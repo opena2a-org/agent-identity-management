@@ -520,6 +520,21 @@ The `event` of an alert is:
 
 Delivery runs in the background, so a request never waits for the collector. Events wait in a queue of 1,000 and are sent in batches of up to 100, at least every 5 seconds. A batch is tried up to 3 times, 1 second and then 2 seconds apart, when the collector cannot be reached or answers 408, 429 or 5xx. Any other refusal, such as a token the collector does not accept, is not retried. Each batch that is not delivered is logged with the collector's answer. When the queue is full, the event is not forwarded, and a warning is logged for the first such event and every thousandth after it; an audit log entry is still in the audit log. At shutdown the queued events are sent within 2 seconds, and the backend logs how many were sent, failed and dropped.
 
+Forwarding loses events within a stated bound and keeps no copy of its own. A batch refused on its third attempt, about 3 seconds after the first, is counted failed and is not sent again; a batch refused in a way that is not retried is counted failed at its first attempt. An event that finds 1,000 events already queued is not queued. Nothing is written to disk to send later, and HEC indexer acknowledgment is not requested: an answer below 400 counts as delivered. Where the record of a lost event survives depends on its kind:
+
+| Event | Record outside the SIEM |
+|-------|-------------------------|
+| Audit log entry (`aim.audit.<action>`) | The entry stays in the audit log: it is forwarded only after it is written. |
+| Alert (`aim.alert.created`) | The alert stays in the `alerts` table: it is forwarded only after it is written. |
+| Failed sign-in (`aim.auth.signin_failed`) | On `POST /api/v1/auth/login/local`, the reasons `unknown_email`, `account_deactivated` and `password_mismatch` also write an `auth_failures` row, which the lockout count reads and the next successful sign-in with that email deletes. The reasons `account_locked` and `password_not_set`, and every refused `POST /api/v1/public/login`, are not stored by AIM outside the SIEM stream. |
+| FGA denial (`aim.fga.denied`) | When an FGA policy covers the agent and capability, the denial also writes an `access_attestations` row with its outcome. A denial without a policy, and an `ERROR` outcome, are not stored by AIM outside the SIEM stream. |
+
+The loss shows in three places:
+
+- `GET /health/ready` carries `dependencies.siem`, with `"required": false`. It is `notConfigured` without a SIEM. It is `unavailable`, with `"reason": "dependency check failed"`, while the most recent batch to the collector was not delivered after its attempts, or an event was dropped after the last delivered batch; the response then has `"degraded": true` and is still answered 200, because the SIEM is optional. It is `ok` otherwise, including before the first batch. The entry reads the backend's record of its own deliveries and drops and sends nothing to the collector, so it changes only when a batch is sent or an event is dropped: the next delivered batch returns it to `ok`. Check it with `curl -s http://localhost:8080/health/ready`.
+- `/metrics` carries three counters, in events, while a SIEM is configured: `aim_siem_events_sent_total{adapter="splunk"}`, `aim_siem_events_failed_total{adapter="splunk"}` and `aim_siem_events_dropped_total`. Without a SIEM there are no `aim_siem_` series. Check them on the metrics listener's default address with `curl -s http://127.0.0.1:9464/metrics | grep '^aim_siem_'`; with `METRICS_AUTH_TOKEN` set, add `-H "Authorization: Bearer $METRICS_AUTH_TOKEN"`.
+- Each batch that is not delivered logs `ERROR SIEM delivery failed adapter=splunk events=<count>`, followed by the collector's answer.
+
 To check delivery, search Splunk for `sourcetype="opena2a:aim"`.
 
 Microsoft Sentinel is not supported: Microsoft ended support for the Azure Monitor HTTP Data Collector API, which the source tree's Sentinel adapter targets, on 14 September 2026. A Sentinel adapter for the Logs Ingestion API is planned.

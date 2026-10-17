@@ -223,3 +223,111 @@ func TestForwarder_CloseStopsAtItsDeadline(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Equal(t, ForwarderStats{Failed: 1}, f.Stats(), "the request in flight is cancelled")
 }
+
+func flushForwarder(t *testing.T, f *Forwarder) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, f.Flush(ctx))
+}
+
+func TestForwarder_FlushSendsWhatIsQueued(t *testing.T) {
+	adapter := &fakeAdapter{name: "fake"}
+	f := NewForwarder([]BatchAdapter{adapter}, testConfig(), nil)
+
+	require.True(t, f.Enqueue(event("a", SeverityInfo)))
+	require.True(t, f.Enqueue(event("b", SeverityInfo)))
+	flushForwarder(t, f)
+	assert.Equal(t, [][]string{{"a", "b"}}, adapter.received(), "sent before the hour-long flush interval")
+
+	flushForwarder(t, f)
+	assert.Len(t, adapter.received(), 1, "a flush with nothing queued sends nothing")
+
+	closeForwarder(t, f)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	assert.NoError(t, f.Flush(ctx), "a flush after Close returns at once")
+}
+
+func TestForwarder_HealthAcrossAcceptRefuseAndRecover(t *testing.T) {
+	adapter := &fakeAdapter{name: "fake", errs: []error{
+		nil,
+		&StatusError{Service: "fake", StatusCode: 403},
+	}}
+	f := NewForwarder([]BatchAdapter{adapter}, testConfig(), nil)
+	t.Cleanup(func() { closeForwarder(t, f) })
+
+	assert.Equal(t, Health{}, f.Health(), "before the first delivery")
+
+	require.True(t, f.Enqueue(event("accepted", SeverityInfo)))
+	flushForwarder(t, f)
+	health := f.Health()
+	assert.False(t, health.Failing)
+	assert.False(t, health.LastDeliveryFailed)
+	assert.False(t, health.LastDelivery.IsZero())
+	accepted := health.LastDelivery
+
+	require.True(t, f.Enqueue(event("refused", SeverityInfo)))
+	flushForwarder(t, f)
+	health = f.Health()
+	assert.True(t, health.Failing, "the most recent delivery was refused")
+	assert.True(t, health.LastDeliveryFailed)
+	assert.False(t, health.LastDelivery.Before(accepted))
+
+	require.True(t, f.Enqueue(event("recovered", SeverityInfo)))
+	flushForwarder(t, f)
+	health = f.Health()
+	assert.False(t, health.Failing, "a later accepted delivery ends the failing state")
+	assert.False(t, health.LastDeliveryFailed)
+	assert.True(t, health.LastDrop.IsZero())
+
+	assert.Equal(t, ForwarderStats{Sent: 2, Failed: 1}, f.Stats())
+	assert.Equal(t, []AdapterStats{{Adapter: "fake", Sent: 2, Failed: 1}}, f.AdapterStats())
+}
+
+func TestForwarder_HealthFailsWhileAnyAdapterFails(t *testing.T) {
+	failing := &fakeAdapter{name: "failing", errs: []error{&StatusError{Service: "failing", StatusCode: 403}}}
+	healthy := &fakeAdapter{name: "healthy"}
+	f := NewForwarder([]BatchAdapter{failing, healthy}, testConfig(), nil)
+	t.Cleanup(func() { closeForwarder(t, f) })
+
+	require.True(t, f.Enqueue(event("a", SeverityInfo)))
+	flushForwarder(t, f)
+	health := f.Health()
+	assert.True(t, health.Failing, "the failing adapter's most recent delivery was refused")
+	assert.False(t, health.LastDeliveryFailed, "the healthy adapter's delivery ended last")
+
+	require.True(t, f.Enqueue(event("b", SeverityInfo)))
+	flushForwarder(t, f)
+	assert.False(t, f.Health().Failing, "both adapters accepted their most recent delivery")
+	assert.Equal(t, []AdapterStats{
+		{Adapter: "failing", Sent: 1, Failed: 1},
+		{Adapter: "healthy", Sent: 2},
+	}, f.AdapterStats())
+}
+
+func TestForwarder_HealthFailsAfterADropUntilAnAcceptedDelivery(t *testing.T) {
+	adapter := &fakeAdapter{name: "fake", entered: make(chan struct{}, 4), block: make(chan struct{})}
+	cfg := testConfig()
+	cfg.QueueSize = 1
+	cfg.BatchSize = 1
+	f := NewForwarder([]BatchAdapter{adapter}, cfg, nil)
+	t.Cleanup(func() { closeForwarder(t, f) })
+
+	require.True(t, f.Enqueue(event("a", SeverityInfo)))
+	<-adapter.entered // the worker holds "a" and waits on the adapter
+	require.True(t, f.Enqueue(event("b", SeverityInfo)), "the queue holds one event")
+	before := time.Now()
+	require.False(t, f.Enqueue(event("c", SeverityInfo)), "the queue is full")
+
+	health := f.Health()
+	assert.True(t, health.Failing, "an event was dropped and no delivery was accepted since")
+	assert.True(t, health.LastDelivery.IsZero(), "no delivery has ended yet")
+	assert.False(t, health.LastDrop.Before(before))
+
+	close(adapter.block)
+	flushForwarder(t, f)
+	health = f.Health()
+	assert.False(t, health.Failing, "a delivery accepted after the drop ends the failing state")
+	assert.Equal(t, ForwarderStats{Sent: 2, Dropped: 1}, f.Stats())
+}

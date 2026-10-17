@@ -8,6 +8,8 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/integrations/siem"
 )
 
 // buildCommit is the commit the binary was built from, set by the linker:
@@ -125,16 +127,39 @@ func redisReadyCheck(configured bool, client *redis.Client) func(context.Context
 	return nil
 }
 
+// errSIEMDeliveryFailing is what the readiness check reports for SIEM
+// forwarding while its most recent delivery was not accepted, or an event was
+// dropped after the last accepted delivery.
+var errSIEMDeliveryFailing = errors.New("siem: the most recent delivery was not accepted, or an event was dropped after the last accepted one")
+
+// siemReadyCheck returns the readiness check for SIEM forwarding. A nil
+// result means no SIEM is configured (notConfigured). The check reads the
+// forwarder's record of its own deliveries; it sends nothing to the SIEM.
+func siemReadyCheck(forwarder *siem.Forwarder) func() error {
+	if forwarder == nil {
+		return nil
+	}
+	return func() error {
+		if forwarder.Health().Failing {
+			return errSIEMDeliveryFailing
+		}
+		return nil
+	}
+}
+
 // newHealthReadyHandler builds GET /health/ready. checkDB is the required
 // database ping; a nil checkRedis means Redis is not configured (it is
-// optional; see redisReadyCheck). The response is 200 iff every required
-// dependency is ok; an unavailable optional dependency only sets degraded.
-func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error) fiber.Handler {
+// optional; see redisReadyCheck), and a nil checkSIEM means no SIEM is
+// configured (it is optional; see siemReadyCheck). The response is 200 iff
+// every required dependency is ok; an unavailable optional dependency only
+// sets degraded. checkSIEM reads state and is not timed, so the SIEM entry
+// carries no latencyMs.
+func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, checkSIEM func() error) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), healthReadyDeadline)
 		defer cancel()
 
-		deps := make(map[string]healthReadyDependency, 2)
+		deps := make(map[string]healthReadyDependency, 3)
 
 		dbStatus, dbLatency, dbReason := runBoundedCheck(ctx, healthReadyDBTimeout, checkDB)
 		deps["database"] = healthReadyDependency{
@@ -156,6 +181,16 @@ func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error) fibe
 				Reason:    redisReason,
 			}
 			degraded = redisStatus == depStatusUnavailable
+		}
+
+		switch {
+		case checkSIEM == nil:
+			deps["siem"] = healthReadyDependency{Status: depStatusNotConfigured, Required: false}
+		case checkSIEM() != nil:
+			deps["siem"] = healthReadyDependency{Status: depStatusUnavailable, Required: false, Reason: reasonCheckFailed}
+			degraded = true
+		default:
+			deps["siem"] = healthReadyDependency{Status: depStatusOK, Required: false}
 		}
 
 		ready := dbStatus == depStatusOK
