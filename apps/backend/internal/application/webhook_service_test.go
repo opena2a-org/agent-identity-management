@@ -32,13 +32,13 @@ func TestDefaultWebhookConfig(t *testing.T) {
 
 func TestWebhookConfig_CustomValues(t *testing.T) {
 	config := &WebhookConfig{
-		DefaultTimeout:       60 * time.Second,
-		DefaultMaxRetries:    5,
-		DefaultRetryDelay:    120 * time.Second,
-		MaxRetryDelay:        60 * time.Minute,
-		RetryBackoffFactor:   3.0,
-		DeliveryWorkerCount:  10,
-		RetryWorkerInterval:  60 * time.Second,
+		DefaultTimeout:      60 * time.Second,
+		DefaultMaxRetries:   5,
+		DefaultRetryDelay:   120 * time.Second,
+		MaxRetryDelay:       60 * time.Minute,
+		RetryBackoffFactor:  3.0,
+		DeliveryWorkerCount: 10,
+		RetryWorkerInterval: 60 * time.Second,
 	}
 
 	assert.Equal(t, 60*time.Second, config.DefaultTimeout)
@@ -181,41 +181,35 @@ func TestWebhookTestResult_ConnectionError(t *testing.T) {
 	assert.Contains(t, result.ErrorMessage, "connection")
 }
 
+// receiverSignature is the X-Webhook-Signature a receiver recomputes, as
+// docs/API.md § Verifying a delivery describes it: v1= and the hex
+// HMAC-SHA256 of "<X-Webhook-Timestamp>.<raw body>" under the secret.
+func receiverSignature(secret, timestamp string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp + "."))
+	mac.Write(body)
+	return "v1=" + hex.EncodeToString(mac.Sum(nil))
+}
+
 func TestSignatureVerification(t *testing.T) {
 	// Simulate what a webhook receiver would do
 	payload := []byte(`{"event":"agent.created","data":{"id":"123"}}`)
 	secret := "webhook_secret_key"
 
-	// Create signature (what the service does)
-	signature := createSignature(payload, secret)
+	// Sign the delivery (what the service does)
+	timestamp, signature := signDelivery(payload, secret, time.Now())
 
-	// Receiver verification (what the client does)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(payload)
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-
-	assert.Equal(t, expectedSig, signature)
-
-	// Verify using constant-time comparison
-	sigBytes, _ := hex.DecodeString(signature)
-	expectedBytes, _ := hex.DecodeString(expectedSig)
-	assert.True(t, hmac.Equal(sigBytes, expectedBytes))
+	// Receiver verification, with a constant-time comparison
+	expectedSig := receiverSignature(secret, timestamp, payload)
+	assert.True(t, hmac.Equal([]byte(expectedSig), []byte(signature)))
 }
 
 func TestSignatureVerification_InvalidSecret(t *testing.T) {
 	payload := []byte(`{"event":"agent.created"}`)
-	correctSecret := "correct_secret"
-	wrongSecret := "wrong_secret"
 
-	// Create signature with correct secret
-	signature := createSignature(payload, correctSecret)
+	timestamp, signature := signDelivery(payload, "correct_secret", time.Now())
 
-	// Try to verify with wrong secret
-	mac := hmac.New(sha256.New, []byte(wrongSecret))
-	mac.Write(payload)
-	wrongExpected := hex.EncodeToString(mac.Sum(nil))
-
-	assert.NotEqual(t, wrongExpected, signature)
+	assert.NotEqual(t, receiverSignature("wrong_secret", timestamp, payload), signature)
 }
 
 func TestSignatureVerification_TamperedPayload(t *testing.T) {
@@ -223,15 +217,9 @@ func TestSignatureVerification_TamperedPayload(t *testing.T) {
 	tamperedPayload := []byte(`{"amount":1000}`)
 	secret := "secret"
 
-	// Create signature with original payload
-	signature := createSignature(originalPayload, secret)
+	timestamp, signature := signDelivery(originalPayload, secret, time.Now())
 
-	// Try to verify with tampered payload
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(tamperedPayload)
-	tamperedSig := hex.EncodeToString(mac.Sum(nil))
-
-	assert.NotEqual(t, tamperedSig, signature)
+	assert.NotEqual(t, receiverSignature(secret, timestamp, tamperedPayload), signature)
 }
 
 // ========================================

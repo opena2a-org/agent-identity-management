@@ -560,9 +560,12 @@ func TestAPIKeyService_GenerateAPIKey_DeliversOneSignedAPIKeyCreated(t *testing.
 	}
 
 	assert.Equal(t, "api_key.created", post.header.Get("X-Webhook-Event"))
+	timestamp := post.header.Get("X-Webhook-Timestamp")
+	require.NotEmpty(t, timestamp, "the delivery carries the time it was sent")
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp + "."))
 	mac.Write(post.body)
-	assert.Equal(t, hex.EncodeToString(mac.Sum(nil)), post.header.Get("X-Webhook-Signature"))
+	assert.Equal(t, "v1="+hex.EncodeToString(mac.Sum(nil)), post.header.Get("X-Webhook-Signature"))
 
 	var payload domain.WebhookPayload
 	require.NoError(t, json.Unmarshal(post.body, &payload))

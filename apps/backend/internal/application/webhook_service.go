@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -383,22 +384,19 @@ func (s *WebhookService) sendWebhookWithResult(webhook *domain.Webhook, event st
 		return 0, err
 	}
 
-	// Create signature
-	signature := createSignature(jsonData, webhook.Secret)
-
 	// Send HTTP request
 	req, err := http.NewRequest("POST", webhook.URL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return 0, err
 	}
 
-	setDeliveryHeaders(req, webhook, event, signature)
+	start := time.Now()
+	setDeliveryHeaders(req, webhook, event, jsonData, start)
 
 	// SECURITY: The webhook URL was checked when the webhook was saved. The
 	// egress client judges the address again when it connects and does not
 	// follow redirects, so neither a changed DNS answer nor a 3xx from the
 	// endpoint sends the delivery to an address that check refuses.
-	start := time.Now()
 	client := s.httpClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -479,15 +477,36 @@ func (s *WebhookService) sendWebhook(webhook *domain.Webhook, event string, payl
 
 // Helper functions
 
-// setDeliveryHeaders sets the headers of a webhook delivery. A test delivery
-// and an event delivery send the same set, so a receiver that routes or
-// filters on them treats both alike.
-func setDeliveryHeaders(req *http.Request, webhook *domain.Webhook, event, signature string) {
+// setDeliveryHeaders sets the headers of a webhook delivery attempt of body
+// sent at sentAt, signed with the webhook's secret (see signDelivery). A test
+// delivery and an event delivery send the same set, so a receiver that routes
+// or filters on them treats both alike.
+func setDeliveryHeaders(req *http.Request, webhook *domain.Webhook, event string, body []byte, sentAt time.Time) {
+	timestamp, signature := signDelivery(body, webhook.Secret, sentAt)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Webhook-Timestamp", timestamp)
 	req.Header.Set("X-Webhook-Signature", signature)
 	req.Header.Set("X-Webhook-Event", event)
 	req.Header.Set("X-Webhook-ID", webhook.ID.String())
 	req.Header.Set("User-Agent", "AIM-Webhook/1.0")
+}
+
+// webhookSignatureScheme names the signing scheme of X-Webhook-Signature, so
+// a later scheme can be sent beside it under its own name.
+const webhookSignatureScheme = "v1"
+
+// signDelivery returns the X-Webhook-Timestamp and X-Webhook-Signature values
+// of an attempt of body sent at sentAt: the time in Unix seconds, and "v1=" and
+// the hex HMAC-SHA256 under secret of "<timestamp>.<body>". Each attempt is
+// signed when it is sent, so a receiver that refuses an old timestamp and an
+// event id it already processed refuses a replayed attempt.
+func signDelivery(body []byte, secret string, sentAt time.Time) (timestamp, signature string) {
+	timestamp = strconv.FormatInt(sentAt.Unix(), 10)
+	signed := make([]byte, 0, len(timestamp)+1+len(body))
+	signed = append(signed, timestamp...)
+	signed = append(signed, '.')
+	signed = append(signed, body...)
+	return timestamp, webhookSignatureScheme + "=" + createSignature(signed, secret)
 }
 
 func generateSecret() (string, error) {
@@ -499,9 +518,10 @@ func generateSecret() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func createSignature(payload []byte, secret string) string {
+// createSignature returns the hex HMAC-SHA256 of message under secret.
+func createSignature(message []byte, secret string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(payload)
+	mac.Write(message)
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -757,16 +777,14 @@ func (s *WebhookService) deliverWithRetry(webhook *domain.Webhook, payload *doma
 func (s *WebhookService) attemptDelivery(webhook *domain.Webhook, event domain.WebhookEvent, payload []byte, timeout time.Duration) (int, string, time.Duration, error) {
 	start := time.Now()
 
-	// Create signature
-	signature := createSignature(payload, webhook.Secret)
-
 	// Create request
 	req, err := http.NewRequest("POST", webhook.URL, bytes.NewBuffer(payload))
 	if err != nil {
 		return 0, "", time.Since(start), err
 	}
 
-	setDeliveryHeaders(req, webhook, string(event), signature)
+	// Each attempt, a retry included, is signed with the time it is sent.
+	setDeliveryHeaders(req, webhook, string(event), payload, start)
 
 	// Send request. SECURITY: see sendWebhookWithResult for why delivery
 	// goes through the egress client.

@@ -291,10 +291,13 @@ func TestAlertService_CreateAlert_DeliversOneSignedAlertCreated(t *testing.T) {
 	assert.Equal(t, "alert.created", post.header.Get("X-Webhook-Event"),
 		"X-Webhook-Event must carry the delivered event, not the webhook's first subscription")
 
+	timestamp := post.header.Get("X-Webhook-Timestamp")
+	require.NotEmpty(t, timestamp, "the delivery carries the time it was sent")
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(timestamp + "."))
 	mac.Write(post.body)
-	assert.Equal(t, hex.EncodeToString(mac.Sum(nil)), post.header.Get("X-Webhook-Signature"),
-		"the signature must verify over the delivered body")
+	assert.Equal(t, "v1="+hex.EncodeToString(mac.Sum(nil)), post.header.Get("X-Webhook-Signature"),
+		"the signature must verify over the timestamp and the delivered body")
 
 	var payload domain.WebhookPayload
 	require.NoError(t, json.Unmarshal(post.body, &payload))
