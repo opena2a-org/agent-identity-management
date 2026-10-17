@@ -116,7 +116,7 @@ _INIT_ANSWER_STATUS_PATTERN = re.compile(r'[a-z][a-z_-]{0,31}')
 # form) are each replaced with U+FFFD, and text over the cap is cut with a
 # marker. The TypeScript SDK's `sanitizeTerminalLine` replaces the same set.
 TERMINAL_LINE_MAX_CHARS = 500
-_NOT_IN_A_LINE = re.compile(r'[\x00-\x1f\x7f-\x9f؜‎‏‪-‮⁦-⁩\ud800-\udfff]')
+_NOT_IN_A_LINE = re.compile(r'[\x00-\x1f\x7f-\x9f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069\ud800-\udfff]')
 
 
 def _terminal_line(text, max_chars=TERMINAL_LINE_MAX_CHARS):

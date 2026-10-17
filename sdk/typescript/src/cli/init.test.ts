@@ -531,7 +531,7 @@ describe('the shipped bin dispatches init', () => {
 
 describe('the exchange answer: fields are checked and server text is printed as one plain line', () => {
   const ESC = '\u001b';
-  const RLO = '‮';
+  const RLO = '\u202e';
   const UUID = '550e8400-e29b-41d4-a716-446655440000';
   const SECOND_LINE = 'SECOND LINE: text chosen by the server';
 

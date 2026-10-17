@@ -171,7 +171,7 @@ def test_an_address_with_a_backslash_is_refused_with_zero_requests(recorder, age
     "http://local\x1bhost:8080",
     "http://local\x7fhost:8080",
     "http://local\x85host:8080",
-    "http://local host:8080",
+    "http://local\u00a0host:8080",
 ])
 def test_an_address_with_whitespace_or_a_control_character_is_refused_with_zero_requests(
         recorder, agents_dir, capsys, url):
