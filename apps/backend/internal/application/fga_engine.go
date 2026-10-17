@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/util/sqlarray"
 	"go.opentelemetry.io/otel"
@@ -497,6 +498,9 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		if e.agentSvc != nil {
 			if agent, agErr := e.agentSvc.GetAgent(ctx, req.AgentID); agErr == nil && agent != nil {
 				agentOrgID = agent.OrganizationID
+				// gen_ai.agent.id is the AIP identifier of the row resolved here,
+				// never a request field; an unresolved agent emits none.
+				genaiSignals.AgentID = domain.BuildAgentDID(agent.ID)
 				keyAlgo := agent.KeyAlgorithm
 				if agent.PQCKeyAlgorithm != nil && *agent.PQCKeyAlgorithm != "" {
 					if keyAlgo == "" {
@@ -758,9 +762,15 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 // No DB writes, no engine state changes, no NanoMind dispatch. Span
 // emission only. Safe to call from any handler that has already made the
 // authorization decision and just needs the trace to show up in Tempo.
+//
+// agentID is the agent named by the request and feeds the legacy agent.id
+// key and the ASC lookup. verifiedAgentID is the ID of the agent row whose
+// signature the handler verified; its AIP identifier is emitted as
+// gen_ai.agent.id, and uuid.Nil emits no gen_ai.agent.id.
 func (e *FGAEngine) EmitSDKVerificationSpan(
 	ctx context.Context,
 	agentID uuid.UUID,
+	verifiedAgentID uuid.UUID,
 	keyAlgorithm string,
 	trustScore float64,
 	capability string,
@@ -782,6 +792,9 @@ func (e *FGAEngine) EmitSDKVerificationSpan(
 	// sharing telemetry.SetGenAIAgentAttributes with the /authorize path so the
 	// two span sources cannot drift apart.
 	genaiSignals := telemetry.AgentAuthzSignals{Capability: capability}
+	if verifiedAgentID != uuid.Nil {
+		genaiSignals.AgentID = domain.BuildAgentDID(verifiedAgentID)
+	}
 	if keyAlgorithm != "" {
 		parent.SetAttributes(attribute.String("agent.public_key.algorithm", keyAlgorithm))
 		genaiSignals.PublicKeyAlgo = keyAlgorithm

@@ -103,9 +103,12 @@ func main() {
 	// in open-telemetry/semantic-conventions-genai#291. This public example
 	// emits ONLY the gen_ai.agent.* namespace (no legacy agent.* signal keys);
 	// agent.id is identity and fga.* is AIM's own span shape.
+	// gen_ai.agent.id is the upstream OpenTelemetry key: the demo agent's AIP
+	// identifier, did:aip:aim_ followed by its UUID.
 	parent, span := tracer.Start(ctx, "fga.authorize",
 		apitrace.WithAttributes(
 			attribute.String("agent.id", "00000000-0000-0000-0000-deadbeefcafe"),
+			attribute.String("gen_ai.agent.id", "did:aip:aim_00000000-0000-0000-0000-deadbeefcafe"),
 			attribute.String("fga.outcome", "ALLOW"),
 			// gen_ai.agent.* — eight authorization-decision attributes.
 			attribute.String("gen_ai.agent.capability", "smoke:test"),

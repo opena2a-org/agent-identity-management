@@ -105,3 +105,33 @@ func TestSetGenAIAgentAttributes_ZeroScoreIsEmitted(t *testing.T) {
 	assert.Equal(t, 0.0, attrs[GenAIAgentDriftScore].AsFloat64())
 	assert.Contains(t, attrs, GenAIAgentDriftMethod)
 }
+
+// TestSetGenAIAgentAttributes_AgentID asserts the upstream key gen_ai.agent.id
+// lands with the given value when AgentID is set, and is absent when AgentID is
+// empty, whatever other signals are present.
+func TestSetGenAIAgentAttributes_AgentID(t *testing.T) {
+	assert.Equal(t, "gen_ai.agent.id", GenAIAgentID, "the upstream OpenTelemetry key, spelled as upstream defines it")
+
+	const agentDID = "did:aip:aim_6f1c2b9e-4d3a-4e8f-9a1b-2c3d4e5f6a7b"
+
+	attrs := recordGenAIAttrs(t, AgentAuthzSignals{AgentID: agentDID})
+	require.Contains(t, attrs, "gen_ai.agent.id")
+	assert.Equal(t, agentDID, attrs["gen_ai.agent.id"].AsString())
+	assert.Len(t, attrs, 1, "an identifier alone emits the identifier alone")
+
+	attrs = recordGenAIAttrs(t, AgentAuthzSignals{
+		AgentID:    agentDID,
+		Capability: "fs:read",
+		TrustScore: f64(0.5),
+	})
+	require.Contains(t, attrs, "gen_ai.agent.id")
+	assert.Equal(t, agentDID, attrs["gen_ai.agent.id"].AsString())
+	assert.Equal(t, "fs:read", attrs[GenAIAgentCapability].AsString())
+
+	attrs = recordGenAIAttrs(t, AgentAuthzSignals{
+		Capability: "fs:read",
+		TrustScore: f64(0.5),
+	})
+	assert.NotContains(t, attrs, "gen_ai.agent.id", "an empty AgentID emits no gen_ai.agent.id")
+	assert.Contains(t, attrs, GenAIAgentCapability)
+}
