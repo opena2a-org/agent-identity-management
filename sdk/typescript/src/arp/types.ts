@@ -233,6 +233,13 @@ export interface IntelligenceConfig {
    * has observed at least 100 events. During that warm-up the coordinator
    * records the unavailable signal and does not raise severity, matching
    * the record-and-ignore policy documented on `BehavioralRiskRecord`.
+   *
+   * The twin appends one line per processed event to
+   * `~/.opena2a/arp/events.jsonl` and one per escalation to
+   * `~/.opena2a/arp/l1-escalations.jsonl`, files every agent on the machine
+   * shares. Each is rotated once it is above 50 MiB, renamed to
+   * `<name>.<timestamp>.<pid>.<random>`, and the five newest rotated copies
+   * are kept while older ones are deleted.
    */
   runtimeTwin?: {
     /** Default: true when intelligence is enabled. */

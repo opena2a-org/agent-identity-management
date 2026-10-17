@@ -34,6 +34,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { isOptedOut } from '../telemetry/signature/config';
+import { rotateLogIfNeeded } from '../reporting/log-rotation';
 import type { ARPEvent } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 
@@ -380,10 +381,16 @@ export class RuntimeTwin {
     } catch {}
   }
 
+  /**
+   * Append the event to `~/.opena2a/arp/events.jsonl`, a file every agent on
+   * the machine shares. rotateLogIfNeeded renames it aside once it is above
+   * 50 MiB and keeps at most five renamed copies beside it.
+   */
   private appendToLog(event: BehavioralEvent): void {
     try {
       const dir = path.dirname(this.eventLogPath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      rotateLogIfNeeded(this.eventLogPath);
       fs.appendFileSync(this.eventLogPath, JSON.stringify(event) + '\n');
     } catch {}
   }
@@ -392,8 +399,11 @@ export class RuntimeTwin {
     try {
       const logDir = path.join(os.homedir(), '.opena2a', 'arp');
       if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+      // Shared by every agent on the machine and capped like events.jsonl.
+      const escalationLogPath = path.join(logDir, 'l1-escalations.jsonl');
+      rotateLogIfNeeded(escalationLogPath);
       fs.appendFileSync(
-        path.join(logDir, 'l1-escalations.jsonl'),
+        escalationLogPath,
         JSON.stringify({
           timestamp: new Date().toISOString(),
           agentId: this.agentId,
