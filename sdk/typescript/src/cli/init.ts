@@ -95,6 +95,9 @@ export function initHelpText(): string {
 
 const VALUE_FLAGS = new Set(['--url', '--name']);
 
+/** Longest unexpected argument an error message shows. */
+const SHOWN_ARGUMENT_MAX_CHARS = 128;
+
 /** Why a token on the command line is refused; the value is never read. */
 const TOKEN_FLAG_REFUSED =
   `the bootstrap token is read from ${BOOTSTRAP_TOKEN_ENV}, not from a flag ` +
@@ -115,9 +118,11 @@ function parseArgs(argv: string[]): ParseResult {
     }
     if (!VALUE_FLAGS.has(flag)) {
       // Never echo an unknown argument verbatim: a token pasted without its
-      // flag would be printed back.
-      const shown = raw.startsWith('-') ? scrubToken(raw.split('=')[0]) : 'a positional argument';
-      return { ok: false, error: `Unknown option: ${shown}` };
+      // flag would be printed back. An option is named without its value; a
+      // positional is shown with anything token-shaped redacted, as one line.
+      if (raw.startsWith('-')) return { ok: false, error: `Unknown option: ${scrubToken(raw.split('=')[0])}` };
+      const shown = raw === '' ? '""' : sanitizeTerminalLine(scrubToken(raw), SHOWN_ARGUMENT_MAX_CHARS);
+      return { ok: false, error: `unexpected argument: ${shown}` };
     }
     let value: string | undefined;
     if (flag !== raw) {
@@ -254,6 +259,29 @@ const REFUSAL_FIX: Record<string, string> = {
   bootstrap_token_revoked: 'The bootstrap token was revoked (a newer token was generated, or it was exposed).',
   bootstrap_token_in_url: 'The bootstrap token was sent in a URL and has been revoked.',
 };
+
+/**
+ * Why a request failed, from what fetch threw: `TypeError: fetch failed` with
+ * the transport error as its cause. A host name that resolves to more than one
+ * address, each of which refused the connection (`localhost` as `::1` and
+ * `127.0.0.1`), fails with an AggregateError cause whose own message is empty;
+ * its per-address errors carry the reason.
+ */
+function requestFailureReason(e: unknown): string {
+  if (!(e instanceof Error)) return String(e) || 'unknown error';
+  const cause = e.cause;
+  if (cause instanceof Error) {
+    if (cause.message) return cause.message;
+    const errors = (cause as { errors?: unknown }).errors;
+    const parts = Array.isArray(errors)
+      ? errors.filter((x): x is Error => x instanceof Error && x.message !== '').map((x) => x.message)
+      : [];
+    if (parts.length > 0) return parts.join('; ');
+    const code = (cause as NodeJS.ErrnoException).code;
+    if (typeof code === 'string' && code !== '') return code;
+  }
+  return e.message || 'unknown error';
+}
 
 function prepareCredentialsDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -402,7 +430,7 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   } catch (e) {
     const reason = controller.signal.aborted
       ? `no answer within ${Math.round((deps.timeoutMs ?? REQUEST_TIMEOUT_MS) / 1000)}s`
-      : scrubToken(e instanceof Error ? (e.cause instanceof Error ? e.cause.message : e.message) : String(e));
+      : sanitizeTerminalLine(scrubToken(requestFailureReason(e)));
     err(`Error: could not reach the AIM server at ${aimUrl} (${reason}).`);
     err('Check the address and pass it with --url; the token has not been used.');
     return 1;

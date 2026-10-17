@@ -463,6 +463,88 @@ describe('transport', () => {
   });
 });
 
+describe('an unexpected argument is named in the error (#755)', () => {
+  it('an unexpected positional is named, and nothing is sent', async () => {
+    expect(await runInit(['--url', baseUrl, 'extra-positional'], deps())).toBe(1);
+    expect(errLines[0]).toBe('Error: unexpected argument: extra-positional');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('a token given as a positional is shown redacted', async () => {
+    expect(await runInit([TOKEN], deps({}))).toBe(1);
+    expect(errLines[0]).toBe('Error: unexpected argument: aim_ob_[REDACTED]');
+    expect(allOutput()).not.toContain(TOKEN);
+    expect(seen).toHaveLength(0);
+  });
+
+  it('a positional holding an escape sequence and a newline is shown as one line', async () => {
+    expect(await runInit(['bad\u001b[2Jname\nsecond'], deps())).toBe(1);
+    expect(errLines[0]).toBe('Error: unexpected argument: bad�[2Jname�second');
+    expect(seen).toHaveLength(0);
+  });
+
+  it('an empty positional is shown as ""', async () => {
+    expect(await runInit([''], deps())).toBe(1);
+    expect(errLines[0]).toBe('Error: unexpected argument: ""');
+  });
+
+  it('a long positional is cut at 128 characters', async () => {
+    expect(await runInit(['x'.repeat(300)], deps())).toBe(1);
+    expect(errLines[0]).toBe(`Error: unexpected argument: ${'x'.repeat(128)} [truncated]`);
+  });
+});
+
+describe('a request that cannot connect names why (#755)', () => {
+  function throwingFetch(cause: Error): typeof fetch {
+    return (async () => {
+      throw new TypeError('fetch failed', { cause });
+    }) as typeof fetch;
+  }
+
+  it('a host whose two addresses both refuse the connection names each refusal', async () => {
+    // What fetch throws for localhost when ::1 and 127.0.0.1 both refuse: an
+    // AggregateError with an empty message, the reasons in its errors.
+    const refused = (address: string) =>
+      Object.assign(new Error(`connect ECONNREFUSED ${address}`), { code: 'ECONNREFUSED' });
+    const cause = Object.assign(new AggregateError([refused('::1:80'), refused('127.0.0.1:80')], ''), {
+      code: 'ECONNREFUSED',
+    });
+    expect(await runInit(['--url', 'http://localhost:/'], { ...deps(), fetch: throwingFetch(cause) })).toBe(1);
+    expect(errLines[0]).toBe(
+      'Error: could not reach the AIM server at http://localhost: ' +
+        '(connect ECONNREFUSED ::1:80; connect ECONNREFUSED 127.0.0.1:80).',
+    );
+    expect(errLines[1]).toContain('the token has not been used');
+  });
+
+  it('a cause with no message and no per-address errors is named by its code', async () => {
+    const cause = Object.assign(new Error(''), { code: 'ECONNRESET' });
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: throwingFetch(cause) })).toBe(1);
+    expect(errLines[0]).toBe(`Error: could not reach the AIM server at ${baseUrl} (ECONNRESET).`);
+  });
+
+  it('a reason holding an escape sequence and a newline is printed as one line', async () => {
+    const cause = new Error("Host: localhost. is not in the cert's altnames: DNS:evil\u001b[2J\nnext");
+    expect(await runInit(['--url', baseUrl], { ...deps(), fetch: throwingFetch(cause) })).toBe(1);
+    expect(errLines[0]).toBe(
+      `Error: could not reach the AIM server at ${baseUrl} ` +
+        "(Host: localhost. is not in the cert's altnames: DNS:evil�[2J�next).",
+    );
+    expect(allOutput()).not.toContain('\u001b');
+  });
+
+  it('a closed port on localhost is reported with a reason, never an empty one', async () => {
+    const dead = await startServer();
+    const port = new URL(dead.url).port;
+    await new Promise<void>((resolve) => dead.server.close(() => resolve()));
+    expect(await runInit(['--url', `http://localhost:${port}`], deps())).toBe(1);
+    expect(errLines[0]).toMatch(
+      new RegExp(`^Error: could not reach the AIM server at http://localhost:${port} \\(connect E[A-Z]+ [^)]+\\)\\.$`),
+    );
+    expect(allOutput()).not.toContain(TOKEN);
+  });
+});
+
 describe('helpers', () => {
   it('dashboardUrlFor maps API addresses to dashboard addresses', () => {
     expect(dashboardUrlFor('https://api.aim.opena2a.org')).toBe('https://aim.opena2a.org');
