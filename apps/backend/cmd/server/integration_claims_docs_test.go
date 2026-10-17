@@ -29,10 +29,14 @@ import (
 // Microsoft Teams is out of the term list: an organization's alerts reach a
 // Teams workflow, proved by TestAlertChannelsTeamsEmailRoundTrip
 // (alert_channels_teams_email_integration_test.go, integration tag).
+//
+// Microsoft Sentinel is out of the term list: security events reach it through
+// the Logs Ingestion API, proved by TestSIEMSentinelRoundTrip
+// (siem_sentinel_integration_test.go, integration tag).
 
 // unshippedIntegration matches the name of an integration the server does not
 // ship.
-var unshippedIntegration = regexp.MustCompile(`(?i)cyberark|sentinel`)
+var unshippedIntegration = regexp.MustCompile(`(?i)cyberark`)
 
 // integrationStatus matches the words that state such an integration's status.
 var integrationStatus = regexp.MustCompile(`(?i)\b(planned|under evaluation|not available|not loaded|not supported)\b`)
@@ -48,9 +52,14 @@ var retiredIntegrationClaims = map[string][]string{
 		"the CyberArk and SIEM integrations",
 		"CCP for vaulted credential retrieval. PSM for privileged session recording.",
 		"the Data Collector API it targets was retired on 14 September 2026",
+		"A CyberArk connector and a Microsoft Sentinel adapter are planned.",
+		"The Microsoft Sentinel adapter is not loaded",
+		"A Sentinel adapter for the Logs Ingestion API is planned.",
 	},
 	"docs/DEPLOYMENT.md": {
 		"targets was retired on 14 September 2026",
+		"Microsoft Sentinel is not supported",
+		"A Sentinel adapter for the Logs Ingestion API is planned.",
 	},
 	"docs/API.md": {
 		"\"secret\": \"your-webhook-secret\"",
@@ -60,6 +69,7 @@ var retiredIntegrationClaims = map[string][]string{
 	},
 	"apps/backend/internal/integrations/siem/adapter.go": {
 		"which Microsoft retired on 14 September 2026",
+		"The server does not load this adapter.",
 	},
 }
 
@@ -70,20 +80,21 @@ var measuredIntegrationClaims = map[string][]string{
 		"MCP attestation, PAM, audit log forwarding to Splunk. |",
 	},
 	"docs/server-features.md": {
-		"except Splunk forwarding, which runs in self-hosted deployments only. A CyberArk connector and a Microsoft Sentinel adapter are planned.",
+		"except SIEM forwarding, which runs in self-hosted deployments only. A CyberArk connector is planned.",
 		"## CyberArk integration (planned)",
 		"Sending session events to Privileged Session Manager (PSM) is under evaluation",
-		"Microsoft ended support for the HTTP Data Collector API it targets on 14 September 2026. A Sentinel adapter for the Logs Ingestion API is planned.",
+		"through the Azure Monitor Logs Ingestion API, with the client credentials of a Microsoft Entra application. The server does not use the HTTP Data Collector API, for which Microsoft ended support on 14 September 2026.",
 	},
 	"docs/DEPLOYMENT.md": {
-		"Microsoft ended support for the Azure Monitor HTTP Data Collector API, which the source tree's Sentinel adapter targets, on 14 September 2026.",
+		"The backend sends events to Microsoft Sentinel through the Azure Monitor Logs Ingestion API",
+		"It does not use the HTTP Data Collector API.",
 	},
 	"docs/API.md": {
 		"The create answer is the only one that carries the secret",
 		"| `{\"error\":\"unsupported event: auth.failed\"}` | An event name that is not one of those in [Webhook Events](#webhook-events). |",
 	},
 	"apps/backend/internal/integrations/siem/adapter.go": {
-		"// Data Collector API, for which Microsoft ended support on 14 September 2026,",
+		"// The Microsoft Sentinel adapter is in sentinel.go.",
 	},
 }
 
@@ -158,8 +169,8 @@ func TestUnshippedIntegrationsCarryAStatusInTheDocs(t *testing.T) {
 }
 
 // Slack is not in the term list: the example guides post to Slack from the
-// agent's own code, not through the server. PagerDuty and Microsoft Teams are
-// not in it either: the server ships them.
+// agent's own code, not through the server. PagerDuty, Microsoft Teams and
+// Microsoft Sentinel are not in it either: the server ships them.
 func TestUnshippedIntegrationFindings(t *testing.T) {
 	sample := strings.Join([]string{
 		"CCP for vaulted credential retrieval through CyberArk.",
@@ -167,6 +178,7 @@ func TestUnshippedIntegrationFindings(t *testing.T) {
 		"Microsoft Sentinel is not supported: the source tree's adapter is not loaded.",
 		"Send alerts to PagerDuty",
 		"Slack Notifications for Business Travel",
+		"Security events reach Microsoft Sentinel through the Logs Ingestion API.",
 	}, "\n")
 	assert.Equal(t, []string{
 		"sample.md:1: CCP for vaulted credential retrieval through CyberArk.",

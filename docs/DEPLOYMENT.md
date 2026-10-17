@@ -440,7 +440,7 @@ curl -s http://localhost:8080/api/v1/status
 
 ### SIEM Forwarding
 
-The backend forwards security events to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the events of every organization on the server. Four kinds of event are forwarded:
+The backend forwards security events to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set, and to Microsoft Sentinel through the Azure Monitor Logs Ingestion API once the six required `SIEM_SENTINEL_*` variables are set (see Microsoft Sentinel below). With both configured, each event goes to both. One collector receives the events of every organization on the server. Four kinds of event are forwarded:
 
 | Event | `eventType` | `severity` |
 |-------|-------------|------------|
@@ -469,7 +469,7 @@ A secrets request that is refused or fails writes no entry.
 | `SIEM_SPLUNK_INDEX` | Optional. Unset, events go to the token's default index. |
 | `SIEM_MIN_SEVERITY` | Optional. `info` (the default), `low`, `medium`, `high` or `critical`. Events below it are not sent: at `medium`, failed sign-ins are not sent. |
 
-One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to splunk`, `siem: forwarding alerts (aim.alert.created)` and `siem: forwarding failed sign-ins (aim.auth.signin_failed) and FGA denials (aim.fga.denied)`.
+One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to <adapters>`, where `<adapters>` is `splunk`, `sentinel` or `splunk, sentinel`, then `siem: forwarding alerts (aim.alert.created)` and `siem: forwarding failed sign-ins (aim.auth.signin_failed) and FGA denials (aim.fga.denied)`.
 
 Each event is one HEC event with sourcetype `opena2a:aim` and source `opena2a-aim`. The `event` of an audit log entry is:
 
@@ -588,12 +588,66 @@ Forwarding loses events within a stated bound and keeps no copy of its own. A ba
 The loss shows in three places:
 
 - `GET /health/ready` carries `dependencies.siem`, with `"required": false`. It is `notConfigured` without a SIEM. It is `unavailable`, with `"reason": "dependency check failed"`, while the most recent batch to the collector was not delivered after its attempts, or an event was dropped after the last delivered batch; the response then has `"degraded": true` and is still answered 200, because the SIEM is optional. It is `ok` otherwise, including before the first batch. The entry reads the backend's record of its own deliveries and drops and sends nothing to the collector, so it changes only when a batch is sent or an event is dropped: the next delivered batch returns it to `ok`. Check it with `curl -s http://localhost:8080/health/ready`.
-- `/metrics` carries three counters, in events, while a SIEM is configured: `aim_siem_events_sent_total{adapter="splunk"}`, `aim_siem_events_failed_total{adapter="splunk"}` and `aim_siem_events_dropped_total`. Without a SIEM there are no `aim_siem_` series. Check them on the metrics listener's default address with `curl -s http://127.0.0.1:9464/metrics | grep '^aim_siem_'`; with `METRICS_AUTH_TOKEN` set, add `-H "Authorization: Bearer $METRICS_AUTH_TOKEN"`.
-- Each batch that is not delivered logs `ERROR SIEM delivery failed adapter=splunk events=<count>`, followed by the collector's answer.
+- `/metrics` carries three counters, in events, while a SIEM is configured: `aim_siem_events_sent_total{adapter="splunk"}`, `aim_siem_events_failed_total{adapter="splunk"}` and `aim_siem_events_dropped_total`, with a second `sent` and `failed` pair labelled `adapter="sentinel"` for Microsoft Sentinel. Without a SIEM there are no `aim_siem_` series. Check them on the metrics listener's default address with `curl -s http://127.0.0.1:9464/metrics | grep '^aim_siem_'`; with `METRICS_AUTH_TOKEN` set, add `-H "Authorization: Bearer $METRICS_AUTH_TOKEN"`.
+- Each batch that is not delivered logs `ERROR SIEM delivery failed adapter=splunk events=<count>` (or `adapter=sentinel`), followed by the collector's answer.
 
 To check delivery, search Splunk for `sourcetype="opena2a:aim"`.
 
-Microsoft Sentinel is not supported: Microsoft ended support for the Azure Monitor HTTP Data Collector API, which the source tree's Sentinel adapter targets, on 14 September 2026. A Sentinel adapter for the Logs Ingestion API is planned.
+#### Microsoft Sentinel
+
+The backend sends events to Microsoft Sentinel through the Azure Monitor Logs Ingestion API, as records of a data collection rule (DCR) stream that the rule writes to a Log Analytics table. It does not use the HTTP Data Collector API.
+
+| Variable | Value |
+|----------|-------|
+| `SIEM_SENTINEL_ENDPOINT` | The logs ingestion endpoint the records are posted to: `{endpoint}` in `POST {endpoint}/dataCollectionRules/...`. It must use `https`; `http` is accepted only for a loopback host. |
+| `SIEM_SENTINEL_DCR_IMMUTABLE_ID` | The data collection rule's `immutableId` property, the id the ingestion URL names the rule by. |
+| `SIEM_SENTINEL_STREAM_NAME` | The stream the rule declares for these records, such as `Custom-AIMSecurityEvents`. |
+| `SIEM_SENTINEL_TENANT_ID` | The Microsoft Entra tenant id of the application the backend signs in as. |
+| `SIEM_SENTINEL_CLIENT_ID` | The application (client) id. |
+| `SIEM_SENTINEL_CLIENT_SECRET` | A client secret of the application. It is sent only in the token request, and no error or log line carries it or a token. |
+| `SIEM_SENTINEL_AUTHORITY_HOST` | Optional. The host the token is requested from; `https://login.microsoftonline.com` when unset. It must use `https`; `http` is accepted only for a loopback host. The token is always requested for `https://monitor.azure.com`. |
+
+When none of the six required variables is set, Sentinel is not configured, even with `SIEM_SENTINEL_AUTHORITY_HOST` set. When some but not all are set, startup stops with an error that names each missing variable and quotes no value.
+
+To create the application, register it in Microsoft Entra ID, add a client secret, and give it permission to send data to the rule. Microsoft's [Logs Ingestion API overview](https://learn.microsoft.com/en-us/azure/azure-monitor/logs/logs-ingestion-api-overview) covers the rule, the endpoint and the role assignment the application needs.
+
+For a batch, the backend asks for a token with the client credentials grant, `POST <authority host>/<tenant id>/oauth2/v2.0/token` with scope `https://monitor.azure.com/.default`, and keeps it until 60 seconds before its `expires_in` runs out, so one token serves many batches. It posts the batch as one JSON array of records to `<endpoint>/dataCollectionRules/<DCR immutableId>/streams/<stream name>?api-version=2023-01-01` with `Authorization: Bearer <token>`. Any 2xx answer counts as delivered. A token request or upload that cannot reach its host, or that is answered 408, 429 or 5xx, is retried as described above. Any other answer is not retried, such as a refused token request (`invalid_client` for a wrong client secret) or an upload answered 400, 401 or 403. After a 401 or 403 from the upload, the next batch asks for a new token. A redirect is not followed, because the token request carries the client secret.
+
+Each record has these columns. Declare them in the rule's stream declaration, and give the destination table the same columns:
+
+| Column | Type | Value |
+|--------|------|-------|
+| `TimeGenerated` | `datetime` | The event's time, RFC 3339 in UTC. |
+| `EventType` | `string` | The event's `eventType`, such as `aim.auth.signin_failed`. |
+| `Severity` | `string` | The event's `severity`. |
+| `AgentId` | `string` | The event's `agentId`; empty when the event names no agent. |
+| `Capability` | `string` | The event's `capability`; empty when it has none. |
+| `Outcome` | `string` | The event's `outcome`; empty when it has none. |
+| `Source` | `string` | `opena2a-aim`. |
+| `Details` | `dynamic` | The event's `details`, an object; `{}` when it has none. |
+
+```json
+[
+  {"name": "TimeGenerated", "type": "datetime"},
+  {"name": "EventType", "type": "string"},
+  {"name": "Severity", "type": "string"},
+  {"name": "AgentId", "type": "string"},
+  {"name": "Capability", "type": "string"},
+  {"name": "Outcome", "type": "string"},
+  {"name": "Source", "type": "string"},
+  {"name": "Details", "type": "dynamic"}
+]
+```
+
+A refused token shows where a refused Splunk token does: `dependencies.siem` in `GET /health/ready` is `unavailable` and the response has `"degraded": true`, `aim_siem_events_failed_total{adapter="sentinel"}` counts the batch's events and `aim_siem_events_sent_total{adapter="sentinel"}` does not move, and the backend logs `ERROR SIEM delivery failed adapter=sentinel events=<count> error="sentinel token request returned <status>: invalid_client: <description>"`.
+
+To check delivery, query the destination table in Log Analytics. For a table named `AIMSecurityEvents_CL`:
+
+```kusto
+AIMSecurityEvents_CL
+| where TimeGenerated > ago(1h)
+| project TimeGenerated, EventType, Severity, AgentId, Details
+```
 
 ### Database Migrations and the Application Role
 

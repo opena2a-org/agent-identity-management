@@ -490,6 +490,41 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   new options `RequireSTARTTLS`, `RequireAuthPlain` and `NoSTARTTLS`, written from RFC 3207, RFC 4954 and RFC 4616,
   with a certificate generated at test time for 127.0.0.1 and a record of each command and whether it arrived over TLS.
 
+### Added — security events reach Microsoft Sentinel through the Azure Monitor Logs Ingestion API
+
+- Setting `SIEM_SENTINEL_ENDPOINT`, `SIEM_SENTINEL_DCR_IMMUTABLE_ID`, `SIEM_SENTINEL_STREAM_NAME`,
+  `SIEM_SENTINEL_TENANT_ID`, `SIEM_SENTINEL_CLIENT_ID` and `SIEM_SENTINEL_CLIENT_SECRET` configures a `sentinel`
+  adapter; `SIEM_SENTINEL_AUTHORITY_HOST` is optional and defaults to `https://login.microsoftonline.com`. With Splunk
+  HEC also configured, each event goes to both. When some but not all of the six are set, startup stops with an error
+  that names each missing variable and quotes no value. The endpoint and the authority host must use `https`, or
+  `http` to a loopback host.
+- For a batch, the adapter asks Microsoft Entra ID for a token with the client credentials grant and scope
+  `https://monitor.azure.com/.default`, keeps it until 60 seconds before its `expires_in` runs out, and posts the batch
+  as one JSON array to `{endpoint}/dataCollectionRules/{dcrImmutableId}/streams/{streamName}?api-version=2023-01-01`.
+  Any 2xx answer is delivery. A token request or upload that cannot reach its host, or is answered 408, 429 or 5xx, is
+  retried as for Splunk. Any other answer is not, such as a refused token (`invalid_client`) or an upload answered 401
+  or 403, and after a 401 or 403 the next batch asks for a new token. A redirect is not followed. No error or log line carries the client secret or a token: an answer that echoes either is redacted.
+- Each record has the columns `TimeGenerated` (the event's time, RFC 3339 in UTC), `EventType`, `Severity`,
+  `AgentId`, `Capability`, `Outcome`, `Source` (`opena2a-aim`) and `Details` (an object).
+- The readiness entry `dependencies.siem` and the counters `aim_siem_events_sent_total{adapter="sentinel"}` and
+  `aim_siem_events_failed_total{adapter="sentinel"}` report Sentinel deliveries as they report Splunk's.
+- The previous `SentinelAdapter`, which no configuration loaded and which posted to the HTTP Data Collector API, is
+  removed.
+- `internal/config` reads the seven variables into `config.SIEMConfig`, through which the server's SIEM settings read
+  every `SIEM_*` variable. `internal/config/testdata/environment_table.json` has 37 rows for them, each variable
+  unset, empty, whitespace only, with a valid and with an invalid value, and `SIEM_SENTINEL_CLIENT_SECRET` also with
+  a quote and a backslash; `internal/config` checks each row's setting and `cmd/server` its startup line.
+- `docs/DEPLOYMENT.md` § SIEM Forwarding gives the seven variables, the record's columns for the rule's stream
+  declaration, how the Entra application is set up, how a refused token shows, and a Log Analytics query to check
+  arrival, in place of the sentence that said Sentinel was not supported. `docs/server-features.md` names forwarding
+  to Splunk and Microsoft Sentinel, which runs in self-hosted deployments only, where it said a Sentinel adapter for
+  the Logs Ingestion API was planned. `apps/backend/cmd/server/integration_claims_docs_test.go` no longer counts
+  Sentinel among the integrations whose documentation lines must state a status such as planned.
+- Tests: `apps/backend/cmd/server/siem_sentinel_integration_test.go` (`TestSIEMSentinelRoundTrip`),
+  `apps/backend/internal/integrations/siem/sentinel_test.go`, `apps/backend/internal/integrations/siem/env_test.go`,
+  `apps/backend/internal/integrations/siem/adapter_test.go` and the loopback token and ingestion stubs in
+  `apps/backend/internal/integrations/siem/sentineltest`.
+
 ### Added — the dashboard adds, edits, tests and deletes alert channels
 
 - A Developers tab, Alert channels (`/dashboard/alert-channels`), shown to admins, managers and members, the roles

@@ -263,6 +263,14 @@ type SIEMConfig struct {
 	SplunkHECToken string
 	SplunkIndex    string
 	MinSeverity    string
+
+	SentinelEndpoint       string
+	SentinelDCRImmutableID string
+	SentinelStreamName     string
+	SentinelTenantID       string
+	SentinelClientID       string
+	SentinelClientSecret   string
+	SentinelAuthorityHost  string
 }
 
 // Value returns the named SIEM_* variable as Load read it, and "" for a name
@@ -277,6 +285,20 @@ func (s SIEMConfig) Value(name string) string {
 		return s.SplunkIndex
 	case "SIEM_MIN_SEVERITY":
 		return s.MinSeverity
+	case "SIEM_SENTINEL_ENDPOINT":
+		return s.SentinelEndpoint
+	case "SIEM_SENTINEL_DCR_IMMUTABLE_ID":
+		return s.SentinelDCRImmutableID
+	case "SIEM_SENTINEL_STREAM_NAME":
+		return s.SentinelStreamName
+	case "SIEM_SENTINEL_TENANT_ID":
+		return s.SentinelTenantID
+	case "SIEM_SENTINEL_CLIENT_ID":
+		return s.SentinelClientID
+	case "SIEM_SENTINEL_CLIENT_SECRET":
+		return s.SentinelClientSecret
+	case "SIEM_SENTINEL_AUTHORITY_HOST":
+		return s.SentinelAuthorityHost
 	}
 	return ""
 }
@@ -402,6 +424,14 @@ func Load() (*Config, error) {
 			SplunkHECToken: getEnv("SIEM_SPLUNK_HEC_TOKEN", ""),
 			SplunkIndex:    getEnv("SIEM_SPLUNK_INDEX", ""),
 			MinSeverity:    getEnv("SIEM_MIN_SEVERITY", ""),
+
+			SentinelEndpoint:       getEnv("SIEM_SENTINEL_ENDPOINT", ""),
+			SentinelDCRImmutableID: getEnv("SIEM_SENTINEL_DCR_IMMUTABLE_ID", ""),
+			SentinelStreamName:     getEnv("SIEM_SENTINEL_STREAM_NAME", ""),
+			SentinelTenantID:       getEnv("SIEM_SENTINEL_TENANT_ID", ""),
+			SentinelClientID:       getEnv("SIEM_SENTINEL_CLIENT_ID", ""),
+			SentinelClientSecret:   getEnv("SIEM_SENTINEL_CLIENT_SECRET", ""),
+			SentinelAuthorityHost:  getEnv("SIEM_SENTINEL_AUTHORITY_HOST", ""),
 		},
 		SigningKeys: SigningKeysConfig{
 			CardAttestation:        getEnv("AIM_SIGNING_KEY_CARD_ATTESTATION", ""),

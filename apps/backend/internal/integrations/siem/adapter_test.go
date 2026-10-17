@@ -28,13 +28,13 @@ func TestSplunkAdapter_Name(t *testing.T) {
 }
 
 func TestSentinelAdapter_Name(t *testing.T) {
-	adapter := NewSentinelAdapter(SentinelConfig{WorkspaceID: "test-ws"})
+	adapter := NewSentinelAdapter(SentinelConfig{Endpoint: "https://dce.example.test", DCRImmutableID: "dcr-test"})
 	assert.Equal(t, "sentinel", adapter.Name())
 }
 
-func TestSentinelAdapter_DefaultLogType(t *testing.T) {
-	adapter := NewSentinelAdapter(SentinelConfig{WorkspaceID: "test"})
-	assert.Equal(t, "OpenA2A_AIM", adapter.config.LogType)
+func TestSentinelAdapter_DefaultAuthorityHost(t *testing.T) {
+	adapter := NewSentinelAdapter(SentinelConfig{Endpoint: "https://dce.example.test", TenantID: "tenant"})
+	assert.Equal(t, "https://login.microsoftonline.com", adapter.config.AuthorityHost)
 }
 
 func TestMultiAdapter_Name(t *testing.T) {
@@ -63,10 +63,10 @@ func TestMapCapabilityToSafe(t *testing.T) {
 	// Import from cyberark package would be needed for real test
 	// This tests the SIEM event schema independently
 	event := &SIEMEvent{
-		EventType: EventFGADenied,
-		AgentID:   "agent-456",
+		EventType:  EventFGADenied,
+		AgentID:    "agent-456",
 		Capability: "db.read:pii",
-		Severity: "high",
+		Severity:   "high",
 	}
 	assert.Equal(t, "high", event.Severity)
 	assert.Equal(t, EventFGADenied, event.EventType)
