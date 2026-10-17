@@ -75,15 +75,15 @@ func main() {
 	}
 
 	// Initialize OpenTelemetry (traces + metrics + logs to OTLP collector).
-	// Defaults to localhost:4317 (the demo stack at apps/backend/deployments/otel-demo).
-	// Override with OTEL_EXPORTER_OTLP_ENDPOINT; set it to the empty string to
-	// turn telemetry off. Failure is non-fatal: the server boots without
-	// telemetry if the collector is unreachable.
-	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
-		ServiceName:    "aim-backend",
-		ServiceVersion: "0.x",
-		Insecure:       true,
-	})
+	// Defaults to localhost:4317 in plaintext (the demo stack at
+	// apps/backend/deployments/otel-demo). Override with
+	// OTEL_EXPORTER_OTLP_ENDPOINT: https:// is TLS, http:// is plaintext, and
+	// host:port follows OTEL_EXPORTER_OTLP_INSECURE and without it is TLS
+	// unless the host is loopback; set it to the empty string to turn
+	// telemetry off. Failure is non-fatal: the server boots without
+	// telemetry if the collector is unreachable or a certificate file named
+	// in the environment cannot be read.
+	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetryConfig())
 	switch {
 	case errors.Is(otelErr, telemetry.ErrDisabled):
 		log.Println("OpenTelemetry disabled (OTEL_EXPORTER_OTLP_ENDPOINT is set and empty)")
@@ -250,6 +250,7 @@ func main() {
 	// Global middleware
 	app.Use(middleware.RecoveryMiddleware())
 	app.Use(trace.Middleware())                     // Mints each request's audit record trace; reads only traceparent's trace-id
+	app.Use(middleware.HTTPServerSpans())           // An OpenTelemetry SERVER span per request; extracts no traceparent
 	app.Use(middleware.SecurityHeadersMiddleware()) // SECURITY: Add HTTP security headers (HSTS, CSP, etc.)
 	app.Use(middleware.LoggerMiddleware())
 	app.Use(metrics.PrometheusMiddleware())   // Prometheus metrics collection
@@ -2288,6 +2289,16 @@ func mountVerificationEventRoutes(v1 fiber.Router, h *handlers.VerificationEvent
 	// server. Same approach as SubmitVerificationResult (sdk_api_routes.go).
 	verificationEvents.Post("/", middleware.MemberMiddleware(), h.CreateVerificationEvent)
 	verificationEvents.Delete("/:id", middleware.ManagerMiddleware(), h.DeleteVerificationEvent)
+}
+
+// telemetryConfig is the configuration main passes to telemetry.Init. It
+// names no endpoint and sets no TLS choice, so both come from the
+// OTEL_EXPORTER_OTLP_* variables.
+func telemetryConfig() telemetry.Config {
+	return telemetry.Config{
+		ServiceName:    "aim-backend",
+		ServiceVersion: "0.x",
+	}
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {

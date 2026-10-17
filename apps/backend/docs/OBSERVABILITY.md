@@ -57,7 +57,7 @@ docker compose down -v
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` when unset | OTLP gRPC endpoint. The backend always uses gRPC; HTTP is not wired in this build. Set to the empty string, it turns telemetry off: the backend installs no exporter, dials no collector and logs `OpenTelemetry disabled`. |
 | `OTEL_SERVICE_NAME` | `aim-backend` | Sets the `service.name` resource attribute. |
 
-The backend currently dials with TLS disabled (`Insecure: true` in `internal/telemetry/init.go`). Production deployments should flip that and configure a CA bundle.
+The endpoint's scheme decides TLS: `https://` is TLS and `http://` plaintext. `host:port` is plaintext with `OTEL_EXPORTER_OTLP_INSECURE=true`, TLS with `false`, and with neither TLS unless the host is loopback. `OTEL_EXPORTER_OTLP_CERTIFICATE`, `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` and `OTEL_EXPORTER_OTLP_CLIENT_KEY` name the CA and client key pair. The full rules are in [`docs/DEPLOYMENT.md` § Observability](../../../docs/DEPLOYMENT.md#observability).
 
 If the collector is unreachable at boot, the backend logs a warning and continues without telemetry. Spans/metrics/logs are buffered in batch processors and the connection is retried.
 

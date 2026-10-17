@@ -19,12 +19,12 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.27.0"
@@ -48,10 +48,13 @@ type Config struct {
 	ServiceName string
 	// ServiceVersion populates the `service.version` resource attribute.
 	ServiceVersion string
-	// Endpoint is the OTLP gRPC endpoint (host:port). Empty = the value of
-	// OTEL_EXPORTER_OTLP_ENDPOINT, or "localhost:4317" when that is unset.
+	// Endpoint is the OTLP gRPC endpoint for every signal, a URL
+	// (https://host:port or http://host:port) or host:port. Empty = the
+	// value of OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT or
+	// OTEL_EXPORTER_OTLP_ENDPOINT, or "localhost:4317" when neither is set.
 	Endpoint string
-	// Insecure controls TLS. Demo stack runs without TLS.
+	// Insecure makes an endpoint given without a scheme plaintext, as
+	// OTEL_EXPORTER_OTLP_INSECURE=true does. A scheme wins over it.
 	Insecure bool
 }
 
@@ -64,7 +67,10 @@ type Config struct {
 //
 // Reads OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME if Config fields
 // are empty. An OTEL_EXPORTER_OTLP_ENDPOINT set to the empty string turns
-// telemetry off: Init returns ErrDisabled and a nil shutdown func.
+// telemetry off: Init returns ErrDisabled and a nil shutdown func. Each
+// signal's endpoint and TLS setting are resolved as resolveTransport
+// describes; a certificate variable naming a file that cannot be read fails
+// Init with an error naming the variable, and installs no provider.
 func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error, err error) {
 	if cfg.ServiceName == "" {
 		cfg.ServiceName = os.Getenv("OTEL_SERVICE_NAME")
@@ -73,18 +79,21 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		}
 	}
 	if cfg.Endpoint == "" {
-		endpoint, set := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")
-		switch {
-		case set && endpoint == "":
+		if endpoint, set := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT"); set && endpoint == "" {
 			return nil, ErrDisabled
-		case endpoint == "":
-			cfg.Endpoint = defaultEndpoint
-		default:
-			cfg.Endpoint = endpoint
 		}
 	}
 	if cfg.ServiceVersion == "" {
 		cfg.ServiceVersion = "1.0.0"
+	}
+
+	transports := map[string]transport{}
+	for _, signal := range []string{signalTraces, signalMetrics, signalLogs} {
+		t, err := resolveTransport(os.LookupEnv, signal, cfg.Endpoint, cfg.Insecure)
+		if err != nil {
+			return nil, err
+		}
+		transports[signal] = t
 	}
 
 	res, err := resource.New(ctx,
@@ -99,13 +108,13 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 
 	otel.SetTextMapPropagator(Propagator())
 
-	tp, traceShutdown, err := initTraceProvider(ctx, cfg, res)
+	tp, traceShutdown, err := initTraceProvider(ctx, transports[signalTraces], res)
 	if err != nil {
 		return nil, err
 	}
 	otel.SetTracerProvider(tp)
 
-	mp, metricShutdown, err := initMeterProvider(ctx, cfg, res)
+	mp, metricShutdown, err := initMeterProvider(ctx, transports[signalMetrics], res)
 	if err != nil {
 		// Trace already up — tear it down before bailing.
 		_ = traceShutdown(context.Background())
@@ -113,7 +122,7 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 	}
 	otel.SetMeterProvider(mp)
 
-	lp, logShutdown, err := initLoggerProvider(ctx, cfg, res)
+	lp, logShutdown, err := initLoggerProvider(ctx, transports[signalLogs], res)
 	if err != nil {
 		_ = metricShutdown(context.Background())
 		_ = traceShutdown(context.Background())
@@ -147,15 +156,14 @@ func Propagator() propagation.TextMapPropagator {
 	)
 }
 
-func initTraceProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdktrace.TracerProvider, func(context.Context) error, error) {
+func initTraceProvider(ctx context.Context, t transport, res *resource.Resource) (*sdktrace.TracerProvider, func(context.Context) error, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
-	opts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(cfg.Endpoint)}
-	if cfg.Insecure {
-		opts = append(opts, otlptracegrpc.WithInsecure())
-	}
-	exp, err := otlptracegrpc.New(dialCtx, opts...)
+	exp, err := otlptracegrpc.New(dialCtx,
+		otlptracegrpc.WithEndpoint(t.endpoint),
+		otlptracegrpc.WithTLSCredentials(t.credentials()),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("telemetry: trace exporter: %w", err)
 	}
@@ -167,12 +175,13 @@ func initTraceProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 	return tp, tp.Shutdown, nil
 }
 
-func initMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, error) {
+func initMeterProvider(ctx context.Context, t transport, res *resource.Resource) (*sdkmetric.MeterProvider, func(context.Context) error, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
 	opts := []otlpmetricgrpc.Option{
-		otlpmetricgrpc.WithEndpoint(cfg.Endpoint),
+		otlpmetricgrpc.WithEndpoint(t.endpoint),
+		otlpmetricgrpc.WithTLSCredentials(t.credentials()),
 		// Cumulative is mandatory for the Prometheus OTLP write receiver.
 		// Without this, monotonic counters are rejected with "invalid
 		// temporality and type combination" because the SDK default for
@@ -180,9 +189,6 @@ func initMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 		otlpmetricgrpc.WithTemporalitySelector(func(sdkmetric.InstrumentKind) metricdata.Temporality {
 			return metricdata.CumulativeTemporality
 		}),
-	}
-	if cfg.Insecure {
-		opts = append(opts, otlpmetricgrpc.WithInsecure())
 	}
 	exp, err := otlpmetricgrpc.New(dialCtx, opts...)
 	if err != nil {
@@ -196,15 +202,16 @@ func initMeterProvider(ctx context.Context, cfg Config, res *resource.Resource) 
 	return mp, mp.Shutdown, nil
 }
 
-func initLoggerProvider(ctx context.Context, cfg Config, res *resource.Resource) (*sdklog.LoggerProvider, func(context.Context) error, error) {
+func initLoggerProvider(ctx context.Context, t transport, res *resource.Resource) (*sdklog.LoggerProvider, func(context.Context) error, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
-	opts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(cfg.Endpoint)}
-	if cfg.Insecure {
-		opts = append(opts, otlploggrpc.WithInsecure())
-	}
-	exp, err := otlploggrpc.New(dialCtx, opts...)
+	exp, err := otlploggrpc.New(dialCtx,
+		// The URL form also sets the exporter's own insecure setting from the
+		// scheme, so it does not parse OTEL_EXPORTER_OTLP_ENDPOINT itself.
+		otlploggrpc.WithEndpointURL(t.url()),
+		otlploggrpc.WithTLSCredentials(t.credentials()),
+	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("telemetry: log exporter: %w", err)
 	}

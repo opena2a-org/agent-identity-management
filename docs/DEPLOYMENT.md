@@ -1003,7 +1003,38 @@ docker compose up -d
 ./smoke-backend.sh
 ```
 
-Every `fga.authorize` decision lands as a parent span with one child span per FGA step it ran: up to five on `POST /api/v1/agents/:id/authorize` (up to four when the policy's risk level is LOW), and one, `fga.capability_check`, when the agent has no FGA policy for the capability or the decision is an SDK verification's. 9 SemConv attributes ride the parent: `agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`. The attribute set is proposed to the OpenTelemetry Semantic Conventions WG. Full design notes: [`apps/backend/docs/OBSERVABILITY.md`](../apps/backend/docs/OBSERVABILITY.md).
+### Collector endpoint and TLS
+
+The backend exports over OTLP/gRPC. It reads the collector's endpoint from `OTEL_EXPORTER_OTLP_ENDPOINT`, or for one signal from `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` or `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, which wins where it is set. It decides TLS as the [OTLP exporter specification](https://opentelemetry.io/docs/specs/otel/protocol/exporter/) defines:
+
+| Endpoint value | Connection |
+|---|---|
+| unset | `localhost:4317`, plaintext |
+| the empty string | telemetry off |
+| `https://collector.example.com:4317` | TLS, whatever `OTEL_EXPORTER_OTLP_INSECURE` says |
+| `http://collector.example.com:4317` | plaintext, whatever `OTEL_EXPORTER_OTLP_INSECURE` says |
+| `collector.example.com:4317` with `OTEL_EXPORTER_OTLP_INSECURE=true` | plaintext |
+| `collector.example.com:4317` with `OTEL_EXPORTER_OTLP_INSECURE=false` | TLS |
+| `collector.example.com:4317` with `OTEL_EXPORTER_OTLP_INSECURE` unset | TLS, unless the host is `localhost`, an address in 127.0.0.0/8 or `::1`, which is plaintext |
+
+For TLS, three variables name PEM files:
+
+- `OTEL_EXPORTER_OTLP_CERTIFICATE`: the CA certificate that verifies the collector. Unset, the system roots verify it.
+- `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` and `OTEL_EXPORTER_OTLP_CLIENT_KEY`: the client certificate and its key, for a collector that requires mutual TLS. Set both or neither.
+
+Each also has a per-signal form, for example `OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE`, which wins where it is set. A file that cannot be read, a scheme other than `http` or `https`, or an `OTEL_EXPORTER_OTLP_INSECURE` value other than `true` or `false` stops telemetry: the start log says `OpenTelemetry init failed: telemetry: <variable>...` with the variable's name, and the server starts without telemetry. With telemetry on, the start log says `OpenTelemetry initialized (OTLP gRPC)`.
+
+Give an IP address in the URL form, for example `http://10.0.0.5:4317`. With `host:port` and an IP address host, for example `10.0.0.5:4317`, the OpenTelemetry exporter library the backend uses reads the variable itself and logs `parse url ... first path segment in URL cannot contain colon` twice at start, once for traces and once for metrics. The backend still reads the value as the table says and exports. A host name in `host:port`, such as `localhost:4317`, logs no such line.
+
+### Spans
+
+Every HTTP request the backend serves, other than `/metrics`, emits a SERVER span named `{method} {route}` from the route the request matched, for example `POST /api/v1/public/login`. It carries the [HTTP semantic-convention](https://opentelemetry.io/docs/specs/semconv/http/http-spans/) attributes `http.request.method`, `url.path`, `url.scheme`, `http.route`, `http.response.status_code`, `server.address`, `server.port`, `network.protocol.version`, `client.address` and `user_agent.original`. A 5xx answer sets the span's status to Error and `error.type` to the status code; a 4xx leaves the status unset. A request no route matched, or one a middleware answered before its route was reached (an authentication refusal, for example), has no `http.route` and is named by its method alone. The span records no query string, no header other than `User-Agent` and no body. A span a handler starts is a child of its request's span. The backend does not continue an incoming `traceparent`: each request's span starts a trace of its own.
+
+Every `fga.authorize` decision lands as a parent span, a child of its request's span, with one child span per FGA step it ran: up to five on `POST /api/v1/agents/:id/authorize` (up to four when the policy's risk level is LOW), and one, `fga.capability_check`, when the agent has no FGA policy for the capability or the decision is an SDK verification's. 9 SemConv attributes ride the parent: `agent.id`, `agent.public_key.algorithm`, `agent.trust_score`, `agent.drift_score`, `agent.scan_verdict`, `agent.capability`, `fga.step`, `fga.outcome`, `fga.denied_by`. The attribute set is proposed to the OpenTelemetry Semantic Conventions WG. Full design notes: [`apps/backend/docs/OBSERVABILITY.md`](../apps/backend/docs/OBSERVABILITY.md).
+
+### Prometheus metric names
+
+The gauge of registered MCP servers is `aim_mcp_servers`. It was `aim_mcp_servers_total`, a counter's suffix on a gauge; a query or alert on the old name matches nothing and needs the new one.
 
 ---
 

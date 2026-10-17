@@ -303,6 +303,39 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Changed — every HTTP request emits an OpenTelemetry server span, the OTLP exporters choose TLS as the OTLP specification defines, and the gauge `aim_mcp_servers_total` is renamed `aim_mcp_servers`
+
+- Each request the backend serves, other than `/metrics`, starts a SERVER span named `{method} {route}` from the route
+  Fiber matched, with `http.request.method`, `url.path`, `url.scheme`, `http.route`, `http.response.status_code`,
+  `server.address`, `server.port`, `network.protocol.version`, `client.address` and `user_agent.original`. A 5xx
+  answer sets the span's status to Error and `error.type`; a 4xx leaves the status unset. A request answered before
+  its route is reached has no `http.route` and is named by its method. No query string, no header other than
+  `User-Agent` and no body is recorded. A span a handler starts on the request context, `fga.authorize` included, is
+  its child. An incoming `traceparent` is not continued.
+- The connection follows `OTEL_EXPORTER_OTLP_ENDPOINT`, or the per-signal `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`,
+  `_METRICS_ENDPOINT` or `_LOGS_ENDPOINT` where one is set: `https://` is TLS and `http://` plaintext whatever
+  `OTEL_EXPORTER_OTLP_INSECURE` says; `host:port` is plaintext with `OTEL_EXPORTER_OTLP_INSECURE=true`, TLS with
+  `false`, and with neither TLS unless the host is `localhost`, in 127.0.0.0/8 or `::1`. Unset stays `localhost:4317`
+  in plaintext, and the empty string still turns telemetry off. The server no longer forces plaintext.
+- `OTEL_EXPORTER_OTLP_CERTIFICATE` (the CA that verifies the collector), `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` and
+  `OTEL_EXPORTER_OTLP_CLIENT_KEY` are read, with their per-signal forms. A file that cannot be read stops telemetry
+  with an error naming the variable, and the server starts without telemetry.
+- An endpoint in URL form now exports. Measured against the previous code with `https://127.0.0.1:<port>` and
+  `http://127.0.0.1:<port>`: no export arrived, and the exporter reported
+  `invalid target address https://127.0.0.1:<port>`, because the URL was passed to it as a gRPC target.
+- Upgrade: a `host:port` endpoint whose host is not loopback, with `OTEL_EXPORTER_OTLP_INSECURE` unset, now connects
+  with TLS. For a collector that serves plaintext on such a host, set `http://host:port` or
+  `OTEL_EXPORTER_OTLP_INSECURE=true`.
+- A `host:port` endpoint with an IP address host, such as `127.0.0.1:4317`, still makes the OpenTelemetry trace and
+  metric exporters log `parse url ... first path segment in URL cannot contain colon` once each at start: they parse
+  the variable themselves whatever the backend passes them. Export works. The URL form logs no such line.
+- `aim_mcp_servers_total`, a gauge with a counter's suffix, is served as `aim_mcp_servers`, with the same help text
+  and values. A query, alert or dashboard on the old name matches nothing until it uses the new one. A test lints the
+  served metrics with the Prometheus linter, which flagged only that name before the change.
+- `docs/DEPLOYMENT.md` § Observability gives the endpoint forms, the TLS default, the three certificate variables,
+  the request span and its attributes, and the renamed gauge. `apps/backend/docs/OBSERVABILITY.md` no longer says the
+  backend dials with TLS disabled.
+
 ### Changed — a message the `smtp` email provider sends carries a `Message-ID`, STARTTLS and `AUTH PLAIN` are tested against a server, and the email providers are documented
 
 - Every message the `smtp` provider sends carries one `Message-ID` header (RFC 5322 §3.6.4): `<`, 16 random bytes in

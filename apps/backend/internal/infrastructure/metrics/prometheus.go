@@ -85,10 +85,10 @@ var (
 		},
 	)
 
-	// MCP Server metrics
+	// MCP Server metrics. A gauge, so its name has no _total suffix.
 	mcpServersTotal = factory.NewGauge(
 		prometheus.GaugeOpts{
-			Name: "aim_mcp_servers_total",
+			Name: "aim_mcp_servers",
 			Help: "Total number of registered MCP servers",
 		},
 	)
