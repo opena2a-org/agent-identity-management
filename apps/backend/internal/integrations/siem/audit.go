@@ -2,6 +2,7 @@ package siem
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -50,11 +51,16 @@ func EventFromAuditLog(entry *domain.AuditLog) *SIEMEvent {
 	if entry.UserID != nil && *entry.UserID != uuid.Nil {
 		details["userId"] = entry.UserID.String()
 	}
+	// The address and user agent are copied: a handler receives them as views
+	// of the request buffer (c.Get, and c.IP behind a trusted proxy), which
+	// the server rewrites when it reads the next request, and the forwarder
+	// serializes the event after the request has ended. OnCreate runs inside
+	// the request, so here the views are still the entry's own.
 	if entry.IPAddress != "" {
-		details["ipAddress"] = entry.IPAddress
+		details["ipAddress"] = strings.Clone(entry.IPAddress)
 	}
 	if entry.UserAgent != "" {
-		details["userAgent"] = entry.UserAgent
+		details["userAgent"] = strings.Clone(entry.UserAgent)
 	}
 	if len(entry.Metadata) > 0 {
 		if raw, err := json.Marshal(entry.Metadata); err == nil {

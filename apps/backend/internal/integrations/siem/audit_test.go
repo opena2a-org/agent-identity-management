@@ -94,3 +94,28 @@ func TestAuditSeverity(t *testing.T) {
 		assert.Equal(t, want, AuditSeverity(action), "action %s", action)
 	}
 }
+
+// An audit entry a handler writes carries the address and user agent as the
+// handler received them, which may be views of the request buffer (see
+// requestView). The forwarder serializes the event after the request has
+// ended, when the server has read the next request into that buffer, so the
+// event copies both out of the entry when it is built, inside the request.
+func TestEventFromAuditLog_CopiesTheAddressAndUserAgentOutOfTheRequestBuffer(t *testing.T) {
+	view := newRequestView(t, "203.0.113.70", "aim-sdk/1.0 (first request)")
+	entry := &domain.AuditLog{
+		ID:             uuid.New(),
+		OrganizationID: uuid.New(),
+		Action:         domain.AuditActionLogin,
+		ResourceType:   "user",
+		ResourceID:     uuid.New(),
+		IPAddress:      view.address,
+		UserAgent:      view.userAgent,
+		Timestamp:      time.Now(),
+	}
+	event := EventFromAuditLog(entry)
+
+	view.overwrite()
+
+	assert.Equal(t, "203.0.113.70", event.Details["ipAddress"])
+	assert.Equal(t, "aim-sdk/1.0 (first request)", event.Details["userAgent"])
+}

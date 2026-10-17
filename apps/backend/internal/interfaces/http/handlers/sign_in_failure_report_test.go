@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
@@ -209,4 +211,45 @@ func TestLocalLogin_ReportsEachRefusedSignIn(t *testing.T) {
 		require.Equal(t, fiber.StatusOK, status, body)
 		assert.Empty(t, reports.got)
 	})
+}
+
+// The report an observer receives keeps the request's own address and user
+// agent after the request has ended. c.IP behind a trusted proxy and c.Get
+// hand the handler views of the server's request buffer, which the server
+// rewrites in place when it reads the next request, and the SIEM forwarder
+// serializes the report's event after the answer has been sent.
+func TestReportSignInFailure_KeepsTheRequestsOwnAddressAndUserAgent(t *testing.T) {
+	app := fiber.New(fiber.Config{
+		ProxyHeader:      fiber.HeaderXForwardedFor,
+		TrustProxy:       true,
+		TrustProxyConfig: fiber.TrustProxyConfig{Loopback: true},
+	})
+	fctx := &fasthttp.RequestCtx{}
+	fctx.SetRemoteAddr(&net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 4321})
+	fctx.Request.Header.Set(fiber.HeaderXForwardedFor, "203.0.113.70")
+	fctx.Request.Header.Set(fiber.HeaderUserAgent, "sign-in-report-test/1.0")
+	c := app.AcquireCtx(fctx)
+	defer app.ReleaseCtx(c)
+	addressView, userAgentView := c.IP(), c.Get(fiber.HeaderUserAgent)
+	require.Equal(t, "203.0.113.70", addressView)
+	require.Equal(t, "sign-in-report-test/1.0", userAgentView)
+
+	reports := &signInReports{}
+	userID, orgID := uuid.New(), uuid.New()
+	reportSignInFailure(c, reports.observe, SignInFailedEmailOrPasswordMismatch, userID, orgID)
+	require.Len(t, reports.got, 1)
+
+	// The next request's headers, read into the same buffer: the views change.
+	fctx.Request.Header.Set(fiber.HeaderXForwardedFor, "198.51.100.9")
+	fctx.Request.Header.Set(fiber.HeaderUserAgent, "later-request-agent/9.9")
+	require.Equal(t, "198.51.100.9", addressView, "c.IP no longer hands out a view of the request buffer; this test no longer models the hazard")
+	require.Equal(t, "later-request-agent/9.9", userAgentView, "c.Get no longer hands out a view of the request buffer; this test no longer models the hazard")
+
+	got := reports.got[0]
+	assert.Equal(t, "203.0.113.70", got.IPAddress)
+	assert.Equal(t, "sign-in-report-test/1.0", got.UserAgent)
+	assert.Equal(t, "password", got.Method)
+	assert.Equal(t, SignInFailedEmailOrPasswordMismatch, got.Reason)
+	assert.Equal(t, userID, got.UserID)
+	assert.Equal(t, orgID, got.OrganizationID)
 }
