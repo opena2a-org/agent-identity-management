@@ -273,6 +273,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   checks that one function computes the identity and one print, this line, prints it through the standard log
   package.
 
+### Added: a dashboard test fails when a navigation link names a path no page serves
+
+- `apps/web/lib/navigation-routes.test.ts` reads each sidebar entry's `href` and `hrefByRole` values in
+  `apps/web/lib/navigation.ts` and each hub tab's `href` in `apps/web/lib/hub-tabs.ts`. It fails unless a page file
+  under `apps/web/app` serves that path, or a `lib/redirects.ts` row sends that path to one a page file serves. A
+  route group folder adds no path segment, and a dynamic page such as `app/dashboard/mcp/[id]/page.tsx` does not
+  count for a static link. The failure names the link, its href and the page file it expected, for example
+  `organization tab Audit log links to /dashboard/admin/audit-logs, and no page serves it and lib/redirects.ts has no row for it: expected app/dashboard/admin/audit-logs/page.tsx`.
+- The Registrations tab, shown only on the self-hosted build, is checked like the other tabs.
+- Measured on a copy of `apps/web` with `app/dashboard/admin/audit-logs/page.tsx` and its test removed: the existing
+  navigation tests (`lib/navigation-edge.test.ts`, `lib/persona.test.ts`, `app/dashboard/layout.drawer.test.tsx`,
+  `app/dashboard/layout.role.test.tsx`) passed, 47 of 47, and the new test failed with the line above. With the page
+  restored, it passed.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
