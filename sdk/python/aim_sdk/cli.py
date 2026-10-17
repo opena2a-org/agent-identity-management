@@ -35,6 +35,7 @@ Login design (RFC 8628, OAuth 2.0 Device Authorization Grant):
 
 import argparse
 import re
+import stat
 import sys
 import os
 import time
@@ -145,9 +146,11 @@ def _json_type_name(value):
     return 'string' if isinstance(value, str) else 'null'
 
 
-def invalid_server_url_reason(aim_url):
+def invalid_server_url_reason(aim_url, option="--url"):
     """
-    Why `aim_url` cannot be an AIM server address, or None when it can.
+    Why `aim_url` cannot be an AIM server address, or None when it can. The
+    reason names the address by `option`: `--url` for the commands, `aim_url`
+    for secure().
 
     Checked before the reachability probe (#408): an empty `--url` or a string
     that is not an http(s) URL used to reach the probe, which reported "could
@@ -156,15 +159,15 @@ def invalid_server_url_reason(aim_url):
     """
     url = (aim_url or "").strip()
     if not url:
-        return "--url is empty"
+        return f"{option} is empty"
     try:
         parts = urlsplit(url)
     except ValueError:
-        return f"--url {url!r} is not a URL"
+        return f"{option} {url!r} is not a URL"
     if parts.scheme not in ("http", "https"):
-        return f"--url {url!r} is not an http(s) URL"
+        return f"{option} {url!r} is not an http(s) URL"
     if not parts.hostname:
-        return f"--url {url!r} has no host"
+        return f"{option} {url!r} has no host"
     return None
 
 
@@ -443,11 +446,22 @@ def _no_answer(exc, aim_url):
 
 def _print_server_unavailable(aim_url, outage, blank_line=True):
     """
-    The last output of a login the server could not serve: what happened and
-    where, that nothing was stored, and when to run the command again.
+    The last output of a login the server could not serve: the lines of
+    _server_unavailable_lines. `blank_line` is False where the output so far
+    already ends with one.
+    """
+    if blank_line:
+        print()
+    for line in _server_unavailable_lines(aim_url, outage):
+        print(line)
+
+
+def _server_unavailable_lines(aim_url, outage):
+    """
+    What happened and where, that nothing was stored, and when to run the
+    command again, for a sign-in the server could not serve.
 
     The wait is printed, never slept, and comes from `Retry-After` alone.
-    `blank_line` is False where the output so far already ends with one.
     """
     if outage.status is not None:
         what = f"it answered HTTP {outage.status}"
@@ -467,10 +481,10 @@ def _print_server_unavailable(aim_url, outage, blank_line=True):
     else:
         when = f"in {outage.retry_after} second{'' if outage.retry_after == 1 else 's'}"
 
-    if blank_line:
-        print()
-    print(f"The AIM server at {aim_url} is unavailable: {what}.")
-    print(f"No sign-in was completed and nothing was stored. Run the same command again {when}.")
+    return [
+        f"The AIM server at {aim_url} is unavailable: {what}.",
+        f"No sign-in was completed and nothing was stored. Run the same command again {when}.",
+    ]
 
 
 def request_device_code(aim_url: str, client_id: str = DEVICE_CLIENT_ID):
@@ -579,6 +593,49 @@ def poll_device_token(aim_url: str, device_code: str, interval: int, deadline: f
         return {'error': code or f"HTTP {status} from {url}"}
 
 
+def _device_wait(device):
+    """
+    The poll interval and the longest wait, in seconds, for a device-code
+    answer: its interval (5 when it states none or no number), and the code's
+    lifetime it states in expiresIn (LOGIN_MAX_WAIT_SECONDS when it states
+    none or no number), capped at LOGIN_MAX_WAIT_SECONDS and at least 1.
+    """
+    try:
+        interval = int(device.get('interval') or 5)
+    except (TypeError, ValueError):
+        interval = 5
+    try:
+        expires_in = int(device.get('expiresIn') or LOGIN_MAX_WAIT_SECONDS)
+    except (TypeError, ValueError):
+        expires_in = LOGIN_MAX_WAIT_SECONDS
+    return interval, max(1, min(expires_in, LOGIN_MAX_WAIT_SECONDS))
+
+
+def _verification_uri_problem(device):
+    """
+    Why a device-code answer's verification URIs cannot be used, or None.
+
+    Both URLs are server-chosen strings: the one printed and the one handed
+    to the browser. Only http(s) is opened; anything else stops the sign-in.
+    """
+    verification_uri = device.get('verificationUri', '')
+    for candidate in (verification_uri, device.get('verificationUriComplete') or verification_uri):
+        if not (str(candidate).startswith('http://') or str(candidate).startswith('https://')):
+            return (f"the server sent a verification URI that is not an http(s) URL ({candidate!r}); "
+                    f"check the server's FRONTEND_URL.")
+    return None
+
+
+def _sign_in_failure(reason, max_wait):
+    """The sentence that ends a device grant that answered `reason` instead of a token pair."""
+    if reason in ('expired_token', 'timeout'):
+        return (f"The code expired before it was approved (waited {max_wait}s; login timed out). "
+                f"Run aim-sdk login to get a new code.")
+    if reason == 'access_denied':
+        return "The login was denied in the dashboard. Nothing was stored."
+    return f"Login failed: {reason}"
+
+
 def login(args):
     """Login to an AIM server with the OAuth 2.0 device grant (RFC 8628)."""
     from .credentials import save_sdk_credentials, load_sdk_credentials, AIM_DIR
@@ -657,22 +714,11 @@ def login(args):
     user_code = device.get('userCode', '')
     verification_uri = device.get('verificationUri', '')
     verification_uri_complete = device.get('verificationUriComplete') or verification_uri
-    # Both URLs are server-chosen strings: the one printed and the one handed
-    # to the browser. Only http(s) is opened; anything else stops here.
-    for candidate in (verification_uri, verification_uri_complete):
-        if not (str(candidate).startswith('http://') or str(candidate).startswith('https://')):
-            print(f"\nCould not start the device login: the server sent a verification URI that is not "
-                  f"an http(s) URL ({candidate!r}); check the server's FRONTEND_URL.")
-            return 1
-    try:
-        interval = int(device.get('interval') or 5)
-    except (TypeError, ValueError):
-        interval = 5
-    try:
-        expires_in = int(device.get('expiresIn') or LOGIN_MAX_WAIT_SECONDS)
-    except (TypeError, ValueError):
-        expires_in = LOGIN_MAX_WAIT_SECONDS
-    max_wait = max(1, min(expires_in, LOGIN_MAX_WAIT_SECONDS))
+    uri_problem = _verification_uri_problem(device)
+    if uri_problem:
+        print(f"\nCould not start the device login: {uri_problem}")
+        return 1
+    interval, max_wait = _device_wait(device)
 
     print("To sign in, open this page in your browser and approve the code:")
     print()
@@ -709,14 +755,7 @@ def login(args):
         _print_server_unavailable(aim_url, token_response['outage'])
         return EXIT_SERVER_UNAVAILABLE
     if 'error' in token_response:
-        reason = token_response['error']
-        if reason in ('expired_token', 'timeout'):
-            print(f"\nThe code expired before it was approved (waited {max_wait}s; login timed out). "
-                  f"Run aim-sdk login to get a new code.")
-        elif reason == 'access_denied':
-            print("\nThe login was denied in the dashboard. Nothing was stored.")
-        else:
-            print(f"\nLogin failed: {reason}")
+        print(f"\n{_sign_in_failure(token_response['error'], max_wait)}")
         return 1
 
     # The pair is the one the dashboard login issues; the user fields come
@@ -769,6 +808,133 @@ def login(args):
     else:
         print("Failed to save credentials.")
         return 1
+
+
+# The first line secure() prints when it signs this machine in; `{agent}` is
+# the name the call registers.
+INLINE_SIGN_IN_LEAD = "{agent} needs an AIM sign-in on this machine. Sign in once to continue."
+
+
+def sign_in_block(lead, aim_url, verification_uri, user_code, max_wait):
+    """
+    The lines a device sign-in prints before it waits: `lead`, the server, the
+    page to open, the code, and the wait line, which gives `max_wait` seconds
+    in whole minutes, rounded up. Each value is printed as one terminal line
+    (_terminal_line). No line carries styling, so the bytes are the same at a
+    terminal, in a pipe and with NO_COLOR set.
+    """
+    minutes = -(-max_wait // 60)
+    return [
+        lead,
+        f"  Server: {_terminal_line(aim_url)}",
+        f"  Open:   {_terminal_line(verification_uri)}",
+        f"  Code:   {_terminal_line(user_code)}",
+        f"Waiting for your approval (up to {minutes} min). Ctrl+C stops the wait. "
+        "Nothing is stored until you approve.",
+    ]
+
+
+def _home_relative(path):
+    """`path` with the home directory written as `~`, or in full when it is elsewhere."""
+    try:
+        return "~/" + Path(path).relative_to(Path.home()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def sign_in_inline(aim_url, agent_name, out=None):
+    """
+    Sign this machine in to the AIM server at `aim_url` for secure(), which
+    calls this when it finds no SDK credentials and no api_key and a person
+    can approve a code. The device grant and the stored credentials are the
+    ones `aim-sdk login` uses; the lines go to `out`, standard error by default.
+
+    Returns:
+        dict: the stored SDK credentials.
+
+    Raises:
+        ConfigurationError: the address was refused before any request, the
+            server was unavailable or did not start the grant, or the
+            credentials could not be saved.
+        AuthenticationError: the code was denied or expired, or the wait for
+            the token pair ended with another error.
+        KeyboardInterrupt: Ctrl+C during the wait.
+
+    Credentials are saved only after the server answers with a token pair.
+    """
+    from . import credentials as stored
+    from .exceptions import AuthenticationError, ConfigurationError
+
+    out = sys.stderr if out is None else out
+
+    url_problem = invalid_server_url_reason(aim_url, option="aim_url")
+    if url_problem:
+        raise ConfigurationError(
+            f"{url_problem}. Pass the server's http(s) address, for example "
+            f"aim_url=\"https://aim.example.com\", or omit aim_url to use {DEFAULT_AIM_URL}."
+        )
+    # Before any request: the whole sign-in goes to this address.
+    refusal = _cleartext_url_refusal(aim_url, 'login')
+    if refusal:
+        raise ConfigurationError("\n".join(refusal.lines))
+    aim_url = aim_url.strip().rstrip('/')
+
+    device = request_device_code(aim_url)
+    if isinstance(device.get('outage'), _Outage):
+        raise ConfigurationError("\n".join(_server_unavailable_lines(aim_url, device['outage'])))
+    if 'error' in device:
+        raise ConfigurationError(_terminal_line(f"Could not start the device login: {device['error']}"))
+    uri_problem = _verification_uri_problem(device)
+    if uri_problem:
+        raise ConfigurationError(_terminal_line(f"Could not start the device login: {uri_problem}"))
+    interval, max_wait = _device_wait(device)
+    verification_uri = device['verificationUri']
+
+    lead = INLINE_SIGN_IN_LEAD.format(agent=_terminal_line(agent_name))
+    for line in sign_in_block(lead, aim_url, verification_uri, device.get('userCode', ''), max_wait):
+        print(line, file=out)
+    out.flush()
+
+    # The rule `aim-sdk login` applies: a browser opens only when standard
+    # output is a terminal, on the page with the code filled in.
+    if _no_browser_reason(None) is None:
+        try:
+            webbrowser.open(device.get('verificationUriComplete') or verification_uri)
+        except Exception:
+            pass
+
+    token_response = poll_device_token(aim_url, device['deviceCode'], interval, time.monotonic() + max_wait)
+    if isinstance(token_response.get('outage'), _Outage):
+        raise ConfigurationError("\n".join(_server_unavailable_lines(aim_url, token_response['outage'])))
+    if 'error' in token_response:
+        raise AuthenticationError(_terminal_line(_sign_in_failure(token_response['error'], max_wait)))
+
+    # The credentials login() stores, key for key: accessToken and
+    # organizationId mark them as a sign-in's (credentials.detect_credential_origin).
+    from .oauth import decode_jwt_claims
+
+    claims = decode_jwt_claims(token_response.get('accessToken', '')) or {}
+    credentials = {
+        'aimUrl': aim_url,
+        'refreshToken': token_response.get('refreshToken'),
+        'accessToken': token_response.get('accessToken'),
+        'userId': claims.get('user_id'),
+        'userEmail': claims.get('email'),
+        'organizationId': claims.get('organization_id'),
+    }
+    if not stored.save_sdk_credentials(credentials):
+        raise ConfigurationError("Failed to save credentials.")
+
+    path = stored.SDK_CREDENTIALS_FILE
+    try:
+        private = stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    except OSError:
+        private = False
+    who = credentials.get('userEmail') or credentials.get('userId') or 'Unknown'
+    print(f"Signed in as {_terminal_line(who)} on {aim_url}.", file=out)
+    print(f"Credentials: {_home_relative(path)}" + (" (owner read/write only)" if private else ""), file=out)
+    out.flush()
+    return credentials
 
 
 _SDK_TOKEN_KEYS = ("refreshToken", "refresh_token", "accessToken", "access_token")

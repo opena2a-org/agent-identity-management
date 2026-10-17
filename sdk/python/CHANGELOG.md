@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added: `secure()` signs this machine in when it finds no SDK credentials and no `api_key`, and a person can approve the code
+
+- With no SDK credentials (from `aim-sdk login` or a dashboard download) and no `api_key`, `secure()`
+  (`register_agent`) now runs the device grant `aim-sdk login` uses, when the `CI` environment variable is unset or
+  empty and standard input is a terminal or the code runs in an IPython kernel. Before, it raised
+  `ConfigurationError: No authentication credentials found.` and the first call needed `aim-sdk login` ahead of it.
+- The sign-in lines go to standard error: `<agent> needs an AIM sign-in on this machine. Sign in once to continue.`,
+  the server, the page to open and the code, then `Waiting for your approval (up to N min). Ctrl+C stops the wait.
+  Nothing is stored until you approve.`, where N is the code's lifetime the server states (`expiresIn`), at most 900
+  seconds, in minutes rounded up. A browser opens on the page with the code filled in under the rule `aim-sdk login`
+  applies: only when standard output is a terminal.
+- After the approval the call stores the credentials `aim-sdk login` stores, in `~/.aim/sdk_credentials.json`, prints
+  `Signed in as <email> on <server>.` and `Credentials: ~/.aim/sdk_credentials.json (owner read/write only)` (the
+  part in parentheses only when the file's mode is 0600), and registers the agent in OAuth mode.
+- The server is `aim_url`, or `https://aim.opena2a.org` when `aim_url` is not passed. An `http:` address on a host
+  other than `localhost`, `127.0.0.1` or `[::1]` is refused before any request, and so is an `aim_url` that is not
+  an http(s) URL.
+- A denied or expired code raises `AuthenticationError`. An answer of 502, 503 or 504 to the device-code request,
+  a 503 to a poll, or no HTTP answer to the device-code request raises `ConfigurationError` with the lines
+  `aim-sdk login` prints for an unavailable server. Ctrl+C during the wait raises `KeyboardInterrupt`. In each of
+  these cases no credentials are stored and no agent is registered.
+- With `CI` set, or with standard input that is not a terminal outside an IPython kernel, `secure()` raises the
+  `No authentication credentials found` error, as before, and sends no request. Stored SDK credentials never start
+  the sign-in, including when registration with them fails, and neither does an `api_key`.
+- `aim-sdk login` prints the same bytes and exits with the same code as before for an approved, a denied and an
+  expired code, another grant error, a 503 to either request, a 400 to the device-code request, a verification URI
+  that is not http(s), and an interval and lifetime that are not numbers. The steps both paths share (the wait
+  bounds, the verification URI check, the denied and expired sentences and the server-unavailable lines) are now
+  functions both call.
+- Test: `tests/test_secure_signs_in_on_demand.py`. `tests/conftest.py` sets `CI` for every test; the tests of the
+  sign-in remove it.
+
 ### Fixed — `aim-sdk demo` names no enforcement mode the server has not reported, and says in one sentence that it cannot reach the server
 
 - `aim-sdk demo` sends one GET to the server address before it prints anything about the server. When that request
