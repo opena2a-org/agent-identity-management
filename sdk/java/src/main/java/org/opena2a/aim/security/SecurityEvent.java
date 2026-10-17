@@ -18,7 +18,7 @@ import java.util.UUID;
  * <p>Designed for easy parsing and correlation in security tools.
  * All timestamps are ISO 8601 UTC format for cross-system compatibility.</p>
  *
- * <p>Compatible with: Splunk, ELK, Datadog, Sumo Logic, Azure Sentinel, AWS SecurityHub</p>
+ * <p>Written as one JSON object per line, which a test of Splunk HTTP Event Collector's published format accepted as an event's {@code event} field. ELK and Datadog were not tested.</p>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class SecurityEvent {

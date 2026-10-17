@@ -545,7 +545,7 @@ The Java SDK includes enterprise-grade security infrastructure for SOC/SIEM inte
 
 ### SecurityLogger - SOC/SIEM Integration
 
-JSON event logging compatible with Splunk, ELK, Datadog, and other SIEM platforms.
+SecurityLogger writes JSON lines, one event per line. In a test (`SecurityLoggerHecFormatTest`), a receiver written from Splunk HTTP Event Collector's published event format accepted each line, sent unchanged, as an event's `event` field. A line names its time in `timestamp`, an ISO-8601 UTC string, and HEC's `time` field takes epoch seconds, so a sender that sets `time` converts it. ELK and Datadog were not tested.
 
 ```java
 import org.opena2a.aim.security.SecurityLogger;
