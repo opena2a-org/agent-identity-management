@@ -79,6 +79,21 @@ describe("navigation never shows a route the edge gate blocks", () => {
     expect(ROUTE_PERMISSIONS["/dashboard/webhooks"]).toEqual(["admin", "manager", "member"]);
   });
 
+  it("the alert channels tab follows Webhooks, with the gate entry of the backend's write routes", () => {
+    // Creating, changing, deleting and testing a channel sit behind MemberMiddleware on the
+    // backend's /alert-channels group, so the tab and the gate entry name the same three roles.
+    const tabs = HUB_TABS.developers;
+    const at = tabs.findIndex((t) => t.href === "/dashboard/alert-channels");
+    expect(tabs[at]).toEqual({
+      name: "Alert channels",
+      href: "/dashboard/alert-channels",
+      roles: ["admin", "manager", "member"],
+    });
+    expect(tabs[at - 1]?.href).toBe("/dashboard/webhooks");
+    expect(ROUTE_PERMISSIONS["/dashboard/alert-channels"]).toEqual(["admin", "manager", "member"]);
+    expect(effectiveEdgeRoles("/dashboard/alert-channels")).toEqual(["admin", "manager", "member"]);
+  });
+
   it("compliance has its own path and gate entry, with the roles the old path had", () => {
     // /dashboard/compliance no longer inherits "/dashboard/admin", so it names its roles
     // itself. The nav entry, the gate entry and the redirected old path must all agree, and

@@ -32,6 +32,9 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   // Webhooks tab). Role set traces to the backend gate: MemberMiddleware's
   // admin/manager/member allow-list on the /webhooks group.
   "/dashboard/webhooks": ["admin", "manager", "member"],
+  // Developers → Alert channels tab. Role set traces to MemberMiddleware on the
+  // backend's /alert-channels write routes (create, update, delete, test).
+  "/dashboard/alert-channels": ["admin", "manager", "member"],
   // Cross-organization onboarding metrics. The backend also requires the admin's email on
   // the AIM_PLATFORM_ADMINS allowlist; the edge can only check the role. Scoped to this
   // page so it adds nothing to the hosted product's own /dashboard/platform guard.

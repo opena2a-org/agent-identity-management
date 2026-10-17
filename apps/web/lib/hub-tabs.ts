@@ -48,6 +48,9 @@ export const HUB_TABS: Record<string, HubTab[]> = {
     // Role set matches the backend gate (MemberMiddleware allow-list) and the
     // matching ROUTE_PERMISSIONS entry that ships in the same commit.
     { name: "Webhooks", href: "/dashboard/webhooks", roles: ["admin", "manager", "member"] },
+    // Creating, changing, deleting and testing a channel sit behind MemberMiddleware on the
+    // backend's /alert-channels group; the ROUTE_PERMISSIONS entry names the same roles.
+    { name: "Alert channels", href: "/dashboard/alert-channels", roles: ["admin", "manager", "member"] },
   ],
   organization: [
     { name: "Users", href: "/dashboard/admin/users", roles: ["admin"] },

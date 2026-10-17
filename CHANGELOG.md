@@ -303,6 +303,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Added — the dashboard adds, edits, tests and deletes alert channels
+
+- A Developers tab, Alert channels (`/dashboard/alert-channels`), shown to admins, managers and members, the roles
+  `MemberMiddleware` lets create, change, delete and test a channel. It lists the organization's channels with
+  name, kind, severity floor ("alerts at or above <severity>"), active state, the destination as the server answers
+  it (Slack, PagerDuty and Teams values as `****` and their last 4 characters, email recipients as stored), and the
+  last delivery's status, code and time, or "never".
+- Add channel and Edit open one form: name, kind (Slack, PagerDuty, Microsoft Teams, Email), the kind's field (the
+  Slack incoming webhook URL, the 32-character PagerDuty integration key, the Teams workflow URL, or up to 20 email
+  recipients, one per line) with the format the server takes, and the severity floor. A `400` or `409` answer is
+  shown beside the field its message names. On edit the field is empty and shows the current value as the server
+  answers it; left empty, the `PUT` carries no `config` and the stored destination stays. `kind` is sent only when
+  it changes.
+- Test calls `POST /api/v1/alert-channels/:id/test` and shows "Delivered (<code>)", or the failure class the `502`
+  answer names followed by "check the URL or key, then test again" (for an email channel, the recipients and the
+  server's email service). A PagerDuty test asks first, since it opens an alert on the PagerDuty service. Delete asks
+  first. `api.testAlertChannel` returns the `502` body as the outcome instead of the generic server error line.
+
 ### Added — alert channels also deliver to a Microsoft Teams workflow and to email addresses
 
 - `POST` and `PUT /api/v1/alert-channels` take two more kinds. `teams` takes `{"webhookUrl": ...}`, the `https` URL of
