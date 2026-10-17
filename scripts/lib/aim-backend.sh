@@ -10,7 +10,8 @@
 #       stops the run when DIR or a directory above it holds a .aim entry;
 #   aim_backend_parse_database_url
 #       reads DATABASE_URL into pg_user, pg_password, pg_host, pg_port, pg_db
-#       and pg_sslmode;
+#       and pg_sslmode, the user, the password and the database name
+#       percent-decoded;
 #   aim_backend_start WORK_PREFIX [NAME=VALUE ...]
 #       generates JWT_SECRET, KEYVAULT_MASTER_KEY and the admin password
 #       (printing none of them), builds cmd/server, cmd/migrate and
@@ -46,6 +47,27 @@ aim_backend_refuse_stored_sign_in() {
   done
 }
 
+# aim_backend_percent_decode NAME PART VALUE sets the variable NAME to VALUE
+# with each %XX replaced by the byte it encodes. A % that does not begin a %XX
+# stops the run, as it makes lib/pq refuse the URL, and so does %00, a NUL
+# byte, which no environment variable can carry. PART names the value in the
+# message, which holds none of it.
+aim_backend_percent_decode() {
+  local name="$1" part="$2" rest="$3" decoded="" byte
+  while [[ "$rest" == *%* ]]; do
+    decoded+="${rest%%\%*}"
+    rest="${rest#*%}"
+    [[ "$rest" =~ ^[0-9A-Fa-f]{2} ]] \
+      || fail "the $part in DATABASE_URL holds a % that does not begin a percent-encoded byte (%XX); write a % in it as %25"
+    [ "${rest:0:2}" != "00" ] \
+      || fail "the $part in DATABASE_URL holds %00, and an environment variable cannot carry a NUL byte"
+    printf -v byte '%b' "\\x${rest:0:2}"
+    decoded+="$byte"
+    rest="${rest:2}"
+  done
+  printf -v "$name" '%s' "$decoded$rest"
+}
+
 aim_backend_parse_database_url() {
   [ -n "${DATABASE_URL:-}" ] || fail "DATABASE_URL is not set"
   local url_pattern='^postgres(ql)?://([^:@/]+)(:([^@]*))?@([^:/?]+)(:([0-9]+))?/([^?]+)(\?(.*))?$'
@@ -56,6 +78,13 @@ aim_backend_parse_database_url() {
   pg_port="${BASH_REMATCH[7]:-5432}"
   pg_db="${BASH_REMATCH[8]}"
   pg_options="${BASH_REMATCH[10]}"
+  # cmd/migrate opens DATABASE_URL itself, and lib/pq percent-decodes its user,
+  # password and database name. aim-bootstrap and the server read them from
+  # POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_DB as they are, so those get
+  # the decoded values.
+  aim_backend_percent_decode pg_user user "$pg_user"
+  aim_backend_percent_decode pg_password password "$pg_password"
+  aim_backend_percent_decode pg_db "database name" "$pg_db"
   pg_sslmode="disable"
   if [[ "&$pg_options" =~ \&sslmode=([^&]+) ]]; then
     pg_sslmode="${BASH_REMATCH[1]}"
