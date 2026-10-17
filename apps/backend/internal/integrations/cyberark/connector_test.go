@@ -65,6 +65,16 @@ func TestCCPConnectorRoundTrip(t *testing.T) {
 		AppID: testAppID, Safe: testSafe, Object: "db-rotating",
 		Content: changing, UserName: "svc_rotating", PasswordChanging: true,
 	})
+	// Accounts whose AppID, Safe or Object name holds a space.
+	spaced := runtimeContent(t)
+	for _, a := range []ccptest.Account{
+		{AppID: "AIM App", Safe: testSafe, Object: testObject},
+		{AppID: testAppID, Safe: "AIM Database", Object: testObject},
+		{AppID: testAppID, Safe: testSafe, Object: "db orders"},
+	} {
+		a.Content, a.UserName = spaced, "svc_spaced"
+		stub.AddAccount(a)
+	}
 	ctx := context.Background()
 
 	// Every error the connector returns in this test; none may hold a
@@ -78,7 +88,7 @@ func TestCCPConnectorRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		for _, err := range errs {
-			for _, secret := range []string{content, changing} {
+			for _, secret := range []string{content, changing, spaced} {
 				if strings.Contains(err.Error(), secret) {
 					t.Errorf("error %q holds a credential value the stub served", err)
 				}
@@ -173,6 +183,86 @@ func TestCCPConnectorRoundTrip(t *testing.T) {
 		}
 	})
 
+	t.Run("a value holding a space is sent with the space written as %20", func(t *testing.T) {
+		c := connectorFor(t, stub, nil)
+		cases := []struct {
+			param, value string
+			req          CCPRequest
+			content      string
+		}{
+			{"AppID", "AIM App", CCPRequest{AppID: "AIM App", Safe: testSafe, Object: testObject}, spaced},
+			{"Safe", "AIM Database", CCPRequest{Safe: "AIM Database", Object: testObject}, spaced},
+			{"Folder", "Root Folder", CCPRequest{Safe: testSafe, Folder: "Root Folder", Object: testObject}, content},
+			{"Object", "db orders", CCPRequest{Safe: testSafe, Object: "db orders"}, spaced},
+			{"UserName", "svc aim", CCPRequest{Safe: testSafe, Object: testObject, UserName: "svc aim"}, content},
+			{"Address", "orders db", CCPRequest{Safe: testSafe, Object: testObject, Address: "orders db"}, content},
+			{"Database", "orders db", CCPRequest{Safe: testSafe, Object: testObject, Database: "orders db"}, content},
+			{"PolicyID", "Unix SSH", CCPRequest{Safe: testSafe, Object: testObject, PolicyID: "Unix SSH"}, content},
+			{"Reason", "grant approved", CCPRequest{Safe: testSafe, Object: testObject, Reason: "grant approved"}, content},
+		}
+		for _, tc := range cases {
+			before := len(stub.Requests())
+			resp, err := c.RetrieveCredential(ctx, tc.req)
+			if keep(err) != nil {
+				t.Errorf("%s %q: RetrieveCredential: %v", tc.param, tc.value, err)
+				continue
+			}
+			if resp.Content != tc.content {
+				t.Errorf("%s %q: the account returned is not the one the stub serves for the request (Content compared without printing)", tc.param, tc.value)
+			}
+			reqs := stub.Requests()
+			if len(reqs) != before+1 {
+				t.Errorf("%s %q: the stub recorded %d request(s), want 1", tc.param, tc.value, len(reqs)-before)
+				continue
+			}
+			got := reqs[len(reqs)-1]
+			if v := got.Params[tc.param]; len(v) != 1 || v[0] != tc.value {
+				t.Errorf("%s received = %q, want exactly [%q]", tc.param, v, tc.value)
+			}
+			if want := tc.param + "=" + strings.ReplaceAll(tc.value, " ", "%20"); !strings.Contains(got.RequestURI, want) {
+				t.Errorf("request URI %q does not send %s", got.RequestURI, want)
+			}
+			if strings.ContainsAny(got.RequestURI, " +") {
+				t.Errorf("request URI %q holds a raw space or '+'", got.RequestURI)
+			}
+		}
+	})
+
+	t.Run("a Query that names several properties is sent query-escaped", func(t *testing.T) {
+		c := connectorFor(t, stub, nil)
+		for _, tc := range []struct{ query, sent string }{
+			{"Safe=AIM-Database;Object=db", "&Query=Safe%3DAIM-Database%3BObject%3Ddb"},
+			{"Safe=AIM Database;Object=db orders", "&Query=Safe%3DAIM%20Database%3BObject%3Ddb%20orders"},
+		} {
+			before := len(stub.Requests())
+			_, err := c.RetrieveCredential(ctx, CCPRequest{Query: tc.query})
+			keep(err)
+			// The stub checks the format of a request before it looks an
+			// account up, and answers 400 to a format CCP does not accept.
+			// It looks an account up by the Safe and Object parameters and
+			// does not evaluate a Query, so a request that sends neither is
+			// answered 404.
+			if !errors.Is(err, ErrCCPNotFound) {
+				t.Errorf("Query %q: err = %v, want the stub's 404 for a request with no Safe parameter", tc.query, err)
+			}
+			reqs := stub.Requests()
+			if len(reqs) != before+1 {
+				t.Errorf("Query %q: the stub recorded %d request(s), want 1", tc.query, len(reqs)-before)
+				continue
+			}
+			got := reqs[len(reqs)-1]
+			if v := got.Params["Query"]; len(v) != 1 || v[0] != tc.query {
+				t.Errorf("Query received = %q, want exactly [%q]", v, tc.query)
+			}
+			if !strings.Contains(got.RequestURI, tc.sent) {
+				t.Errorf("request URI %q does not send %s", got.RequestURI, tc.sent)
+			}
+			if strings.ContainsAny(got.RequestURI, " +;") {
+				t.Errorf("request URI %q holds a raw space, '+' or ';'", got.RequestURI)
+			}
+		}
+	})
+
 	t.Run("unset parameters are not sent", func(t *testing.T) {
 		c := connectorFor(t, stub, nil)
 		if _, err := c.RetrieveCredential(ctx, CCPRequest{Safe: testSafe, Object: testObject}); keep(err) != nil {
@@ -241,20 +331,53 @@ func TestCCPConnectorRoundTrip(t *testing.T) {
 
 	t.Run("values CCP does not accept are refused before sending", func(t *testing.T) {
 		c := connectorFor(t, stub, nil)
-		cases := []struct {
+		type refusal struct {
 			param string
 			req   CCPRequest
 			value string
-		}{
-			{"Object", CCPRequest{Safe: testSafe, Object: "db orders"}, "db orders"},
+		}
+		cases := []refusal{
 			{"Object", CCPRequest{Safe: testSafe, Object: "db-prod&Safe=Other"}, "db-prod&Safe=Other"},
 			{"Object", CCPRequest{Safe: testSafe, Object: "db+prod"}, "db+prod"},
 			{"Object", CCPRequest{Safe: testSafe, Object: "db%26prod"}, "db%26prod"},
 			{"Object", CCPRequest{Safe: testSafe, Object: "db;prod"}, "db;prod"},
-			{"Safe", CCPRequest{Safe: "AIM Database", Object: testObject}, "AIM Database"},
 			{"Reason", CCPRequest{Safe: testSafe, Object: testObject, Reason: "grant&AppID=Other"}, "grant&AppID=Other"},
-			{"Query", CCPRequest{Query: "Safe=AIM-Database;Object=db"}, "Safe=AIM-Database;Object=db"},
 			{"AppID", CCPRequest{AppID: "AIM+App", Safe: testSafe, Object: testObject}, "AIM+App"},
+			// In a Query, a ';' that does not separate two name=value
+			// properties lies inside a property name or value.
+			{"Query", CCPRequest{Query: "Safe=AIM-Database;"}, "Safe=AIM-Database;"},
+			{"Query", CCPRequest{Query: ";Safe=AIM-Database"}, ";Safe=AIM-Database"},
+			{"Query", CCPRequest{Query: "Safe=AIM-Database;;Object=db"}, "Safe=AIM-Database;;Object=db"},
+			{"Query", CCPRequest{Query: "Safe=AIM-Database;db"}, "Safe=AIM-Database;db"},
+			{"Query", CCPRequest{Query: "Safe=AIM-Database;=db"}, "Safe=AIM-Database;=db"},
+			{"Query", CCPRequest{Query: "Safe=AIM-Database&Object=db"}, "Safe=AIM-Database&Object=db"},
+			{"Query", CCPRequest{Query: "Safe=AIM+Database"}, "Safe=AIM+Database"},
+			{"Query", CCPRequest{Query: "Safe=AIM-Database%3BObject=db"}, "Safe=AIM-Database%3BObject=db"},
+		}
+		// '+', '&', '%' and ';' in each parameter that carries text. In the
+		// Query the value is that of its Safe property, so a ';' lies inside
+		// a property value there too.
+		for _, f := range []struct {
+			param string
+			set   func(*CCPRequest, string)
+		}{
+			{"AppID", func(r *CCPRequest, v string) { r.AppID = v }},
+			{"Safe", func(r *CCPRequest, v string) { r.Safe = v }},
+			{"Folder", func(r *CCPRequest, v string) { r.Folder = v }},
+			{"Object", func(r *CCPRequest, v string) { r.Object = v }},
+			{"UserName", func(r *CCPRequest, v string) { r.UserName = v }},
+			{"Address", func(r *CCPRequest, v string) { r.Address = v }},
+			{"Database", func(r *CCPRequest, v string) { r.Database = v }},
+			{"PolicyID", func(r *CCPRequest, v string) { r.PolicyID = v }},
+			{"Reason", func(r *CCPRequest, v string) { r.Reason = v }},
+			{"Query", func(r *CCPRequest, v string) { r.Query = "Safe=" + v }},
+		} {
+			for _, ch := range []string{"+", "&", "%", ";"} {
+				value := "AIM" + ch + "Database"
+				req := CCPRequest{Safe: testSafe, Object: testObject}
+				f.set(&req, value)
+				cases = append(cases, refusal{f.param, req, value})
+			}
 		}
 		for _, tc := range cases {
 			before := len(stub.Requests())

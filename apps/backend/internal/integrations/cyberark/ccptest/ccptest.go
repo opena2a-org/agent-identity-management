@@ -47,6 +47,8 @@ const AccountsPath = "/AIMWebService/api/Accounts"
 const ClientCommonName = "aim-ccp-client"
 
 // Account is a password object the stub serves for one (AppID, Safe, Object).
+// The stub finds it by the AppID, Safe and Object parameters of a request and
+// does not evaluate a Query.
 type Account struct {
 	AppID    string
 	Safe     string
@@ -266,7 +268,14 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, v := range values {
 			// "The following characters are not supported in URL values: + & %"
-			if strings.ContainsAny(v, "+&%;") {
+			if strings.ContainsAny(v, "+&%") {
+				writeText(w, http.StatusBadRequest, "AIMWS030E Invalid query format.")
+				return
+			}
+			// A free Query separates the account properties it names with
+			// ';', so each ';' in it must separate two of them; no other
+			// value may hold one.
+			if (name == "Query" && !separatesProperties(v)) || (name != "Query" && strings.Contains(v, ";")) {
 				writeText(w, http.StatusBadRequest, "AIMWS030E Invalid query format.")
 				return
 			}
@@ -321,6 +330,21 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		"Database":                acct.Database,
 		"PasswordChangeInProcess": acct.PasswordChanging,
 	})
+}
+
+// separatesProperties reports whether every ';' in query separates two
+// properties written name=value with a non-empty name. A query that holds no
+// ';' passes.
+func separatesProperties(query string) bool {
+	if !strings.Contains(query, ";") {
+		return true
+	}
+	for _, property := range strings.Split(query, ";") {
+		if name, _, ok := strings.Cut(property, "="); !ok || name == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // IsDocumentedParam reports whether name is one of the request parameters
