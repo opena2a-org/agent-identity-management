@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -305,4 +306,90 @@ func TestAlertChannelHandler_TestAnswersTheDelivery(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadGateway, status)
 	assert.JSONEq(t, `{"delivered":false,"statusCode":404,"error":"status 404"}`, body)
 	assert.NotContains(t, body, c.Config["webhookUrl"])
+}
+
+// memoryAlertChannelStore holds channels for the real alert channel service.
+type memoryAlertChannelStore struct {
+	channels map[uuid.UUID]*domain.AlertChannel
+}
+
+func (m *memoryAlertChannelStore) Create(_ context.Context, c *domain.AlertChannel) error {
+	m.channels[c.ID] = c
+	return nil
+}
+
+func (m *memoryAlertChannelStore) GetByID(_ context.Context, orgID, id uuid.UUID) (*domain.AlertChannel, error) {
+	c, ok := m.channels[id]
+	if !ok || c.OrganizationID != orgID {
+		return nil, domain.ErrAlertChannelNotFound
+	}
+	copied := *c
+	return &copied, nil
+}
+
+func (m *memoryAlertChannelStore) List(_ context.Context, orgID uuid.UUID) ([]*domain.AlertChannel, error) {
+	out := []*domain.AlertChannel{}
+	for _, c := range m.channels {
+		if c.OrganizationID == orgID {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+func (m *memoryAlertChannelStore) ListActiveForFloors(context.Context, uuid.UUID, []domain.AlertSeverity) ([]*domain.AlertChannel, error) {
+	return nil, nil
+}
+
+func (m *memoryAlertChannelStore) Update(_ context.Context, c *domain.AlertChannel) error {
+	m.channels[c.ID] = c
+	return nil
+}
+
+func (m *memoryAlertChannelStore) Delete(_ context.Context, _, id uuid.UUID) error {
+	delete(m.channels, id)
+	return nil
+}
+
+func (m *memoryAlertChannelStore) RecordDelivery(context.Context, uuid.UUID, uuid.UUID, string, *int, time.Time) error {
+	return nil
+}
+
+// On a server with no email service, the real service behind the handler
+// answers an email channel's create with 400 and its test message with 502
+// email_unavailable; an email channel's recipients are answered unmasked.
+func TestAlertChannelHandler_EmailChannelWithoutEmailService(t *testing.T) {
+	org := uuid.New()
+	store := &memoryAlertChannelStore{channels: map[uuid.UUID]*domain.AlertChannel{}}
+	existing := &domain.AlertChannel{ID: uuid.New(), OrganizationID: org, Name: "mail", Kind: domain.AlertChannelEmail,
+		Config: map[string]string{}, Recipients: []string{"ops@example.com", "sec@example.com"},
+		MinSeverity: domain.AlertSeverityWarning, IsActive: true}
+	store.channels[existing.ID] = existing
+	audit := &[]alertChannelAuditRow{}
+	h := NewAlertChannelHandler(application.NewAlertChannelService(store, "https://aim.example.test", nil), alertChannelAudit{rows: audit}, nil)
+	rig := &alertChannelRig{app: fiber.New(), audit: audit, org: org}
+	rig.app.Use(func(c fiber.Ctx) error {
+		c.Locals("organization_id", org)
+		c.Locals("user_id", uuid.New())
+		return c.Next()
+	})
+	rig.app.Post("/alert-channels", h.CreateAlertChannel)
+	rig.app.Get("/alert-channels/:id", h.GetAlertChannel)
+	rig.app.Post("/alert-channels/:id/test", h.TestAlertChannel)
+
+	status, body := rig.do(t, fiber.MethodPost, "/alert-channels",
+		`{"name":"new","kind":"email","config":{"recipients":["ops@example.com"]},"minSeverity":"info"}`)
+	assert.Equal(t, fiber.StatusBadRequest, status)
+	assert.JSONEq(t, `{"error":"email is not configured on this server"}`, body)
+	assert.Empty(t, *audit, "a refused create writes no audit row")
+
+	status, body = rig.do(t, fiber.MethodPost, "/alert-channels/"+existing.ID.String()+"/test", "")
+	assert.Equal(t, fiber.StatusBadGateway, status)
+	assert.JSONEq(t, `{"delivered":false,"statusCode":null,"error":"email_unavailable"}`, body)
+
+	status, body = rig.do(t, fiber.MethodGet, "/alert-channels/"+existing.ID.String(), "")
+	require.Equal(t, fiber.StatusOK, status, body)
+	var view map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(body), &view))
+	assert.Equal(t, map[string]interface{}{"recipients": []interface{}{"ops@example.com", "sec@example.com"}}, view["config"])
 }

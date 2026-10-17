@@ -988,9 +988,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	apiKeyService.SetWebhookService(webhookService)
 
 	// Send every alert the alert repository inserts, whichever service wrote
-	// it, to the organization's Slack and PagerDuty channels whose severity
-	// floor admits it (alert_channels.go).
-	alertChannelService := startAlertChannels(repos, cfg.Server.FrontendURL)
+	// it, to the organization's Slack, PagerDuty, Teams and email channels
+	// whose severity floor admits it (alert_channels.go). Email channels are
+	// sent through emailService, nil when no email provider is configured.
+	alertChannelService := startAlertChannels(repos, cfg.Server.FrontendURL, emailService)
 
 	// Initialize RegistrationService for email/password user registration workflow
 	registrationService := application.NewRegistrationService(

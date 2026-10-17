@@ -303,6 +303,44 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Added — alert channels also deliver to a Microsoft Teams workflow and to email addresses
+
+- `POST` and `PUT /api/v1/alert-channels` take two more kinds. `teams` takes `{"webhookUrl": ...}`, the `https` URL of
+  a Teams workflow whose trigger is "When a Teams webhook request is received", on any host; a URL that is not
+  `https`, has no host, carries a user name or password, or that the webhook URL check refuses is answered `400`
+  naming `config.webhookUrl`, and answers carry it as `****` and its last 4 characters. `email` takes
+  `{"recipients": [...]}`, 1 to 20 bare addresses that `net/mail` parses to themselves, so an entry with a display
+  name, a comma, a CR or an LF is answered `400` naming `config.recipients`; answers carry the recipients unmasked.
+- A Teams delivery is a `POST` with `Content-Type: application/json` and no `Authorization` header, of
+  `{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","contentUrl":null,"content":<card>}]}`,
+  where the card is an `AdaptiveCard` of version `1.2` whose `body` holds one `TextBlock` per line of the Slack text,
+  without Slack's escaping. Any `2xx` is delivered, and the HTTP retry rule applies. Workflows whose trigger needs a
+  Microsoft Entra token are not supported.
+- An email delivery sends each recipient one plain-text message through the server's email service, with the subject
+  `AIM alert (<severity>): <title>` (CR and LF removed, cut to 200 characters) and a body holding the title,
+  description, agent, alert id, alert type and the dashboard's alerts page. A recipient the service fails to send to
+  is tried up to 3 more times after 1, 4 and 16 seconds and does not stop the others; the delivery is `delivered` only
+  when every recipient was sent the message, with `lastDeliveryCode` `null`. The test message's subject is
+  `AIM test message for alert channel <name>`. When the server started without an email service, creating an email
+  channel, changing a channel to `email` or giving one a `config` is answered
+  `400 {"error":"email is not configured on this server"}`, and an existing email channel's deliveries and test
+  message fail with the class `email_unavailable` (the test route answers `502`).
+- Migration `132_alert_channels_teams_email.sql` widens `alert_channels_kind_check` to `slack`, `pagerduty`, `teams`
+  and `email`. An email channel's `config` column holds `{"recipients": [...]}`.
+- `docs/API.md` § Alert channels gains both kinds and their config and refusals, the Teams body and the unsupported
+  Entra-authenticated triggers, the email subject, body and retry rule, and that email channels need the server's
+  email service. `apps/backend/cmd/server/integration_claims_docs_test.go` no longer counts Microsoft Teams among the
+  integrations whose documentation lines must state a status such as planned.
+- Tests: `apps/backend/cmd/server/alert_channels_teams_email_integration_test.go`
+  (`TestAlertChannelsTeamsEmailRoundTrip`, against a loopback Teams receiver built from the trigger's published format
+  and the server's SMTP email service sending to a loopback SMTP server),
+  `apps/backend/internal/application/alert_channel_teams_email_test.go`,
+  `apps/backend/internal/infrastructure/email/smtptest/server_test.go` (the loopback SMTP server, written from
+  RFC 5321, in the new test package `smtptest`), and additions to
+  `apps/backend/internal/domain/alert_channel_test.go`,
+  `apps/backend/internal/infrastructure/repository/alert_channel_repository_test.go` and
+  `apps/backend/internal/interfaces/http/handlers/alert_channel_handler_test.go`.
+
 ### Added — an organization's alerts reach Slack and PagerDuty in each service's format, with a severity floor per channel
 
 - New routes `POST`, `GET /api/v1/alert-channels` and `GET`, `PUT`, `DELETE /api/v1/alert-channels/:id` manage an

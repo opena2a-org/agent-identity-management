@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"strings"
 	"sync"
@@ -58,6 +59,29 @@ const (
 	pagerDutyRoutingKeyLength = 32
 	// pagerDutySummaryLimit is the most characters payload.summary takes.
 	pagerDutySummaryLimit = 1024
+
+	// teamsCardContentType is the contentType of an Adaptive Card attachment.
+	teamsCardContentType = "application/vnd.microsoft.card.adaptive"
+	// adaptiveCardSchema and adaptiveCardVersion are the $schema and version of
+	// the card a Teams message carries.
+	adaptiveCardSchema  = "http://adaptivecards.io/schemas/adaptive-card.json"
+	adaptiveCardVersion = "1.2"
+
+	// maxAlertChannelRecipients is the most addresses an email channel has.
+	maxAlertChannelRecipients = 20
+	// emailSubjectLimit is the most characters an email subject has.
+	emailSubjectLimit = 200
+
+	// AlertChannelEmailUnavailable is the failure class of an email channel's
+	// delivery when the server has no email service configured.
+	AlertChannelEmailUnavailable = "email_unavailable"
+	// AlertChannelEmailFailed is the failure class of an email channel's
+	// delivery when the email service did not send the message to every
+	// recipient.
+	AlertChannelEmailFailed = "email_failed"
+	// emailNotConfiguredReason is the refusal of an email channel on a server
+	// with no email service configured.
+	emailNotConfiguredReason = "email is not configured on this server"
 )
 
 // defaultAlertChannelRetryDelays are the waits before the second, third and
@@ -70,6 +94,9 @@ var defaultAlertChannelRetryDelays = []time.Duration{1 * time.Second, 4 * time.S
 type AlertChannelService struct {
 	store       AlertChannelStore
 	frontendURL string
+	// email sends an email channel's messages: the server's email service, nil
+	// when the server has none configured.
+	email domain.EmailService
 
 	// newHTTPClient builds the client a delivery is sent with: the egress
 	// client, which follows no redirect and checks the address of every
@@ -78,7 +105,8 @@ type AlertChannelService struct {
 	// retryDelays are the waits before each retry; a delivery makes at most
 	// len(retryDelays)+1 attempts.
 	retryDelays []time.Duration
-	// checkURL checks a Slack webhook URL the way a webhook URL is checked.
+	// checkURL checks a Slack or Teams webhook URL the way a webhook URL is
+	// checked.
 	checkURL func(rawURL string) error
 
 	queue     chan *domain.Alert
@@ -89,13 +117,16 @@ type AlertChannelService struct {
 }
 
 // NewAlertChannelService returns the service on store. frontendURL is the
-// dashboard's address (FRONTEND_URL): Slack messages link to its alerts page,
-// and a PagerDuty event for an alert that names no agent gives its host as the
-// source. Start begins delivery.
-func NewAlertChannelService(store AlertChannelStore, frontendURL string) *AlertChannelService {
+// dashboard's address (FRONTEND_URL): Slack, Teams and email messages link to
+// its alerts page, and a PagerDuty event for an alert that names no agent gives
+// its host as the source. email is the server's email service, or nil when the
+// server has none; with nil, no email channel can be created and an existing
+// one's deliveries fail. Start begins delivery.
+func NewAlertChannelService(store AlertChannelStore, frontendURL string, email domain.EmailService) *AlertChannelService {
 	return &AlertChannelService{
 		store:         store,
 		frontendURL:   frontendURL,
+		email:         email,
 		newHTTPClient: utils.NewEgressClient,
 		retryDelays:   defaultAlertChannelRetryDelays,
 		checkURL:      checkWebhookURL,
@@ -151,11 +182,27 @@ func checkAlertChannelName(name string) (string, error) {
 
 func checkAlertChannelKind(kind string) (domain.AlertChannelKind, error) {
 	switch k := domain.AlertChannelKind(kind); k {
-	case domain.AlertChannelSlack, domain.AlertChannelPagerDuty:
+	case domain.AlertChannelSlack, domain.AlertChannelPagerDuty, domain.AlertChannelTeams, domain.AlertChannelEmail:
 		return k, nil
 	}
 	return "", refuseAlertChannel("unsupported kind: %s", kind)
 }
+
+// alertChannelConfigKeys are the config keys a channel can take, in the order
+// a refusal names them; alertChannelConfigKey is the one each kind takes.
+var (
+	alertChannelConfigKeys = []string{
+		domain.AlertChannelConfigWebhookURL,
+		domain.AlertChannelConfigRoutingKey,
+		domain.AlertChannelConfigRecipients,
+	}
+	alertChannelConfigKey = map[domain.AlertChannelKind]string{
+		domain.AlertChannelSlack:     domain.AlertChannelConfigWebhookURL,
+		domain.AlertChannelPagerDuty: domain.AlertChannelConfigRoutingKey,
+		domain.AlertChannelTeams:     domain.AlertChannelConfigWebhookURL,
+		domain.AlertChannelEmail:     domain.AlertChannelConfigRecipients,
+	}
+)
 
 func checkAlertChannelFloor(floor string) (domain.AlertSeverity, error) {
 	severity := domain.AlertSeverity(floor)
@@ -166,48 +213,112 @@ func checkAlertChannelFloor(floor string) (domain.AlertSeverity, error) {
 }
 
 // checkConfig decodes and checks a config for kind and returns the values to
-// store. A key the kind does not take is refused by name.
-func (s *AlertChannelService) checkConfig(kind domain.AlertChannelKind, raw json.RawMessage) (map[string]string, error) {
+// store: the destination of a Slack, PagerDuty or Teams channel, or the
+// recipients of an email channel, with an empty config. A key the kind does
+// not take is refused by name.
+func (s *AlertChannelService) checkConfig(kind domain.AlertChannelKind, raw json.RawMessage) (map[string]string, []string, error) {
 	if trimmed := bytes.TrimSpace(raw); len(trimmed) == 0 || trimmed[0] != '{' {
-		return nil, refuseAlertChannel("config must be an object")
+		return nil, nil, refuseAlertChannel("config must be an object")
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var config struct {
-		WebhookURL *string `json:"webhookUrl,omitempty"`
-		RoutingKey *string `json:"routingKey,omitempty"`
+		WebhookURL *string         `json:"webhookUrl,omitempty"`
+		RoutingKey *string         `json:"routingKey,omitempty"`
+		Recipients json.RawMessage `json:"recipients,omitempty"`
 	}
 	if err := dec.Decode(&config); err != nil {
 		if name, ok := UnknownJSONField(err); ok {
-			return nil, refuseAlertChannel("unknown field: config.%s", name)
+			return nil, nil, refuseAlertChannel("unknown field: config.%s", name)
 		}
-		return nil, refuseAlertChannel("config must be an object of string values")
+		return nil, nil, refuseAlertChannel("config must be an object of string values")
+	}
+
+	present := map[string]bool{
+		domain.AlertChannelConfigWebhookURL: config.WebhookURL != nil,
+		domain.AlertChannelConfigRoutingKey: config.RoutingKey != nil,
+		domain.AlertChannelConfigRecipients: config.Recipients != nil,
+	}
+	takes := alertChannelConfigKey[kind]
+	for _, key := range alertChannelConfigKeys {
+		if present[key] && key != takes {
+			return nil, nil, refuseAlertChannel("unknown field: config.%s", key)
+		}
+	}
+	if !present[takes] {
+		return nil, nil, refuseAlertChannel("config.%s is required", takes)
 	}
 
 	switch kind {
 	case domain.AlertChannelSlack:
-		if config.RoutingKey != nil {
-			return nil, refuseAlertChannel("unknown field: config.%s", domain.AlertChannelConfigRoutingKey)
-		}
-		if config.WebhookURL == nil {
-			return nil, refuseAlertChannel("config.%s is required", domain.AlertChannelConfigWebhookURL)
-		}
 		if err := s.checkSlackWebhookURL(*config.WebhookURL); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return map[string]string{domain.AlertChannelConfigWebhookURL: *config.WebhookURL}, nil
+		return map[string]string{domain.AlertChannelConfigWebhookURL: *config.WebhookURL}, nil, nil
+	case domain.AlertChannelTeams:
+		if err := s.checkTeamsWebhookURL(*config.WebhookURL); err != nil {
+			return nil, nil, err
+		}
+		return map[string]string{domain.AlertChannelConfigWebhookURL: *config.WebhookURL}, nil, nil
+	case domain.AlertChannelEmail:
+		recipients, err := checkAlertChannelRecipients(config.Recipients)
+		if err != nil {
+			return nil, nil, err
+		}
+		return map[string]string{}, recipients, nil
 	default: // domain.AlertChannelPagerDuty
-		if config.WebhookURL != nil {
-			return nil, refuseAlertChannel("unknown field: config.%s", domain.AlertChannelConfigWebhookURL)
-		}
-		if config.RoutingKey == nil {
-			return nil, refuseAlertChannel("config.%s is required", domain.AlertChannelConfigRoutingKey)
-		}
 		if utf8.RuneCountInString(*config.RoutingKey) != pagerDutyRoutingKeyLength {
-			return nil, refuseAlertChannel("config.%s must be the %d-character integration key", domain.AlertChannelConfigRoutingKey, pagerDutyRoutingKeyLength)
+			return nil, nil, refuseAlertChannel("config.%s must be the %d-character integration key", domain.AlertChannelConfigRoutingKey, pagerDutyRoutingKeyLength)
 		}
-		return map[string]string{domain.AlertChannelConfigRoutingKey: *config.RoutingKey}, nil
+		return map[string]string{domain.AlertChannelConfigRoutingKey: *config.RoutingKey}, nil, nil
 	}
+}
+
+// checkTeamsWebhookURL accepts an https URL with a host and no user
+// information, that checkWebhookURL also accepts. The host is not restricted:
+// a workflow's URL depends on its region and environment. A URL with user
+// information is refused because the client would send it as an
+// Authorization header, which the trigger refuses. A refusal names the field
+// and never the URL; a host lookup that failed for another reason than the
+// name not existing is returned as it is.
+func (s *AlertChannelService) checkTeamsWebhookURL(raw string) error {
+	refused := refuseAlertChannel(`config.%s must be the https URL of a Teams workflow's "When a Teams webhook request is received" trigger`,
+		domain.AlertChannelConfigWebhookURL)
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Opaque != "" {
+		return refused
+	}
+	if err := s.checkURL(raw); err != nil {
+		if errors.Is(err, ErrWebhookURLRefused) {
+			return refused
+		}
+		return err
+	}
+	return nil
+}
+
+// checkAlertChannelRecipients accepts a JSON array of 1 to
+// maxAlertChannelRecipients strings, each a bare address: one that
+// net/mail.ParseAddress accepts and whose parsed address is the string itself
+// once trimmed, so it carries no display name, comma, CR or LF. It returns
+// the trimmed addresses.
+func checkAlertChannelRecipients(raw json.RawMessage) ([]string, error) {
+	list := make([]string, 0)
+	if err := json.Unmarshal(raw, &list); err != nil || len(list) == 0 || len(list) > maxAlertChannelRecipients {
+		return nil, refuseAlertChannel("config.%s must be a list of 1 to %d email addresses",
+			domain.AlertChannelConfigRecipients, maxAlertChannelRecipients)
+	}
+	recipients := make([]string, 0, len(list))
+	for i, entry := range list {
+		trimmed := strings.TrimSpace(entry)
+		addr, err := mail.ParseAddress(trimmed)
+		if err != nil || addr.Address != trimmed {
+			return nil, refuseAlertChannel("config.%s[%d] must be a bare email address such as ops@example.com, with no display name",
+				domain.AlertChannelConfigRecipients, i)
+		}
+		recipients = append(recipients, trimmed)
+	}
+	return recipients, nil
 }
 
 // checkSlackWebhookURL accepts https://hooks.slack.com/services/ followed by
@@ -246,11 +357,14 @@ func (s *AlertChannelService) CreateAlertChannel(ctx context.Context, orgID, use
 		return nil, err
 	}
 	if req.Kind == nil {
-		return nil, refuseAlertChannel("kind is required: slack or pagerduty")
+		return nil, refuseAlertChannel("kind is required: slack, pagerduty, teams or email")
 	}
 	kind, err := checkAlertChannelKind(*req.Kind)
 	if err != nil {
 		return nil, err
+	}
+	if kind == domain.AlertChannelEmail && s.email == nil {
+		return nil, refuseAlertChannel(emailNotConfiguredReason)
 	}
 	if req.MinSeverity == nil {
 		return nil, refuseAlertChannel("minSeverity must be one of info, warning, high, critical")
@@ -262,7 +376,7 @@ func (s *AlertChannelService) CreateAlertChannel(ctx context.Context, orgID, use
 	if len(req.Config) == 0 {
 		return nil, refuseAlertChannel("config is required")
 	}
-	config, err := s.checkConfig(kind, req.Config)
+	config, recipients, err := s.checkConfig(kind, req.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +390,7 @@ func (s *AlertChannelService) CreateAlertChannel(ctx context.Context, orgID, use
 		Name:           name,
 		Kind:           kind,
 		Config:         config,
+		Recipients:     recipients,
 		MinSeverity:    floor,
 		IsActive:       active,
 		CreatedBy:      &userID,
@@ -324,9 +439,15 @@ func (s *AlertChannelService) UpdateAlertChannel(ctx context.Context, orgID, id 
 			return nil, err
 		}
 	}
+	// An update that names the email kind or gives an email channel its
+	// recipients needs the server's email service; renaming, a floor change
+	// and deactivating do not.
+	if channel.Kind == domain.AlertChannelEmail && s.email == nil && (req.Kind != nil || len(req.Config) > 0) {
+		return nil, refuseAlertChannel(emailNotConfiguredReason)
+	}
 	switch {
 	case len(req.Config) > 0:
-		if channel.Config, err = s.checkConfig(channel.Kind, req.Config); err != nil {
+		if channel.Config, channel.Recipients, err = s.checkConfig(channel.Kind, req.Config); err != nil {
 			return nil, err
 		}
 	case kindChanged:
@@ -347,9 +468,10 @@ func (s *AlertChannelService) DeleteAlertChannel(ctx context.Context, orgID, id 
 }
 
 // AlertChannelTestResult is the outcome of a test message. StatusCode is nil
-// when no answer came; Error is the failure's class and never the
-// destination: "status <code>", "timeout", "refused address" or
-// "unreachable".
+// when no answer came and for an email channel; Error is the failure's class
+// and never the destination: "status <code>", "timeout", "refused address" or
+// "unreachable", and for an email channel AlertChannelEmailUnavailable or
+// AlertChannelEmailFailed.
 type AlertChannelTestResult struct {
 	Delivered  bool
 	StatusCode *int
@@ -358,17 +480,23 @@ type AlertChannelTestResult struct {
 
 // SendTestMessage sends one test message through the organization's channel
 // id at once, with no retry, and records the delivery. A PagerDuty test
-// triggers an incident on the PagerDuty service.
+// triggers an incident on the PagerDuty service; an email test is sent to
+// each recipient.
 func (s *AlertChannelService) SendTestMessage(ctx context.Context, orgID, id uuid.UUID) (*AlertChannelTestResult, error) {
 	channel, err := s.store.GetByID(ctx, orgID, id)
 	if err != nil {
 		return nil, err
 	}
-	destination, body, err := s.testMessage(channel)
-	if err != nil {
-		return nil, err
+	var outcome alertChannelOutcome
+	if channel.Kind == domain.AlertChannelEmail {
+		outcome = s.sendEmails(channel, TestEmailSubject(channel.Name), s.testEmailBody(channel), 1)
+	} else {
+		destination, body, err := s.testMessage(channel)
+		if err != nil {
+			return nil, err
+		}
+		outcome = s.send(destination, body, 1)
 	}
-	outcome := s.send(destination, body, 1)
 	s.record(channel, outcome)
 	return &AlertChannelTestResult{Delivered: outcome.delivered, StatusCode: outcome.code, Error: outcome.class}, nil
 }
@@ -446,12 +574,17 @@ func (s *AlertChannelService) deliverAlert(alert *domain.Alert) {
 }
 
 func (s *AlertChannelService) deliverToChannel(channel *domain.AlertChannel, alert *domain.Alert) {
-	destination, body, err := s.alertMessage(channel, alert)
-	if err != nil {
-		log.Printf("alert channel %s: alert %s not sent: %v", channel.ID, alert.ID, err)
-		return
+	var outcome alertChannelOutcome
+	if channel.Kind == domain.AlertChannelEmail {
+		outcome = s.sendEmails(channel, AlertEmailSubject(alert), s.alertEmailBody(alert), len(s.retryDelays)+1)
+	} else {
+		destination, body, err := s.alertMessage(channel, alert)
+		if err != nil {
+			log.Printf("alert channel %s: alert %s not sent: %v", channel.ID, alert.ID, err)
+			return
+		}
+		outcome = s.send(destination, body, len(s.retryDelays)+1)
 	}
-	outcome := s.send(destination, body, len(s.retryDelays)+1)
 	if !outcome.delivered {
 		log.Printf("alert channel %s (%s): alert %s not delivered: %s", channel.ID, channel.Kind, alert.ID, outcome.class)
 	}
@@ -526,15 +659,61 @@ func (s *AlertChannelService) send(destination string, body []byte, attempts int
 		if err == nil {
 			outcome.code = &code
 		}
-		if verdict == attemptFailed || attempt >= attempts || attempt > len(s.retryDelays) {
+		if verdict == attemptFailed || attempt >= attempts || attempt > len(s.retryDelays) || !s.waitBeforeRetry(attempt) {
 			return outcome
 		}
-		timer := time.NewTimer(s.retryDelays[attempt-1])
-		select {
-		case <-timer.C:
-		case <-s.stop:
-			timer.Stop()
-			return outcome
+	}
+}
+
+// waitBeforeRetry waits the retry delay that follows attempt, and returns
+// false when the service stops first.
+func (s *AlertChannelService) waitBeforeRetry(attempt int) bool {
+	timer := time.NewTimer(s.retryDelays[attempt-1])
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-s.stop:
+		return false
+	}
+}
+
+// sendEmails sends subject and body as plain text to each of channel's
+// recipients, one message each, through the server's email service. A
+// recipient the service fails to send to is tried up to attempts times, with
+// the retry delays between, and does not stop the others. The delivery is
+// delivered when every recipient was sent the message. It has no HTTP status.
+func (s *AlertChannelService) sendEmails(channel *domain.AlertChannel, subject, body string, attempts int) alertChannelOutcome {
+	if s.email == nil {
+		return alertChannelOutcome{class: AlertChannelEmailUnavailable}
+	}
+	if len(channel.Recipients) == 0 {
+		return alertChannelOutcome{class: AlertChannelEmailFailed}
+	}
+	failed := 0
+	for _, to := range channel.Recipients {
+		if err := s.sendEmail(to, subject, body, attempts); err != nil {
+			failed++
+			log.Printf("alert channel %s (email): a recipient was not sent the message: %s", channel.ID, redactEmailAddresses(err.Error()))
+		}
+	}
+	if failed > 0 {
+		log.Printf("alert channel %s (email): %d of %d recipients were not sent the message", channel.ID, failed, len(channel.Recipients))
+		return alertChannelOutcome{class: AlertChannelEmailFailed}
+	}
+	return alertChannelOutcome{delivered: true}
+}
+
+// sendEmail sends one message to one recipient, up to attempts times, and
+// returns the last failure.
+func (s *AlertChannelService) sendEmail(to, subject, body string, attempts int) error {
+	for attempt := 1; ; attempt++ {
+		err := s.email.SendEmail(to, subject, body, false)
+		if err == nil {
+			return nil
+		}
+		if attempt >= attempts || attempt > len(s.retryDelays) || !s.waitBeforeRetry(attempt) {
+			return err
 		}
 	}
 }
@@ -588,19 +767,128 @@ func (s *AlertChannelService) frontendHost() string {
 	return "aim"
 }
 
+// alertText is the text of an alert's Slack and Teams messages, as written:
+// its severity and title, its description, the agent it names when it names
+// one, and the dashboard's alerts page, one to a line.
+func alertText(alert *domain.Alert, alertsPage string) string {
+	lines := []string{
+		"AIM alert, severity " + string(alert.Severity) + ": " + alert.Title,
+		alert.Description,
+	}
+	if alert.AgentName != "" {
+		lines = append(lines, "Agent: "+alert.AgentName)
+	}
+	lines = append(lines, alertsPage)
+	return strings.Join(lines, "\n")
+}
+
 // SlackAlertText is the text of the Slack message for alert: its severity and
 // title, its description, the agent it names when it names one, and the
 // dashboard's alerts page. Every string taken from the alert is escaped.
 func SlackAlertText(alert *domain.Alert, alertsPage string) string {
-	lines := []string{
-		"AIM alert, severity " + EscapeSlackText(string(alert.Severity)) + ": " + EscapeSlackText(alert.Title),
-		EscapeSlackText(alert.Description),
+	return EscapeSlackText(alertText(alert, alertsPage))
+}
+
+// TeamsMessage is the body a Teams workflow's "When a Teams webhook request
+// is received" trigger takes: a message whose attachments are cards.
+type TeamsMessage struct {
+	Type        string            `json:"type"`
+	Attachments []TeamsAttachment `json:"attachments"`
+}
+
+// TeamsAttachment is one card of a Teams message. ContentURL is always sent,
+// as null.
+type TeamsAttachment struct {
+	ContentType string       `json:"contentType"`
+	ContentURL  *string      `json:"contentUrl"`
+	Content     AdaptiveCard `json:"content"`
+}
+
+// AdaptiveCard is the card a Teams message carries.
+type AdaptiveCard struct {
+	Schema  string              `json:"$schema"`
+	Type    string              `json:"type"`
+	Version string              `json:"version"`
+	Body    []AdaptiveTextBlock `json:"body"`
+}
+
+// AdaptiveTextBlock is one line of an Adaptive Card.
+type AdaptiveTextBlock struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// TeamsMessageOf is the Teams message whose card has one TextBlock for each
+// line of text, as written.
+func TeamsMessageOf(text string) TeamsMessage {
+	lines := strings.Split(text, "\n")
+	blocks := make([]AdaptiveTextBlock, 0, len(lines))
+	for _, line := range lines {
+		blocks = append(blocks, AdaptiveTextBlock{Type: "TextBlock", Text: line})
+	}
+	return TeamsMessage{
+		Type: "message",
+		Attachments: []TeamsAttachment{{
+			ContentType: teamsCardContentType,
+			ContentURL:  nil,
+			Content: AdaptiveCard{
+				Schema:  adaptiveCardSchema,
+				Type:    "AdaptiveCard",
+				Version: adaptiveCardVersion,
+				Body:    blocks,
+			},
+		}},
+	}
+}
+
+// TeamsAlertMessage is the Teams message for alert: one TextBlock for each
+// line of its Slack text, without Slack's escaping.
+func TeamsAlertMessage(alert *domain.Alert, alertsPage string) TeamsMessage {
+	return TeamsMessageOf(alertText(alert, alertsPage))
+}
+
+// emailSubject returns subject with every CR and LF removed, so it is one
+// header line, cut to emailSubjectLimit characters.
+func emailSubject(subject string) string {
+	return cutRunes(strings.NewReplacer("\r", "", "\n", "").Replace(subject), emailSubjectLimit)
+}
+
+// AlertEmailSubject is the subject of an alert's email:
+// "AIM alert (<severity>): <title>", with CR and LF removed and cut to 200
+// characters.
+func AlertEmailSubject(alert *domain.Alert) string {
+	return emailSubject("AIM alert (" + string(alert.Severity) + "): " + alert.Title)
+}
+
+// TestEmailSubject is the subject of a test message through the email channel
+// named name.
+func TestEmailSubject(name string) string {
+	return emailSubject("AIM test message for alert channel " + name)
+}
+
+// alertEmailBody is the plain-text body of an alert's email: its severity and
+// title, its description, the agent it names when it names one, its id and
+// type, and the dashboard's alerts page.
+func (s *AlertChannelService) alertEmailBody(alert *domain.Alert) string {
+	var b strings.Builder
+	b.WriteString("AIM alert, severity " + string(alert.Severity) + ": " + alert.Title + "\n\n")
+	if alert.Description != "" {
+		b.WriteString(alert.Description + "\n\n")
 	}
 	if alert.AgentName != "" {
-		lines = append(lines, "Agent: "+EscapeSlackText(alert.AgentName))
+		b.WriteString("Agent: " + alert.AgentName + "\n")
 	}
-	lines = append(lines, EscapeSlackText(alertsPage))
-	return strings.Join(lines, "\n")
+	b.WriteString("Alert ID: " + alert.ID.String() + "\n")
+	b.WriteString("Alert type: " + string(alert.AlertType) + "\n\n")
+	b.WriteString(s.alertsPageURL() + "\n")
+	return b.String()
+}
+
+// testEmailBody is the plain-text body of a test message through channel.
+func (s *AlertChannelService) testEmailBody(channel *domain.AlertChannel) string {
+	return "This is a test message for the AIM alert channel " + channel.Name + ". It carries no alert.\n\n" +
+		"The channel is sent each alert of severity " + string(channel.MinSeverity) + " or above.\n" +
+		"Alerts: " + s.alertsPageURL() + "\n"
 }
 
 // pagerDutySeverities maps AIM's severities to PagerDuty's.
@@ -701,6 +989,9 @@ func (s *AlertChannelService) alertMessage(channel *domain.AlertChannel, alert *
 	case domain.AlertChannelSlack:
 		body, err := encodeAlertChannelBody(map[string]string{"text": SlackAlertText(alert, s.alertsPageURL())})
 		return channel.Config[domain.AlertChannelConfigWebhookURL], body, err
+	case domain.AlertChannelTeams:
+		body, err := encodeAlertChannelBody(TeamsAlertMessage(alert, s.alertsPageURL()))
+		return channel.Config[domain.AlertChannelConfigWebhookURL], body, err
 	case domain.AlertChannelPagerDuty:
 		event, err := PagerDutyAlertEvent(alert, channel.Config[domain.AlertChannelConfigRoutingKey], s.frontendHost())
 		if err != nil {
@@ -719,6 +1010,9 @@ func (s *AlertChannelService) testMessage(channel *domain.AlertChannel) (string,
 		body, err := encodeAlertChannelBody(map[string]string{
 			"text": "AIM test message for alert channel " + EscapeSlackText(channel.Name),
 		})
+		return channel.Config[domain.AlertChannelConfigWebhookURL], body, err
+	case domain.AlertChannelTeams:
+		body, err := encodeAlertChannelBody(TeamsMessageOf("AIM test message for alert channel " + channel.Name))
 		return channel.Config[domain.AlertChannelConfigWebhookURL], body, err
 	case domain.AlertChannelPagerDuty:
 		body, err := encodeAlertChannelBody(PagerDutyEvent{

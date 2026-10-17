@@ -1178,8 +1178,8 @@ def verify_delivery(secret, timestamp, signature, body, now):
 
 ## Alert channels
 
-An alert channel sends an organization's alerts to Slack or PagerDuty, each in that service's published
-format. Every alert the server stores is sent, whichever part of the server raised it, to each active
+An alert channel sends an organization's alerts to Slack, PagerDuty, a Microsoft Teams workflow or a
+list of email addresses, each in that service's published format. Every alert the server stores is sent, whichever part of the server raised it, to each active
 channel of its organization whose severity floor admits the alert's severity. A repeat that is counted
 on an open alert is not sent again.
 
@@ -1220,11 +1220,31 @@ Create a channel.
 }
 ```
 
+**Request (Microsoft Teams):**
+```json
+{
+  "name": "Security channel in Teams",
+  "kind": "teams",
+  "config": {"webhookUrl": "<the HTTP URL the workflow's trigger gives>"},
+  "minSeverity": "warning"
+}
+```
+
+**Request (email):**
+```json
+{
+  "name": "Security team mailbox",
+  "kind": "email",
+  "config": {"recipients": ["ops@example.com", "sec@example.com"]},
+  "minSeverity": "high"
+}
+```
+
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | 1 to 100 characters. A name another channel of the organization has is answered `409`. |
-| `kind` | Yes | `slack` or `pagerduty`. |
-| `config` | Yes | For `slack`, `{"webhookUrl": ...}`: a Slack incoming webhook URL, `https://hooks.slack.com/services/` followed by the webhook's path. For `pagerduty`, `{"routingKey": ...}`: the 32-character integration key of a PagerDuty Events API v2 integration. |
+| `kind` | Yes | `slack`, `pagerduty`, `teams` or `email`. |
+| `config` | Yes | For `slack`, `{"webhookUrl": ...}`: a Slack incoming webhook URL, `https://hooks.slack.com/services/` followed by the webhook's path. For `pagerduty`, `{"routingKey": ...}`: the 32-character integration key of a PagerDuty Events API v2 integration. For `teams`, `{"webhookUrl": ...}`: the URL of a Teams workflow whose trigger is "When a Teams webhook request is received", see [Teams message](#teams-message). For `email`, `{"recipients": [...]}`: 1 to 20 email addresses, see [Email message](#email-message). |
 | `minSeverity` | Yes | The severity floor: `info`, `warning`, `high` or `critical`. |
 | `isActive` | No | `false` creates the channel inactive. Defaults to `true`. |
 
@@ -1245,27 +1265,33 @@ Create a channel.
 }
 ```
 
-Each `config` value is answered as `****` followed by its last 4 characters, on every route. The webhook
-URL or routing key is the credential that posts to the destination: the server stores it as given in its
-database and sends it only to that destination; no answer, log line or audit log entry carries it.
+Each `config` value of a `slack`, `pagerduty` or `teams` channel is answered as `****` followed by its
+last 4 characters, on every route. The webhook URL or routing key is the credential that posts to the
+destination: the server stores it as given in its database and sends it only to that destination; no
+answer, log line or audit log entry carries it. An `email` channel's recipients are not credentials and
+are answered as stored, for example `"config": {"recipients": ["ops@example.com", "sec@example.com"]}`.
 
 A create or update the server refuses is answered `400`:
 
 | Answer | When |
 |--------|------|
 | `{"error":"unknown field: color"}` | The body has a key the route does not take. A `config` key the kind does not take is named `config.<key>`, for example `unknown field: config.channel`. |
-| `{"error":"unsupported kind: sms"}` | `kind` is not `slack` or `pagerduty`. |
+| `{"error":"unsupported kind: sms"}` | `kind` is not `slack`, `pagerduty`, `teams` or `email`. |
 | `{"error":"minSeverity must be one of info, warning, high, critical"}` | `minSeverity` is missing or is another value. |
 | `{"error":"config.webhookUrl must be a Slack incoming webhook URL: https://hooks.slack.com/services/ followed by the webhook's path"}` | The URL has another form, or the check a webhook URL goes through refuses it. The answer never repeats the URL. |
 | `{"error":"config.routingKey must be the 32-character integration key"}` | The routing key is not 32 characters. |
+| `{"error":"config.webhookUrl must be the https URL of a Teams workflow's \"When a Teams webhook request is received\" trigger"}` | A `teams` URL that is not `https`, has no host, carries a user name or password, or that the check a webhook URL goes through refuses. Any host is taken, because a workflow's URL depends on its region and environment. The answer never repeats the URL. |
+| `{"error":"config.recipients must be a list of 1 to 20 email addresses"}` | `recipients` is not an array of strings, is empty, or holds more than 20. |
+| `{"error":"config.recipients[0] must be a bare email address such as ops@example.com, with no display name"}` | An entry, with surrounding spaces removed, is not a bare address: it has a display name, angle brackets, a comma, a CR or LF, or does not parse. The index names the entry. |
+| `{"error":"email is not configured on this server"}` | The server started without an email service (its log says `AIM will continue without email notifications`), and the request creates an `email` channel, changes a channel's `kind` to `email`, or gives an `email` channel a `config`. Renaming, a floor change, deactivating and deleting an `email` channel need no email service. |
 | `{"error":"name must be at most 100 characters"}` | `name` is longer than 100 characters; an empty one is answered `name is required`. |
 
 ### GET /api/v1/alert-channels
 
 The organization's channels: `{"alertChannels": [<channel>, ...], "total": <count>}`. In each channel,
 `lastDeliveryStatus` is `delivered` or `failed` after its latest delivery, `lastDeliveryCode` is the HTTP
-status of that delivery's final attempt (`null` when no answer came), and `lastDeliveryAt` is when it
-ended. All three are `null` until the first delivery.
+status of that delivery's final attempt (`null` when no answer came, and always `null` for an `email`
+channel), and `lastDeliveryAt` is when it ended. All three are `null` until the first delivery.
 
 ### GET /api/v1/alert-channels/:id
 
@@ -1295,15 +1321,22 @@ delivery. The request has no body.
   `AIM test event for alert channel <name>` and `dedup_key` `aim-channel-test-<channel id>`. **A test
   message to PagerDuty opens an alert on the PagerDuty service** the routing key belongs to, which
   notifies as that service is set up to; resolve it in PagerDuty.
+- Teams is sent the [Teams message](#teams-message) with one `TextBlock`,
+  `AIM test message for alert channel <name>`.
+- Each email recipient is sent one plain-text message with the subject
+  `AIM test message for alert channel <name>` (CR and LF removed, cut to 200 characters).
 
-When the destination accepts the message, the answer is `200`:
+When the destination accepts the message, the answer is `200`; for an `email` channel, when every
+recipient was sent it, with `statusCode` `null`:
 ```json
 {"delivered": true, "statusCode": 200}
 ```
 
 Otherwise it is `502`, with the status the destination answered (`null` when no answer came) and the
 class of the failure, never the destination: `status <code>`, `timeout`, `refused address` (an address
-the server does not send to) or `unreachable`.
+the server does not send to) or `unreachable`. For an `email` channel the class is `email_unavailable`
+when the server has no email service, and `email_failed` when the email service did not send the
+message to every recipient.
 ```json
 {"delivered": false, "statusCode": 404, "error": "status 404"}
 ```
@@ -1371,7 +1404,75 @@ A `POST` to `https://events.pagerduty.com/v2/enqueue`, the PagerDuty Events API 
 | `payload.class` | The alert type. |
 | `payload.custom_details` | The alert's id, organization, type, AIM severity, description, resource type and resource id. |
 
-Neither body carries an AIM credential, the channel's config beyond its own destination, or another
+### Teams message
+
+A `POST` to the channel's webhook URL, the URL of a Teams workflow whose trigger is "When a Teams
+webhook request is received", with `Content-Type: application/json` and **no `Authorization`
+header**: with the trigger's "Anyone" option, a request that carries one fails. The body is a message
+with one Adaptive Card:
+
+```json
+{
+  "type": "message",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "contentUrl": null,
+      "content": {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+          {"type": "TextBlock", "text": "AIM alert, severity high: Capability Violation Detected: billing-agent"},
+          {"type": "TextBlock", "text": "Agent 'billing-agent' attempted unauthorized capability 'db:write' ..."},
+          {"type": "TextBlock", "text": "Agent: billing-agent"},
+          {"type": "TextBlock", "text": "https://aim.example.com/dashboard/admin/alerts"}
+        ]
+      }
+    }
+  ]
+}
+```
+
+`body` holds one `TextBlock` for each line of the [Slack message](#slack-message) text, with the
+alert's strings as written: Slack's `&amp;`, `&lt;` and `&gt;` escaping is not applied. Any `2xx`
+answer is delivered, and the retries are those of every HTTP delivery (see below).
+
+Workflows whose trigger accepts only requests from a Microsoft Entra tenant (the tenant-authenticated
+options of the trigger, which need a Microsoft Entra token on the request) are not supported: the server
+sends no token, and such a workflow refuses its requests.
+
+### Email message
+
+The server's email service (`EMAIL_PROVIDER`) sends each recipient its own plain-text message, so a
+recipient does not see the others:
+
+- Subject: `AIM alert (<severity>): <title>`, with CR and LF removed and cut to 200 characters, so an
+  alert's title cannot add a header line.
+- Body:
+
+```text
+AIM alert, severity high: Capability Violation Detected: billing-agent
+
+Agent 'billing-agent' attempted unauthorized capability 'db:write' ...
+
+Agent: billing-agent
+Alert ID: 9b2e4c1a-7f3d-4e6b-8a5c-2d1f0e9b8a7c
+Alert type: security_breach
+
+https://aim.example.com/dashboard/admin/alerts
+```
+
+The description and `Agent:` lines are there only when the alert has them. Each recipient's message
+is sent separately: a recipient the email service fails to send to is tried again up to 3 times, after
+waits of 1, 4 and 16 seconds, whatever the failure, and does not stop the others. The delivery is
+`delivered` when every recipient was sent the message and `failed` otherwise, with
+`lastDeliveryCode` `null` either way. A log line names the channel and how many recipients failed,
+with any address in the email service's error replaced by `[address]`. When the server has no email
+service, an existing `email` channel's deliveries are `failed` with the class `email_unavailable`.
+With `EMAIL_PROVIDER=console` the messages are written to the server's output, not sent.
+
+No body carries an AIM credential, the channel's config beyond its own destination, or another
 channel's data.
 
 ### Delivery, retries and the queue bound
@@ -1385,7 +1486,10 @@ an attempt that got no answer is retried up to 3 times, after waits of 1, 4 and 
 delivery makes at most 4 attempts. Any other answer, and an address the server does not send to, is
 not retried. The final outcome is recorded as the channel's last delivery. Requests follow no redirect
 and go to the destination directly, whatever `HTTP_PROXY` or `HTTPS_PROXY` say; the address of every
-connection is checked when it is opened, as for webhooks.
+connection is checked when it is opened, as for webhooks. These rules are those of the Slack,
+PagerDuty and Teams deliveries. An email delivery goes through the server's email service, which
+opens its own connections; the 10-second bound does not apply to it, and its retries are those of
+[Email message](#email-message).
 
 When 1,024 alerts are already waiting, a new alert is sent to no channel: the server logs
 `alert <alert id>: alert channel queue full`, and the alert itself is stored and shown as usual. Alerts
