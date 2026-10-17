@@ -136,6 +136,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not printed. The error names the host and prints `aim-sdk init --url` with the `https:` address of that host.
   `https:` addresses are accepted on any host. `invalid_server_url_reason`, which `aim-sdk login` also uses, is
   unchanged.
+- `aim-sdk init` also exits 1 before the exchange request, with nothing sent or saved, when `--url`, once the
+  whitespace around it is trimmed, has a backslash, whitespace or a control character (U+0000-U+001F,
+  U+007F-U+009F), whatever its scheme. The error does not print the address. urllib3, which `requests` connects
+  with, ends the host at a backslash and `urlsplit`, which the check above reads, does not: for
+  `http://aim.example.test\@127.0.0.1`, `urlsplit` reads the host `127.0.0.1` and urllib3 `aim.example.test`.
 - Test: `tests/test_cli_init_cleartext_url.py`.
 
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)

@@ -163,6 +163,31 @@ def invalid_server_url_reason(aim_url):
     return None
 
 
+# Whitespace, C0, DEL and C1: refused in `aim-sdk init --url`, see _init_url_refusal.
+_INIT_URL_SPACE_OR_CONTROL = re.compile(r'[\s\x00-\x1f\x7f-\x9f]')
+
+
+def _init_url_refusal(aim_url):
+    """
+    Why `aim-sdk init` refuses `aim_url`, an address that passed
+    invalid_server_url_reason, or None.
+
+    A backslash is refused because the loopback check reads the host with
+    urlsplit while requests connects with urllib3, which ends the host at a
+    backslash where urlsplit does not: for 'http://aim.example.test\\@127.0.0.1'
+    the check would read 127.0.0.1 and requests would send the token to
+    aim.example.test. Whitespace and control characters, which no server
+    address holds, are refused too. The reason does not quote the address,
+    which may hold a password or the token.
+    """
+    url = (aim_url or "").strip()
+    if "\\" in url:
+        return "--url has a backslash"
+    if _INIT_URL_SPACE_OR_CONTROL.search(url):
+        return "--url has whitespace or a control character"
+    return None
+
+
 # The outcomes poll_device_token reports by name. A grant state counts only on
 # a 400 or 403 answer (RFC 8628 section 3.5; AIM sends 403), and 'timeout' only
 # comes from the local deadline: on any other answer these are just body text.
@@ -915,7 +940,7 @@ def init(args):
         print("Generate one from the onboarding screen in the AIM dashboard.")
         return 1
 
-    url_problem = invalid_server_url_reason(args.url)
+    url_problem = invalid_server_url_reason(args.url) or _init_url_refusal(args.url)
     if url_problem:
         print(f"Error: {url_problem}.")
         print("Pass the server's http(s) address, for example:")
