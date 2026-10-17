@@ -527,7 +527,12 @@ class OAuthTokenManager:
                 details={"token_id": local_token_id}
             )
             if not suppress_errors:
-                print(f"Warning: Token refresh failed: {e}")
+                # A requests failure is printed as every other one the SDK
+                # reports (host, failure class, next step): its own text is
+                # urllib3's connection-pool chain.
+                from .client import _render_error
+
+                print(f"Warning: Token refresh failed: {_render_error(e, aim_url)}")
             return None
 
     def get_auth_header(self) -> Dict[str, str]:

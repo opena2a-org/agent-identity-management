@@ -18,6 +18,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 
@@ -107,7 +108,10 @@ def agents_dir(tmp_path, monkeypatch):
 
 
 def run_init(url, token=None, name=cli.DEFAULT_INIT_AGENT_NAME):
-    return cli.init(SimpleNamespace(token=token, url=url, name=name))
+    """`aim-sdk init`, with `token` in AIM_BOOTSTRAP_TOKEN, the one place it reads the token from."""
+    env = {} if token is None else {cli.BOOTSTRAP_TOKEN_ENV: token}
+    with mock.patch.dict(os.environ, env):
+        return cli.init(SimpleNamespace(token=None, url=url, name=name))
 
 
 def assert_token_absent(*texts):
@@ -189,17 +193,73 @@ def test_credentials_file_is_created_owner_only_not_chmod_ed_after(agents_dir, m
     assert mode == 0o600
 
 
-def test_token_flag_and_name_flag(fake_server, agents_dir, monkeypatch, capsys):
+def test_name_flag_names_the_agent(fake_server, agents_dir, monkeypatch, capsys):
     server = fake_server()
-    monkeypatch.setenv(cli.BOOTSTRAP_TOKEN_ENV, "aim_ob_from-env")
+    monkeypatch.setenv(cli.BOOTSTRAP_TOKEN_ENV, TOKEN)
 
-    assert run_init(server.url, token=TOKEN, name="billing-bot") == 0
+    assert run_init(server.url, name="billing-bot") == 0
 
     assert server.requests[0]["headers"]["x-aim-bootstrap-token"] == TOKEN
     assert server.requests[0]["body"]["name"] == "billing-bot"
     assert (agents_dir / "billing-bot.json").exists()
     out = capsys.readouterr()
     assert_token_absent(out.out, out.err)
+
+
+@pytest.mark.parametrize("flag", [["--token", TOKEN], ["=".join(["--token", TOKEN])], ["--tok", TOKEN]],
+                         ids=["separate-value", "equals-form", "abbreviation"])
+def test_token_flag_is_refused_before_any_request_and_never_printed(fake_server, agents_dir, monkeypatch, capsys,
+                                                                    flag):
+    # As `npx @opena2a/aim-sdk init` does: a flag value is visible in the process
+    # list and shell history, so the flag is refused even with the variable set.
+    server = fake_server()
+    monkeypatch.setenv(cli.BOOTSTRAP_TOKEN_ENV, TOKEN)
+    monkeypatch.setattr(sys, "argv", ["aim-sdk", "init", *flag, "--url", server.url])
+
+    assert cli.main() == 1
+
+    assert server.requests == []
+    assert saved_files(agents_dir) == []
+    out = capsys.readouterr()
+    assert out.out.splitlines()[0] == (
+        "Error: the bootstrap token is read from AIM_BOOTSTRAP_TOKEN, not from a flag "
+        "(a flag value is visible in the process list and shell history).")
+    assert f"  {cli.BOOTSTRAP_TOKEN_ENV}=<token> aim-sdk init" in out.out.splitlines()
+    assert_token_absent(out.out, out.err)
+
+
+def test_help_does_not_offer_a_token_flag(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["aim-sdk", "init", "--help"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    out = capsys.readouterr().out
+    assert "--token" not in out
+    assert "read from AIM_BOOTSTRAP_TOKEN only" in " ".join(out.split())
+
+
+@pytest.mark.parametrize("name", ["../../evil-py", "agents/evil", "..\\evil", "/etc/evil", ".", ".."])
+def test_a_name_that_is_a_path_is_refused_before_the_token_is_sent(fake_server, agents_dir, capsys, name):
+    server = fake_server()
+
+    assert run_init(server.url, token=TOKEN, name=name) == 1
+
+    assert server.requests == []
+    assert saved_files(agents_dir) == []
+    out = capsys.readouterr()
+    assert "Error: an agent name cannot hold '/' or '\\', or be '.' or '..'. Nothing was sent." in out.out
+    assert "Registering agent" not in out.out
+    assert_token_absent(out.out, out.err)
+
+
+@pytest.mark.parametrize("name, saved_as", [("ops agent", "ops_agent.json"), ("bot.v2", "bot_v2.json"),
+                                            ("...x", "___x.json")])
+def test_a_name_with_spaces_or_dots_that_is_not_a_path_is_registered(fake_server, agents_dir, capsys, name, saved_as):
+    server = fake_server()
+
+    assert run_init(server.url, token=TOKEN, name=name) == 0
+
+    assert server.requests[0]["body"]["name"] == name
+    assert saved_files(agents_dir) == [saved_as]
 
 
 def test_trailing_slash_url_is_normalised(fake_server, agents_dir, monkeypatch):
@@ -340,6 +400,54 @@ def test_unreachable_server_does_not_print_the_token(agents_dir, capsys):
 
     out = capsys.readouterr()
     assert "Could not register the agent" in out.out
+    assert_token_absent(out.out, out.err)
+
+
+def test_a_closed_port_says_the_token_has_not_been_used(agents_dir, capsys):
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+
+    assert run_init(f"http://127.0.0.1:{port}", token=TOKEN, name="py-agent") == 1
+
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-2].startswith(
+        f"Could not register the agent: Could not reach AIM at 127.0.0.1:{port}: connection refused (ConnectionError).")
+    assert lines[-1] == "The request was not sent, so the token has not been used."
+    assert saved_files(agents_dir) == []
+
+
+def test_a_connection_closed_without_an_answer_says_the_token_may_have_been_used(agents_dir, capsys):
+    received = []
+
+    class ClosesWithoutAnswer(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            received.append(self.headers.get(cli.BOOTSTRAP_TOKEN_HEADER))
+            # No status line: the client reads a connection closed after its request.
+            self.close_connection = True
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), ClosesWithoutAnswer)
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    try:
+        assert run_init(f"http://127.0.0.1:{server.server_port}", token=TOKEN) == 1
+    finally:
+        thread.join(5)
+        server.server_close()
+
+    assert received == [TOKEN]
+    out = capsys.readouterr()
+    assert out.out.splitlines()[-1] == (
+        "The server may have received the request before it failed, so the token may have been used. "
+        "If the agent is listed in the dashboard, delete it, then run aim-sdk init again with a new token.")
+    assert "The request was not sent" not in out.out
+    assert saved_files(agents_dir) == []
     assert_token_absent(out.out, out.err)
 
 

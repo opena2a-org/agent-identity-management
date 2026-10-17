@@ -71,6 +71,18 @@ describe('bare help/version words work like their flag spellings', () => {
     expect(errLines.join('\n')).not.toContain('Unknown telemetry subcommand');
   });
 
+  it('`-V` prints the version and exits 0, as `aim-sdk -V` does (#755)', async () => {
+    expect(await runAimArp(['-V'])).toBe(0);
+    expect(logLines).toEqual([`aim-arp v${cliVersion()}`]);
+    expect(errLines).toEqual([]);
+  });
+
+  it('`telemetry -V` answers with the version, as `telemetry --version` does (#755)', async () => {
+    expect(await runAimArp(['telemetry', '-V'])).toBe(0);
+    expect(logLines).toEqual([`aim-arp v${cliVersion()}`]);
+    expect(errLines).toEqual([]);
+  });
+
   it('an unknown bare word is still an error (the fix adds words, not leniency)', async () => {
     const code = await runAimArp(['frobnicate']);
     expect(code).toBe(1);

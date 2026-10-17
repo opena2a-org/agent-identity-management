@@ -51,6 +51,7 @@ export async function runAimArp(argv: string[]): Promise<number> {
     case 'version':
     case '--version':
     case '-v':
+    case '-V':
       console.log(`aim-arp v${cliVersion()}`);
       return 0;
     case 'help':

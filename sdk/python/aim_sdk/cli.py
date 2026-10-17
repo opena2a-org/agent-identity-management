@@ -5,7 +5,7 @@ Provides commands for authenticating and managing the SDK:
 - login: Authenticate with an AIM server (OAuth 2.0 device grant, RFC 8628)
 - init: Register a first agent with a bootstrap token from the onboarding screen
 - logout: Revoke credentials and clear local storage
-- status: Check current authentication status
+- status: Check the SDK sign-in and list the agents saved on this machine
 - version: Show SDK version
 - help: Show the command list
 
@@ -91,9 +91,13 @@ EXIT_SERVER_UNAVAILABLE = 75
 SERVER_UNAVAILABLE_STATUSES = (502, 503, 504)
 
 # `aim-sdk init`: the bootstrap token minted on the dashboard's onboarding
-# screen registers exactly one agent. The environment variable is the
-# documented channel because an argument is visible in the process list.
+# screen registers exactly one agent. The environment variable is the only
+# channel because an argument is visible in the process list.
 BOOTSTRAP_TOKEN_ENV = "AIM_BOOTSTRAP_TOKEN"
+# Why `aim-sdk init --token` is refused; the value is never read. The same
+# sentence as `npx @opena2a/aim-sdk init`'s refusal.
+TOKEN_FLAG_REFUSED = (f"the bootstrap token is read from {BOOTSTRAP_TOKEN_ENV}, not from a flag "
+                      "(a flag value is visible in the process list and shell history)")
 BOOTSTRAP_TOKEN_PREFIX = "aim_ob_"
 BOOTSTRAP_TOKEN_HEADER = "X-AIM-Bootstrap-Token"
 DEFAULT_INIT_AGENT_NAME = "my-first-agent"
@@ -801,7 +805,7 @@ def _clear_legacy_sdk_credentials() -> None:
 
 def logout(args):
     """Revoke the stored pair on the server and clear the local credentials."""
-    from .credentials import load_sdk_credentials, AIM_DIR
+    from .credentials import load_sdk_credentials, remove_sdk_credentials_lock, AIM_DIR
     from .oauth import OAuthTokenManager
 
     print("Logging out...")
@@ -809,6 +813,7 @@ def logout(args):
     creds_file = Path(AIM_DIR) / "sdk_credentials.json"
     had_file = creds_file.exists()
     if not had_file and not load_sdk_credentials():
+        remove_sdk_credentials_lock()
         print("No credentials to clear")
         return 0
 
@@ -826,6 +831,8 @@ def logout(args):
     if creds_file.exists():
         creds_file.unlink()
     _clear_legacy_sdk_credentials()
+    # The lock file guards the credentials file removed above.
+    remove_sdk_credentials_lock()
 
     if confirmed:
         print("Signed out: the server revoked the session and the local credentials were cleared.")
@@ -893,33 +900,87 @@ def _credentials_source():
     return None
 
 
+def _unreadable_credentials():
+    """
+    (path, why) for the first file _credentials_source checks that exists but
+    cannot be read as a JSON object, or None.
+
+    Asked only when no sign-in was loaded: load_sdk_credentials returns None for
+    a file it cannot read as it does for no file, and status reported a file
+    holding text that is not JSON as `tokenState` "absent".
+    """
+    from . import credentials as creds_module
+
+    for path in (creds_module.SDK_CREDENTIALS_FILE, creds_module.LEGACY_CREDENTIALS_FILE):
+        path = Path(path)
+        if not path.exists():
+            continue
+        try:
+            with open(path, 'r') as f:
+                data = json.load(f)
+        except OSError as e:
+            return path, e.strerror or type(e).__name__
+        except ValueError:
+            return path, "it is not JSON"
+        if not isinstance(data, dict):
+            return path, "it holds JSON that is not an object"
+    return None
+
+
+def _print_saved_agents(signed_in):
+    """
+    List the agents saved under ~/.aim/agents after the sign-in verdict, which
+    is about the SDK sign-in alone. `aim-sdk init` saves an agent there and
+    stores no sign-in, so right after it the verdict read "Not authenticated"
+    with nothing to say that the agent was saved.
+    """
+    from . import credentials as creds_module
+
+    agents = sorted(creds_module.list_agent_credentials(), key=lambda agent: str(agent.get('name')))
+    if not agents:
+        return
+    print()
+    print(f"Agents saved on this machine, in {creds_module.AGENTS_DIR}:")
+    for agent in agents:
+        agent_id = agent.get('agent_id')
+        label = f"agent ID {_terminal_line(agent_id, 128)}" if isinstance(agent_id, str) and agent_id else "no agent ID saved"
+        print(f"   {_terminal_line(agent.get('name'), 128)} ({label})")
+    if not signed_in:
+        print("The verdict above is about the SDK sign-in that aim-sdk login stores; "
+              "aim-sdk init saves an agent and no sign-in.")
+
+
 def status(args):
-    """Check authentication status."""
+    """Check the SDK sign-in and list the agents saved on this machine."""
     from .credentials import load_sdk_credentials, AIM_DIR
 
     creds = load_sdk_credentials()
 
     if not creds:
+        unreadable = _unreadable_credentials()
         if getattr(args, 'json', False):
             # Exactly one JSON object on stdout and nothing else -- this is the
             # output a wrapper script parses, so a stray banner line would make
             # `aim-sdk status --json | jq` fail on a working install.
             # Cite a file only if it exists: with nothing stored there is no
             # sdk_credentials.json to send the user to.
-            source = _credentials_source()
+            source = unreadable[0] if unreadable else _credentials_source()
             print(json.dumps({
                 "authenticated": False,
                 "server": None,
                 "user": None,
                 "credentialsPath": str(source) if source else None,
-                "tokenState": "absent",
+                "tokenState": "unreadable" if unreadable else "absent",
             }))
             return 1
         print("Checking authentication status...")
         print()
         print("Not authenticated.")
+        if unreadable:
+            print(f"{unreadable[0]} exists but could not be read: {unreadable[1]}.")
         print()
         print("Run 'aim-sdk login' to authenticate")
+        _print_saved_agents(signed_in=False)
         return 1
 
     # Legacy files use snake_case keys; read both so an upgraded install does
@@ -950,6 +1011,7 @@ def status(args):
     print()
     print(verdict)
     print("(Checked from the stored credentials; the server was not contacted.)")
+    _print_saved_agents(signed_in=authenticated)
 
     return 0 if authenticated else 1
 
@@ -980,6 +1042,23 @@ def _redact_token(text, token):
     return text
 
 
+def _request_not_sent(exc):
+    """
+    Whether a `requests` failure is known to have come before the request was
+    sent: no connection was made (refused, host not found, unroutable), or
+    none within the timeout. Any other failure may have come after the server
+    received the request.
+    """
+    import requests
+    from urllib3.exceptions import NewConnectionError
+
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return True
+    if isinstance(exc, requests.exceptions.ConnectionError) and exc.args:
+        return isinstance(getattr(exc.args[0], 'reason', None), NewConnectionError)
+    return False
+
+
 def exchange_bootstrap_token(aim_url, token, name, public_key):
     """
     Register one agent with a bootstrap token:
@@ -995,6 +1074,8 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
         publicKey, aimUrl), or {'error': reason} with a bare reason the caller
         prefixes. No returned string contains the token, and server text in a
         reason (its error message, a redirect address) is one terminal line.
+        A request that got no HTTP answer also carries 'token_state':
+        'unused' when the request was not sent, 'unknown' otherwise.
     """
     import requests
     url = f"{aim_url}/api/v1/onboarding/bootstrap-tokens/exchange"
@@ -1009,7 +1090,10 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
     except requests.RequestException as e:
         from .client import _request_failure_message
 
-        return {'error': _redact_token(_request_failure_message(e, aim_url), token)}
+        return {
+            'error': _redact_token(_request_failure_message(e, aim_url), token),
+            'token_state': 'unused' if _request_not_sent(e) else 'unknown',
+        }
 
     status_code = response.status_code
     if status_code in (200, 201):
@@ -1046,7 +1130,16 @@ def init(args):
     """Register a first agent with a bootstrap token from the onboarding screen."""
     from .credentials import get_agent_credentials_path, save_agent_credentials
 
-    token = (args.token or os.environ.get(BOOTSTRAP_TOKEN_ENV) or '').strip()
+    if getattr(args, 'token', None) is not None:
+        # Refused whatever it holds, even when the environment has a token
+        # too; the value is never read or printed.
+        print(f"Error: {TOKEN_FLAG_REFUSED}.")
+        print("Set the token in the environment instead:")
+        print()
+        print(f"  {BOOTSTRAP_TOKEN_ENV}=<token> aim-sdk init")
+        return 1
+
+    token = (os.environ.get(BOOTSTRAP_TOKEN_ENV) or '').strip()
     if not token:
         print("Error: no bootstrap token.")
         print("Copy the command from the onboarding screen in the AIM dashboard, or set the token")
@@ -1078,6 +1171,14 @@ def init(args):
     if not name:
         print("Error: --name is empty.")
         return 1
+    # The name is the agent's name on the dashboard; the server takes any
+    # text, so a path is refused here, before the token is sent.
+    if '/' in name or '\\' in name or name in ('.', '..'):
+        print("Error: an agent name cannot hold '/' or '\\', or be '.' or '..'. Nothing was sent.")
+        print("Pick another name; it is the agent's name on the dashboard:")
+        print()
+        print("  aim-sdk init --name <name>")
+        return 1
 
     # An existing file holds the private key of an agent registered earlier.
     # Refusing here, before the token is sent, keeps that key and the token.
@@ -1095,6 +1196,11 @@ def init(args):
     result = exchange_bootstrap_token(aim_url, token, name, public_key)
     if 'error' in result:
         print(f"\nCould not register the agent: {result['error']}")
+        if result.get('token_state') == 'unused':
+            print("The request was not sent, so the token has not been used.")
+        elif result.get('token_state') == 'unknown':
+            print("The server may have received the request before it failed, so the token may have been used. "
+                  "If the agent is listed in the dashboard, delete it, then run aim-sdk init again with a new token.")
         return 1
 
     agent_id = result['agentId']
@@ -1226,13 +1332,13 @@ def main():
     init_parser = subparsers.add_parser(
         'init',
         help='Register a first agent with a bootstrap token from the onboarding screen',
+        description=(f'Register a first agent with a bootstrap token from the onboarding screen. '
+                     f'The token is read from {BOOTSTRAP_TOKEN_ENV} only: a flag value is visible in '
+                     f'the process list and shell history.'),
     )
-    init_parser.add_argument(
-        '--token',
-        default=None,
-        help=(f'Bootstrap token (default: ${BOOTSTRAP_TOKEN_ENV}; the environment variable '
-              f'keeps it out of the process list)'),
-    )
+    # Defined so that init() refuses it: an option argparse does not know
+    # would be printed back, value and all, in its "unrecognized arguments" error.
+    init_parser.add_argument('--token', default=None, help=argparse.SUPPRESS)
     init_parser.add_argument(
         '--url',
         default=DEFAULT_AIM_URL,
@@ -1241,7 +1347,7 @@ def main():
     init_parser.add_argument(
         '--name',
         default=DEFAULT_INIT_AGENT_NAME,
-        help=f'Agent name (default: {DEFAULT_INIT_AGENT_NAME})',
+        help=f'Agent name, without "/" or "\\" (default: {DEFAULT_INIT_AGENT_NAME})',
     )
     init_parser.set_defaults(func=init)
 
@@ -1250,7 +1356,10 @@ def main():
     logout_parser.set_defaults(func=logout)
 
     # Status command
-    status_parser = subparsers.add_parser('status', help='Check authentication status')
+    status_parser = subparsers.add_parser(
+        'status',
+        help='Check the SDK sign-in and list the agents saved on this machine',
+    )
     status_parser.add_argument(
         '--json',
         action='store_true',

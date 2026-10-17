@@ -373,3 +373,91 @@ def test_a_refused_refresh_token_is_not_presented_again_until_the_file_changes(
     _write(creds_file, make_creds(server.url, fresh))
     assert manager.get_access_token(suppress_errors=True)
     assert server.refreshes()[-1] == fresh
+
+
+# --- #755: the lock file is removed with the credentials, never from under a holder -----
+
+
+def test_a_lock_taken_on_a_file_removed_after_it_was_opened_is_let_go_and_the_path_locked(home, monkeypatch):
+    fcntl = pytest.importorskip("fcntl")
+    lock_path = credentials_module.get_sdk_credentials_lock_path()
+    real_try_lock = credentials_module._try_lock
+    attempts = []
+
+    def removed_after_open(fd):
+        # As when `aim-sdk logout` removes the file after this process opened it.
+        if not attempts:
+            lock_path.unlink()
+        attempts.append(fd)
+        return real_try_lock(fd)
+
+    monkeypatch.setattr(credentials_module, "_try_lock", removed_after_open)
+    with sdk_credentials_lock(timeout=1):
+        assert len(attempts) == 2
+        assert lock_path.exists()
+        # The lock held is the one on the file the path names: a second open of the path cannot take it.
+        other = os.open(lock_path, os.O_RDWR)
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            os.close(other)
+
+
+def test_the_lock_file_is_removed_only_once_the_credentials_file_is_gone(home):
+    assert save_sdk_credentials({"aimUrl": "https://aim.example.test", "refreshToken": "r"})
+    lock_path = credentials_module.get_sdk_credentials_lock_path()
+
+    credentials_module.remove_sdk_credentials_lock()
+    assert lock_path.exists()
+
+    (home / "sdk_credentials.json").unlink()
+    credentials_module.remove_sdk_credentials_lock()
+    assert not lock_path.exists()
+
+    # The next holder makes it again.
+    with sdk_credentials_lock(timeout=1):
+        assert lock_path.exists()
+
+
+def test_the_lock_file_is_not_removed_while_another_holder_has_it(home):
+    held, release = threading.Event(), threading.Event()
+
+    def holder():
+        with sdk_credentials_lock():
+            held.set()
+            release.wait(10)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    try:
+        assert held.wait(10)
+        credentials_module.remove_sdk_credentials_lock()
+        assert credentials_module.get_sdk_credentials_lock_path().exists()
+    finally:
+        release.set()
+        thread.join(10)
+
+
+# --- #755: a refresh that gets no HTTP answer is reported in the SDK's words ------------
+
+
+def test_a_refresh_that_gets_no_answer_names_the_host_and_failure_not_the_urllib3_chain(home, capsys):
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    url = f"http://127.0.0.1:{port}"
+    _write(home / "sdk_credentials.json", _download_creds(url, _token("refresh", 86400)))
+
+    assert OAuthTokenManager().get_access_token() is None
+
+    out = capsys.readouterr().out
+    assert [line for line in out.splitlines() if line.startswith("Warning: Token refresh failed")] == [
+        f"Warning: Token refresh failed: Could not reach AIM at 127.0.0.1:{port}: connection refused "
+        f"(ConnectionError). Check that the AIM server is running and that the aim_url {url} is correct "
+        f"and reachable from this host."
+    ]
+    assert "HTTPConnectionPool" not in out
+    assert "Max retries exceeded" not in out

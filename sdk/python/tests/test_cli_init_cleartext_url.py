@@ -12,7 +12,9 @@ character, ends the command the same way on any scheme.
 `requests.post` is replaced with a recorder, so no request reaches the network
 and the recorder holds every request the command made.
 """
+import os
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 import requests
@@ -66,7 +68,10 @@ def agents_dir(tmp_path, monkeypatch):
 
 
 def run_init(url, token=None, name=cli.DEFAULT_INIT_AGENT_NAME):
-    return cli.init(SimpleNamespace(token=token, url=url, name=name))
+    """`aim-sdk init`, with `token` in AIM_BOOTSTRAP_TOKEN, the one place it reads the token from."""
+    env = {} if token is None else {cli.BOOTSTRAP_TOKEN_ENV: token}
+    with mock.patch.dict(os.environ, env):
+        return cli.init(SimpleNamespace(token=None, url=url, name=name))
 
 
 def saved_files(agents_dir):

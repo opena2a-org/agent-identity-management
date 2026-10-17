@@ -143,9 +143,10 @@ _lock_depth = threading.local()
 def get_sdk_credentials_lock_path() -> Path:
     """The lock file that serializes refreshes of the SDK credentials file.
 
-    It sits next to the credentials file and is never replaced or removed: the
+    It sits next to the credentials file and is never replaced: the
     credentials file itself is replaced on every save, so a lock taken on it
-    would not be seen by a process that opened the new file.
+    would not be seen by a process that opened the new file. It is removed
+    only with the credentials it guards, by ``remove_sdk_credentials_lock``.
     """
     return SDK_CREDENTIALS_FILE.with_name(SDK_CREDENTIALS_FILE.name + ".lock")
 
@@ -190,6 +191,10 @@ def sdk_credentials_lock(timeout: Optional[float] = None):
     separately from the ``flock`` taken here, so each takes its lock while the
     other holds its own. On macOS the two locks exclude each other.
 
+    The lock is held on the file the lock path names once it is taken: a lock
+    on a file that was removed while this process waited for it is let go and
+    the path opened again (see ``remove_sdk_credentials_lock``).
+
     Raises:
         SDKCredentialsLockTimeout: another holder kept the lock past ``timeout``
             seconds (default ``SDK_CREDENTIALS_LOCK_TIMEOUT``).
@@ -209,16 +214,8 @@ def sdk_credentials_lock(timeout: Optional[float] = None):
         return
 
     wait = SDK_CREDENTIALS_LOCK_TIMEOUT if timeout is None else timeout
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(key, os.O_RDWR | os.O_CREAT, 0o600)
+    fd = _lock_named_file(path, time.monotonic() + wait, wait)
     try:
-        deadline = time.monotonic() + wait
-        while not _try_lock(fd):
-            if time.monotonic() >= deadline:
-                raise SDKCredentialsLockTimeout(
-                    f"Another process held {path} for more than {wait:g} seconds"
-                )
-            time.sleep(0.05)
         held[key] = 1
         try:
             yield
@@ -227,6 +224,75 @@ def sdk_credentials_lock(timeout: Optional[float] = None):
             _unlock(fd)
     finally:
         os.close(fd)
+
+
+def _names_open_file(path: Path, fd: int) -> bool:
+    """Whether ``path`` names the file open on ``fd``."""
+    try:
+        named = os.stat(path)
+    except FileNotFoundError:
+        return False
+    opened = os.fstat(fd)
+    return (named.st_dev, named.st_ino) == (opened.st_dev, opened.st_ino)
+
+
+def _lock_named_file(path: Path, deadline: float, wait: float) -> int:
+    """Open and lock the file at ``path``; return its descriptor, locked.
+
+    A process that opened the lock file before ``remove_sdk_credentials_lock``
+    removed it locks a file no process opening the path afterwards sees, so
+    holding that lock would keep nobody out. Such a lock is let go and the path
+    opened again, until ``deadline``.
+    """
+    while True:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            while not _try_lock(fd):
+                if time.monotonic() >= deadline:
+                    raise SDKCredentialsLockTimeout(
+                        f"Another process held {path} for more than {wait:g} seconds"
+                    )
+                time.sleep(0.05)
+            if _names_open_file(path, fd):
+                return fd
+            _unlock(fd)
+        except BaseException:
+            os.close(fd)
+            raise
+        os.close(fd)
+        if time.monotonic() >= deadline:
+            raise SDKCredentialsLockTimeout(
+                f"Could not lock {path} within {wait:g} seconds: it was removed "
+                f"while this process waited for it"
+            )
+
+
+def remove_sdk_credentials_lock() -> None:
+    """Remove the lock file once the SDK credentials file it guards is gone.
+
+    ``aim-sdk logout`` calls this after deleting the credentials. The lock is
+    taken without waiting, and the file is removed while it is held and only
+    when no credentials file exists by then. A process of this SDK that opened
+    the lock file before the removal finds, once it holds the lock, that the
+    path no longer names that file, and opens the path again
+    (``_lock_named_file``). A process of the Java SDK makes no such check: one
+    that opened the file before the removal holds, for that one locked action,
+    a lock on the removed file.
+
+    The file is left in place when another holder has the lock, when the
+    credentials file exists again, or when the removal fails.
+    """
+    path = get_sdk_credentials_lock_path()
+    if not path.exists():
+        return
+    try:
+        with sdk_credentials_lock(timeout=0):
+            if SDK_CREDENTIALS_FILE.exists():
+                return
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _write_private_json(path: Path, data: Dict[str, Any]) -> None:

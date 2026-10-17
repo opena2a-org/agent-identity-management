@@ -225,6 +225,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   `sanitizeTerminalLine`, as the server's error message does (#755).
 - Tests: `src/arp/cli/telemetry-audit-log-corrupt.test.ts`, `src/cli/init.test.ts`.
 
+### Fixed — `aim-arp -V` prints the version, and `init` refuses an agent name that is a path
+
+- `aim-arp -V` and `aim-arp telemetry -V` print the version and exit 0, as `-v` and `--version` do and as
+  `aim-sdk -V` does. On a build of the code before this change, `aim-arp -V` printed `Unknown command: -V` and the
+  help and exited 1, and `aim-arp telemetry -V` printed `Unknown telemetry subcommand: -V` and exited 1 (#755).
+- `init` refuses an agent name that holds `/` or `\`, or is `.` or `..`, before the token is sent: it prints
+  `Error: an agent name cannot hold "/" or "\", or be "." or "..". Nothing was sent.` and exits 1. Against a local
+  server answering 201, `aim-arp init --name '../../evil'` sent the name `../../evil`, printed `Agent "../../evil" is
+  registered.` and saved the key to `~/.aim/agents/______evil.json`. A name with spaces or dots that is none of these,
+  such as `ops agent` or `bot.v2`, is sent as before. `init --help` describes `--name` as an agent name without `/`
+  or `\`, and `aim-sdk init` in the Python SDK applies the same rule (#755).
+- The README's `init` paragraph states the name rule, in the words the Python SDK's README uses; both READMEs say
+  that the token is read from `AIM_BOOTSTRAP_TOKEN` only and a flag that carries it is refused (#755).
+- Tests: `src/arp/cli/aim-arp-argv.test.ts`, `src/cli/init.test.ts`.
+
 ### Tests
 
 - The signed-field enforcement harness now proves that the verifier compares each signed instant to the clock, not

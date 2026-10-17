@@ -13,6 +13,7 @@ import base64
 import contextlib
 import io
 import json
+import os
 import time
 from types import SimpleNamespace
 
@@ -125,3 +126,134 @@ def test_json_with_no_stored_credentials_cites_no_file(home):
     assert payload["tokenState"] == "absent"
     assert not (home / "sdk_credentials.json").exists()
     assert payload["credentialsPath"] is None
+
+
+# --- #755: a stored file that cannot be read is not reported as absent ------------
+
+def test_a_credentials_file_that_is_not_json_is_unreadable_not_absent(home):
+    path = home / "credentials.json"
+    path.write_text("this is not json {{{")
+
+    rc, out, _ = _status(json_output=True)
+    assert rc == 1
+    assert json.loads(out) == {"authenticated": False, "server": None, "user": None,
+                               "credentialsPath": str(path), "tokenState": "unreadable"}
+
+    rc, out, _ = _status()
+    assert rc == 1
+    lines = out.splitlines()
+    assert "Not authenticated." in lines
+    assert f"{path} exists but could not be read: it is not JSON." in lines
+    assert "Run 'aim-sdk login' to authenticate" in lines
+
+
+def test_a_credentials_file_holding_a_json_array_is_unreadable(home):
+    path = home / "sdk_credentials.json"
+    path.write_text("[]")
+
+    rc, out, _ = _status(json_output=True)
+    payload = json.loads(out)
+    assert rc == 1
+    assert (payload["tokenState"], payload["credentialsPath"]) == ("unreadable", str(path))
+
+    _, out, _ = _status()
+    assert f"{path} exists but could not be read: it holds JSON that is not an object." in out.splitlines()
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="needs a file its owner cannot read")
+def test_a_credentials_file_that_cannot_be_opened_is_unreadable(home):
+    path = home / "sdk_credentials.json"
+    path.write_text(json.dumps({"refreshToken": "r"}))
+    os.chmod(path, 0)
+    try:
+        rc, out, _ = _status(json_output=True)
+        payload = json.loads(out)
+        assert rc == 1
+        assert (payload["tokenState"], payload["credentialsPath"]) == ("unreadable", str(path))
+
+        _, out, _ = _status()
+        assert f"{path} exists but could not be read: Permission denied." in out.splitlines()
+    finally:
+        os.chmod(path, 0o600)
+
+
+def test_a_readable_file_that_holds_no_sign_in_is_still_absent(home):
+    path = home / "sdk_credentials.json"
+    path.write_text(json.dumps({"aimUrl": "https://aim.example.com"}))
+
+    rc, out, _ = _status(json_output=True)
+    payload = json.loads(out)
+    assert rc == 1
+    assert (payload["tokenState"], payload["credentialsPath"]) == ("absent", str(path))
+    _, out, _ = _status()
+    assert "could not be read" not in out
+
+
+# --- #755: status lists the agents saved on this machine -------------------------
+
+AGENT_ID = "550e8400-e29b-41d4-a716-446655440000"
+SIGN_IN_NOTE = ("The verdict above is about the SDK sign-in that aim-sdk login stores; "
+                "aim-sdk init saves an agent and no sign-in.")
+
+
+def _save_agent(name, agent_id):
+    assert credentials_module.save_agent_credentials(name, {"agent_id": agent_id, "public_key": "p", "private_key": "k"})
+
+
+def test_status_after_init_lists_the_saved_agent_and_says_what_the_verdict_is_about(home):
+    _save_agent("py-agent", AGENT_ID)
+
+    rc, out, _ = _status()
+
+    assert rc == 1
+    lines = out.splitlines()
+    assert "Not authenticated." in lines
+    assert lines[-3:] == [
+        f"Agents saved on this machine, in {home / 'agents'}:",
+        f"   py-agent (agent ID {AGENT_ID})",
+        SIGN_IN_NOTE,
+    ]
+
+
+def test_status_json_after_init_keeps_its_five_members(home):
+    _save_agent("py-agent", AGENT_ID)
+
+    rc, out, _ = _status(json_output=True)
+
+    payload = json.loads(out)
+    assert rc == 1
+    assert set(payload) == {"authenticated", "server", "user", "credentialsPath", "tokenState"}
+    assert payload["tokenState"] == "absent"
+
+
+def test_a_signed_in_status_lists_the_saved_agents_by_name_without_the_note(home):
+    (home / "sdk_credentials.json").write_text(json.dumps({
+        "refreshToken": "r", "accessToken": _jwt(time.time() + 3600), "aimUrl": "https://aim.example.com"}))
+    _save_agent("b-agent", "id-b")
+    _save_agent("a-agent", "id-a")
+
+    rc, out, _ = _status()
+
+    assert rc == 0
+    lines = out.splitlines()
+    assert lines[-3:] == [
+        f"Agents saved on this machine, in {home / 'agents'}:",
+        "   a-agent (agent ID id-a)",
+        "   b-agent (agent ID id-b)",
+    ]
+    assert SIGN_IN_NOTE not in lines
+
+
+def test_status_with_no_saved_agent_prints_no_agent_list(home):
+    _, out, _ = _status()
+    assert "Agents saved" not in out
+    assert SIGN_IN_NOTE not in out
+
+
+def test_a_saved_agent_name_with_control_characters_is_printed_as_one_plain_line(home):
+    (home / "agents" / "x.json").write_text(json.dumps({"name": "evil\x1b[2J\nsecond", "agent_id": "id-x"}))
+
+    _, out, _ = _status()
+
+    assert "\x1b" not in out
+    assert "   evil�[2J�second (agent ID id-x)" in out.splitlines()

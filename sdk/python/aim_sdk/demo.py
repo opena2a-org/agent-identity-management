@@ -35,6 +35,40 @@ from ._dashboard import dashboard_url_for
 DEMO_AGENT_NAME = "demo-agent"
 DEMO_CAPABILITIES = ["api:call", "user:read", "db:read"]
 
+# How long the demo waits for the AIM server's first answer, as `aim-sdk login` does.
+PROBE_TIMEOUT_SECONDS = 5
+
+
+def _unreachable_reason(aim_url: str) -> Optional[str]:
+    """
+    Why one GET to `aim_url` got no HTTP answer, or None when it got one. Any
+    status, an error included, is an answer. The reason is the SDK's rendering
+    of a `requests` failure (host, failure class, next step), the sentence
+    `aim-sdk init` prints for the same address.
+    """
+    import requests
+
+    from .client import _request_failure_message
+
+    try:
+        requests.get(aim_url, timeout=PROBE_TIMEOUT_SECONDS, allow_redirects=False)
+    except requests.RequestException as e:
+        return _request_failure_message(e, aim_url)
+    return None
+
+
+def _enforcement(strict_mode: bool) -> str:
+    """
+    The enforcement mode as this process knows it before the server reports one.
+
+    AIM_STRICT_MODE can only force strict mode (aim_sdk.strict_mode). When it
+    does not, the organization's enforcement mode applies; this process does not
+    know it, so no mode is named.
+    """
+    if strict_mode:
+        return "strict, forced by AIM_STRICT_MODE"
+    return "your organization's enforcement mode, set on the dashboard"
+
 
 class _DemoContext:
     """Everything the demo functions need, built once in _setup()."""
@@ -183,6 +217,13 @@ def _setup(url_override: Optional[str], interactive: bool, delay: float) -> Opti
 
     aim_url = (url_override or creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
     dashboard_url = dashboard_url_for(aim_url)
+
+    # Nothing about the server is printed before it answers once.
+    unreachable = _unreachable_reason(aim_url)
+    if unreachable:
+        print(f"Could not register the demo agent: {unreachable}")
+        return None
+
     strict_mode = strict_mode_override()
 
     print(f"""
@@ -194,7 +235,7 @@ Watch your AIM dashboard update in real time as this agent performs actions.
 
   Dashboard:   {dashboard_url}/dashboard
   API Server:  {aim_url}
-  Strict Mode: {"ENABLED - Unauthorized actions will be BLOCKED" if strict_mode else "DISABLED - Actions are logged but not blocked"}
+  Enforcement: {_enforcement(strict_mode)}
 
 ================================================================================
 """)
@@ -320,7 +361,7 @@ def _show_agent_status(ctx: "_DemoContext"):
   Status:       {details.get('status', 'active')}
   Trust Score:  {details.get('trustScore', 0) * 100:.1f}%
   Verified:     {'Yes' if details.get('verified') else 'No'}
-  Strict Mode:  {'ENABLED' if ctx.strict_mode else 'DISABLED'}
+  Enforcement:  {_enforcement(ctx.strict_mode)}
 """)
         caps = details.get("capabilities", [])
         if caps:
@@ -370,7 +411,7 @@ The agent's trust score determines whether approval is needed:
   - Medium trust (50-80%): Most JIT actions need approval
   - Low trust (<50%): All JIT actions need approval
 
-Current Strict Mode: {'ENABLED' if ctx.strict_mode else 'DISABLED'}
+Enforcement: {_enforcement(ctx.strict_mode)}
 """)
     print("\n  Attempting: delete_user_account('test-user-999')")
     print("  This action requires JIT approval...")
@@ -409,7 +450,7 @@ The agent has these DECLARED capabilities:
 The agent does NOT have:
   - file:write, file:read, network:external, user:delete
 
-Strict Mode: {'ENABLED - Unauthorized actions WILL BE BLOCKED' if ctx.strict_mode else 'DISABLED - Actions logged but allowed (enable with AIM_STRICT_MODE=true)'}
+Enforcement: {_enforcement(ctx.strict_mode)}
 
 Watch what happens when an attacker tries unauthorized actions...
 """)
@@ -460,7 +501,7 @@ Watch what happens when an attacker tries unauthorized actions...
                 print("        Security alert created, violation logged")
                 blocked_count += 1
             else:
-                print(f"  [AIM] ALLOWED - Action was permitted (strict mode: {'ON' if ctx.strict_mode else 'OFF'})")
+                print("  [AIM] ALLOWED - Action was permitted")
                 if not ctx.strict_mode:
                     print("        Enable strict mode: export AIM_STRICT_MODE=true or via Dashboard > Security Policies")
                 allowed_count += 1
@@ -480,7 +521,7 @@ Watch what happens when an attacker tries unauthorized actions...
   ============================================================
 """)
     if allowed_count > 0 and not ctx.strict_mode:
-        print(f"""  Actions were ALLOWED because strict mode is DISABLED.
+        print(f"""  The server allowed these actions under your organization's enforcement mode.
   Enable blocking via:
     - Environment: export AIM_STRICT_MODE=true
     - Dashboard:   {ctx.dashboard_url}/dashboard/admin/security-policies
@@ -673,7 +714,7 @@ def _print_menu(ctx: "_DemoContext"):
 
   0. Exit
 
-  Dashboard: {ctx.dashboard_url}/dashboard | Strict Mode: {'ON' if ctx.strict_mode else 'OFF'}
+  Dashboard: {ctx.dashboard_url}/dashboard | Enforcement: {_enforcement(ctx.strict_mode)}
 ================================================================================
 """)
 

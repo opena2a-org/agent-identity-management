@@ -81,7 +81,7 @@ export function initHelpText(): string {
 
   OPTIONS
     --url <url>      AIM server URL (default: AIM_URL, then ${DEFAULT_AIM_URL})
-    --name <name>    Agent name (default: ${DEFAULT_AGENT_NAME})
+    --name <name>    Agent name, without "/" or "\\" (default: ${DEFAULT_AGENT_NAME})
     -h, --help       Show this help
 
   The token is read from ${BOOTSTRAP_TOKEN_ENV} only: a flag value is visible
@@ -379,6 +379,13 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   const name = (args.name ?? DEFAULT_AGENT_NAME).trim();
   if (!name) {
     err('Error: --name is empty.');
+    return 1;
+  }
+  // The name is the agent's name on the dashboard; the server takes any text,
+  // so a path is refused here, before the token is sent.
+  if (/[/\\]/.test(name) || name === '.' || name === '..') {
+    err('Error: an agent name cannot hold "/" or "\\", or be "." or "..". Nothing was sent.');
+    err("Pick another name with --name <name>; it is the agent's name on the dashboard.");
     return 1;
   }
 

@@ -253,8 +253,9 @@ def test_init_refusal_example_keeps_the_port_the_address_names(monkeypatch, caps
     monkeypatch.setattr(cli.requests, "post",
                         lambda *a, **k: pytest.fail("init made a request for an address it must refuse"))
     token = "".join([cli.BOOTSTRAP_TOKEN_PREFIX, "P0rtKept", "q" * 30])
+    monkeypatch.setenv(cli.BOOTSTRAP_TOKEN_ENV, token)
 
-    assert cli.init(SimpleNamespace(token=token, url="http://aim.example.test:8080", name="agent")) == 1
+    assert cli.init(SimpleNamespace(token=None, url="http://aim.example.test:8080", name="agent")) == 1
 
     out = capsys.readouterr().out
     assert "aim-sdk init sends the bootstrap token over http: only to this machine" in out
