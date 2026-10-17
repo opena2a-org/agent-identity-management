@@ -85,6 +85,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/infrastructure/secrets/awssmtest/server_test.go`,
   `apps/backend/internal/application/secrets_external_backends_integration_test.go`.
 
+### Fixed — the 1Password secrets backend reads back the credential bytes it stored, and the Azure Key Vault and GCP Secret Manager backends report a deleted secret as not found
+
+- `POST /api/v1/secrets/namespaces/:id/credentials` and `POST /api/v1/secrets/namespaces/:id/rotate` decode
+  `encryptedBlob` from base64, so a credential blob can hold any byte, and a 1Password item field value is a JSON
+  string. The 1Password backend now writes the blob base64-encoded in the item's `blob` field, with a `blobEncoding`
+  field set to `base64`, and decodes it on read. Run through the 1Password Connect client library against a stub
+  Connect server on the previous code, a 10-byte blob holding four bytes that are not valid UTF-8 was read back as
+  18 bytes, each of those four replaced with U+FFFD, and the same held for the blob a rotation wrote. An item with no
+  `blobEncoding` field is read as before, as the bytes of its text; an item whose `blobEncoding` is not `base64` is
+  refused.
+- A read of a secret that the vault answers as missing returns `no credential found in azure for namespace <id>`
+  (Azure Key Vault, HTTP 404) or `no credential found in gcp for namespace <id>` (GCP Secret Manager, gRPC
+  `NOT_FOUND`), the form the 1Password backend returns for a namespace with no item. Run through each vendor's client
+  library against a stub on the previous code, a read after a delete returned
+  `secrets backend unavailable: azure retrieve failed: ...` and `secrets backend unavailable: gcp retrieve failed: ...`,
+  the error the domain keeps for a backend that cannot be reached. Every other error of these reads is unchanged.
+- Tests: `azure_key_vault_server_test.go`, `gcp_secret_server_test.go` and `onepassword_server_test.go` in
+  `apps/backend/internal/infrastructure/secrets/` store, read, rotate and delete a credential through `azsecrets`,
+  `secretmanager/apiv1` and `connect-sdk-go` against the test-only stubs `azkvtest` (HTTPS, with the 401 bearer
+  challenge), `gcpsmtest` (the generated `SecretManagerServiceServer`) and `onepasswordtest`, each written from its
+  vendor's published API reference. They check that each stub refuses a request without credentials, that the Azure
+  client refuses a vault whose certificate it does not trust, and that a wrong 1Password bearer is refused. No test
+  reaches a vendor service; a run against vendor accounts is not part of this change.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each

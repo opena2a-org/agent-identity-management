@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -87,6 +88,22 @@ func itemTitle(namespaceID uuid.UUID) string {
 	return fmt.Sprintf("aim-secrets/%s", namespaceID.String())
 }
 
+// The blob is ciphertext and an item field value is a JSON string, so a byte
+// that is not valid UTF-8 would be replaced with U+FFFD when the item is
+// encoded. The blob field holds the bytes base64-encoded and the blobEncoding
+// field says so. An item without blobEncoding holds the bytes as text.
+const onePasswordBlobEncodingBase64 = "base64"
+
+// onePasswordItemFields returns the fields of the item that holds a credential.
+func onePasswordItemFields(blob []byte, encryptionAlg string, version int) []*onepassword.ItemField {
+	return []*onepassword.ItemField{
+		{Label: "blob", Value: base64.StdEncoding.EncodeToString(blob), Type: "CONCEALED"},
+		{Label: "blobEncoding", Value: onePasswordBlobEncodingBase64, Type: "STRING"},
+		{Label: "encryptionAlg", Value: encryptionAlg, Type: "STRING"},
+		{Label: "version", Value: fmt.Sprintf("%d", version), Type: "STRING"},
+	}
+}
+
 func (b *OnePasswordBackend) Store(namespaceID uuid.UUID, blob []byte, encryptionAlg string) error {
 	_, cancel := context.WithTimeout(context.Background(), onePasswordTimeout)
 	defer cancel()
@@ -94,11 +111,7 @@ func (b *OnePasswordBackend) Store(namespaceID uuid.UUID, blob []byte, encryptio
 	item := &onepassword.Item{
 		Title:    itemTitle(namespaceID),
 		Category: onepassword.Password,
-		Fields: []*onepassword.ItemField{
-			{Label: "blob", Value: string(blob), Type: "CONCEALED"},
-			{Label: "encryptionAlg", Value: encryptionAlg, Type: "STRING"},
-			{Label: "version", Value: "1", Type: "STRING"},
-		},
+		Fields:   onePasswordItemFields(blob, encryptionAlg, 1),
 	}
 
 	_, err := b.client.CreateItem(item, b.vaultUUID)
@@ -125,12 +138,14 @@ func (b *OnePasswordBackend) Retrieve(namespaceID uuid.UUID) (*domainsecrets.Sec
 		return nil, fmt.Errorf("%w: 1password get item failed: %v", domainsecrets.ErrBackendUnavailable, err)
 	}
 
-	var blobVal, encAlg string
+	var blobVal, blobEncoding, encAlg string
 	version := 1
 	for _, f := range item.Fields {
 		switch f.Label {
 		case "blob":
 			blobVal = f.Value
+		case "blobEncoding":
+			blobEncoding = f.Value
 		case "encryptionAlg":
 			encAlg = f.Value
 		case "version":
@@ -138,9 +153,22 @@ func (b *OnePasswordBackend) Retrieve(namespaceID uuid.UUID) (*domainsecrets.Sec
 		}
 	}
 
+	blob := []byte(blobVal)
+	switch blobEncoding {
+	case "":
+		// Written before blobEncoding existed: the blob is the bytes of the text.
+	case onePasswordBlobEncodingBase64:
+		blob, err = base64.StdEncoding.DecodeString(blobVal)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode 1password blob for namespace %s: %w", namespaceID, err)
+		}
+	default:
+		return nil, fmt.Errorf("unknown 1password blob encoding %q for namespace %s", blobEncoding, namespaceID)
+	}
+
 	return &domainsecrets.SecretCredential{
 		NamespaceID:   namespaceID,
-		EncryptedBlob: []byte(blobVal),
+		EncryptedBlob: blob,
 		EncryptionAlg: encAlg,
 		Version:       version,
 	}, nil
@@ -166,11 +194,7 @@ func (b *OnePasswordBackend) Rotate(namespaceID uuid.UUID, blob []byte, encrypti
 		return fmt.Errorf("%w: 1password get item failed: %v", domainsecrets.ErrBackendUnavailable, err)
 	}
 
-	item.Fields = []*onepassword.ItemField{
-		{Label: "blob", Value: string(blob), Type: "CONCEALED"},
-		{Label: "encryptionAlg", Value: encryptionAlg, Type: "STRING"},
-		{Label: "version", Value: fmt.Sprintf("%d", nextVersion), Type: "STRING"},
-	}
+	item.Fields = onePasswordItemFields(blob, encryptionAlg, nextVersion)
 
 	_, err = b.client.UpdateItem(item, b.vaultUUID)
 	if err != nil {

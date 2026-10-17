@@ -3,9 +3,12 @@ package secrets
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/google/uuid"
@@ -113,6 +116,11 @@ func (b *AzureKeyVaultBackend) Retrieve(namespaceID uuid.UUID) (*domainsecrets.S
 
 	resp, err := b.client.GetSecret(ctx, azureSecretName(namespaceID), "", nil)
 	if err != nil {
+		// A vault that answers 404 was reached: the secret is missing or deleted.
+		var respErr *azcore.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("no credential found in azure for namespace %s", namespaceID)
+		}
 		return nil, fmt.Errorf("%w: azure retrieve failed: %v", domainsecrets.ErrBackendUnavailable, err)
 	}
 	if resp.Value == nil {
