@@ -176,6 +176,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Added — alerts and secrets management requests reach the SIEM
+
+- With SIEM forwarding configured, each alert the backend writes is forwarded as an `aim.alert.created` event, whichever
+  service raised it: the alert repository gives each alert it inserts to the observers added with its new `OnCreate`,
+  and a repeat counted on an alert still open is not forwarded again. The event's `severity` is `info`, `medium`,
+  `high` or `critical` for the alert severities `info`, `warning`, `high` and `critical`; `agentId` names the agent
+  when the alert's resource is an agent or its metadata names one; `details` carry `alertId`, `organizationId`,
+  `alertType`, and `resourceType` and `resourceId` when the alert has them. The alert's title, description, source
+  address and metadata are not forwarded.
+- Each secrets management request that succeeds now writes one audit log entry in the caller's organization, under
+  the caller's user id, with the namespace's id as its resource: `POST /api/v1/secrets/namespaces` writes `create`
+  on `secret_namespace`, `POST /api/v1/secrets/namespaces/:id/credentials` writes `create` on `secret_credential`,
+  `POST /api/v1/secrets/namespaces/:id/rotate` writes `update` on `secret_credential`, and
+  `DELETE /api/v1/secrets/namespaces/:id` writes `delete` on `secret_namespace`. The entry's metadata is the
+  namespace's `backendType` only, never the credential, its length or its encryption parameters. A refused or failed
+  request writes no entry, and a rotation refused for a revoked session still writes only its
+  `credential_mint_refused` entry. The audit log forwarding sends these entries to the SIEM as `aim.audit.create`,
+  `aim.audit.update` and `aim.audit.delete`.
+- Measured at the previous commit through the route table against a migrated database: two `db:write` verifications
+  refused for an agent holding `db:read` in a strict-mode organization wrote three alert rows and no
+  `aim.alert.created` event reached the collector; a namespace create, a credential store, a rotation and a namespace
+  delete were each answered with success and wrote no `audit_logs` row; a verification refused because the agent was
+  suspended was already forwarded as `aim.audit.verification_refused`, and is unchanged.
+- `docs/DEPLOYMENT.md` § SIEM Forwarding adds alerts, with their event type, severity mapping and fields, and the
+  secrets management entries to the forwarded events, and its audit entry example gives a refused verification's
+  `resourceType` as the `agent_action` the backend writes.
+- Tests: `apps/backend/cmd/server/siem_alerts_secrets_integration_test.go` (`TestSIEMAlertsAndSecretsRoundTrip`),
+  `apps/backend/cmd/server/siem_alerts_test.go`, `apps/backend/internal/integrations/siem/alert_test.go`,
+  `apps/backend/internal/infrastructure/repository/alert_on_create_test.go` and
+  `apps/backend/internal/interfaces/http/handlers/secrets_handler_audit_test.go`.
+
 ### Added — failed sign-ins and FGA denials reach the SIEM next to the audit log entries
 
 - With SIEM forwarding configured (`SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN`), each password sign-in that

@@ -384,15 +384,27 @@ Remove a retired key once nothing it signed is still valid: card attestations ex
 
 ### SIEM Forwarding
 
-The backend forwards security events to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the events of every organization on the server. Three kinds of event are forwarded:
+The backend forwards security events to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the events of every organization on the server. Four kinds of event are forwarded:
 
 | Event | `eventType` | `severity` |
 |-------|-------------|------------|
 | Every audit log entry the backend writes | `aim.audit.<action>` | `high`, `medium` or `info`, by action (see below) |
 | Every password sign-in that `POST /api/v1/public/login` or `POST /api/v1/auth/login/local` answers 401 | `aim.auth.signin_failed` | `low` |
 | Every FGA decision of `POST /api/v1/agents/:id/authorize` that does not allow the request | `aim.fga.denied` | `medium` |
+| Every alert the backend raises | `aim.alert.created` | `info`, `medium`, `high` or `critical`, by the alert's severity (see below) |
 
-A failed sign-in and an FGA denial write no audit log entry, so each is forwarded as an event of its own. An allowed FGA decision is not forwarded.
+A failed sign-in and an FGA denial write no audit log entry, so each is forwarded as an event of its own. An allowed FGA decision is not forwarded. An alert is forwarded when its row is written, whichever part of the backend raised it; a repeat that is counted on an alert still open (the alert's `occurrenceCount`) is not forwarded again.
+
+The audit log entries include a verification refused because the agent's status does not let it act (`aim.audit.verification_refused`) and each secrets management request that succeeds, written in the caller's organization under the caller's user id, with the namespace's id as `resourceId` and the namespace's backend as the only metadata (`{"backendType": "aim_native"}`); the credential is never in the entry:
+
+| Request | `eventType` | `resourceType` |
+|---------|-------------|----------------|
+| `POST /api/v1/secrets/namespaces` | `aim.audit.create` | `secret_namespace` |
+| `POST /api/v1/secrets/namespaces/:id/credentials` | `aim.audit.create` | `secret_credential` |
+| `POST /api/v1/secrets/namespaces/:id/rotate` | `aim.audit.update` | `secret_credential` |
+| `DELETE /api/v1/secrets/namespaces/:id` | `aim.audit.delete` | `secret_namespace` |
+
+A secrets request that is refused or fails writes no entry.
 
 | Variable | Value |
 |----------|-------|
@@ -401,7 +413,7 @@ A failed sign-in and an FGA denial write no audit log entry, so each is forwarde
 | `SIEM_SPLUNK_INDEX` | Optional. Unset, events go to the token's default index. |
 | `SIEM_MIN_SEVERITY` | Optional. `info` (the default), `low`, `medium`, `high` or `critical`. Events below it are not sent: at `medium`, failed sign-ins are not sent. |
 
-One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to splunk` and `siem: forwarding failed sign-ins (aim.auth.signin_failed) and FGA denials (aim.fga.denied)`.
+One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to splunk`, `siem: forwarding alerts (aim.alert.created)` and `siem: forwarding failed sign-ins (aim.auth.signin_failed) and FGA denials (aim.fga.denied)`.
 
 Each event is one HEC event with sourcetype `opena2a:aim` and source `opena2a-aim`. The `event` of an audit log entry is:
 
@@ -417,7 +429,7 @@ Each event is one HEC event with sourcetype `opena2a:aim` and source `opena2a-ai
     "organizationId": "<organization id>",
     "action": "verification_refused",
     "actorType": "agent",
-    "resourceType": "agent",
+    "resourceType": "agent_action",
     "resourceId": "<resource id>",
     "userId": "<user id, when recorded>",
     "ipAddress": "<when recorded>",
@@ -484,6 +496,27 @@ The `event` of an FGA denial is:
 ```
 
 `outcome` is `DENY`, `DENY_ATTRIBUTE`, `DENY_CONTEXT` or `DENY_CHAIN`, as in the authorize answer, or `ERROR` when the engine failed and the route answered 500; `deniedReason` then holds the error.
+
+The `event` of an alert is:
+
+```json
+{
+  "eventType": "aim.alert.created",
+  "timestamp": "2026-10-16T18:00:00Z",
+  "agentId": "<agent id, when the alert names an agent>",
+  "severity": "high",
+  "source": "opena2a-aim",
+  "details": {
+    "alertId": "<alert id>",
+    "organizationId": "<organization id>",
+    "alertType": "security_breach",
+    "resourceType": "<when the alert has one, such as agent>",
+    "resourceId": "<when the alert has one>"
+  }
+}
+```
+
+`severity` is `info`, `medium`, `high` or `critical` for the alert severities `info`, `warning`, `high` and `critical`. `agentId` is the alert's resource when that resource is an agent, or the agent the alert's metadata names, as a honeytoken alert's does. The event does not carry the alert's title, description, source address or metadata; read them with `GET /api/v1/admin/alerts` or in the dashboard.
 
 Delivery runs in the background, so a request never waits for the collector. Events wait in a queue of 1,000 and are sent in batches of up to 100, at least every 5 seconds. A batch is tried up to 3 times, 1 second and then 2 seconds apart, when the collector cannot be reached or answers 408, 429 or 5xx. Any other refusal, such as a token the collector does not accept, is not retried. Each batch that is not delivered is logged with the collector's answer. When the queue is full, the event is not forwarded, and a warning is logged for the first such event and every thousandth after it; an audit log entry is still in the audit log. At shutdown the queued events are sent within 2 seconds, and the backend logs how many were sent, failed and dropped.
 

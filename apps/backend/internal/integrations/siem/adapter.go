@@ -29,6 +29,7 @@ const (
 	EventCertificationDecision EventType = "aim.certification.decision"
 	EventAgentSuspended        EventType = "aim.agent.suspended"
 	EventDriftAlert            EventType = "aim.drift.alert"
+	EventAlertCreated          EventType = "aim.alert.created"
 )
 
 // SIEMEvent is the standardized event schema for all AIM security events.
