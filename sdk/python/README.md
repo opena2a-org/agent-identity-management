@@ -77,7 +77,7 @@ AIM_BOOTSTRAP_TOKEN=aim_ob_... aim-sdk init                       # registers my
 AIM_BOOTSTRAP_TOKEN=aim_ob_... aim-sdk init --url http://localhost:8080 --name my-agent
 ```
 
-`init` generates the Ed25519 keypair locally and sends only the public key, saves the credentials to `~/.aim/agents/<name>.json` (mode 0600), and prints the agent's dashboard URL. `secure("<name>")` then uses that agent. The token is read from the environment so it stays out of the process list; `--token` also works.
+`init` generates the Ed25519 keypair locally and sends only the public key, saves the credentials to `~/.aim/agents/<name>.json` (mode 0600), and prints the agent's dashboard URL. `secure("<name>")` then uses that agent. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. A name that holds `/` or `\`, or is `.` or `..`, is refused before the token is sent.
 
 ## Framework auto-detection
 
@@ -262,7 +262,7 @@ aim-sdk demo                     # Register a demo agent, watch your dashboard c
 aim-sdk demo --interactive       # Full menu: security demos, JIT approval, MCP
 aim-sdk demo --cleanup           # Delete the demo agent again
 aim-sdk logout                   # Revoke the session on the server, clear ~/.aim/sdk_credentials.json
-aim-sdk status                   # Show authentication state
+aim-sdk status                   # Show the SDK sign-in and the agents saved on this machine
 aim-sdk --version                # Show SDK version
 ```
 

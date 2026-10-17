@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `aim-sdk demo` names no enforcement mode the server has not reported, and says in one sentence that it cannot reach the server
+
+- `aim-sdk demo` sends one GET to the server address before it prints anything about the server. When that request
+  gets no HTTP answer, the demo prints `Could not register the demo agent: ` followed by the SDK's sentence for the
+  failure, the one `aim-sdk init` prints for the same address, and exits 1. Measured with a fresh HOME and a stored
+  sign-in naming `http://127.0.0.1:9`: `aim-sdk demo --ci` printed its banner with `Strict Mode: DISABLED - Actions
+  are logged but not blocked` before any request, then `Warning: Token refresh failed:
+  HTTPConnectionPool(host='127.0.0.1', port=9): Max retries exceeded with url: /api/v1/auth/refresh (Caused by NewConnectionError(...))`,
+  then `Could not register the demo agent: Cannot register new agent 'demo-agent': OAuth access token failed.` and
+  a line saying the token had expired or been revoked. It now prints only `Could not register the demo agent: Could
+  not reach AIM at 127.0.0.1:9: connection refused (ConnectionError). Check that the AIM server is running and that
+  the aim_url http://127.0.0.1:9 is correct and reachable from this host.` (#755)
+- The banner's mode line reads `Enforcement: strict, forced by AIM_STRICT_MODE` when `AIM_STRICT_MODE` forces strict
+  mode and `Enforcement: your organization's enforcement mode, set on the dashboard` otherwise. It read `Strict Mode:
+  DISABLED - Actions are logged but not blocked` whenever the variable did not force strict mode, a mode the
+  organization sets and the demo does not know. The interactive menu and its agent status, JIT and CBAC screens
+  print the same `Enforcement` text, and the CBAC summary says that the server allowed the actions under the
+  organization's enforcement mode (#755).
+- When the refresh request raises a `requests` exception, the text after `Warning: Token refresh failed: ` is the
+  SDK's rendering of that exception: for a refused connection, `Could not reach AIM at 127.0.0.1:9: connection
+  refused (ConnectionError). Check that ...`, where it was the exception's own text, urllib3's `HTTPConnectionPool`
+  chain (#755).
+- Tests: `tests/test_demo_command.py`, `tests/test_refresh_cross_process_lock.py`. The demo tests that do not test
+  the first request stand in for a server that answers it.
+
+### Fixed — `aim-sdk status` reports a credentials file it cannot read, and lists the agents saved on this machine
+
+- When no sign-in can be loaded and `~/.aim/sdk_credentials.json` or `~/.aim/credentials.json` exists but cannot be
+  read as a JSON object, `aim-sdk status --json` answers `"tokenState": "unreadable"` with `credentialsPath` naming
+  that file, and the human output adds `<path> exists but could not be read: <why>.`, where `<why>` is `it is not
+  JSON`, `it holds JSON that is not an object`, or the operating system's reason, `Permission denied` for a file its
+  owner cannot read. Measured with `~/.aim/credentials.json` holding `this is not json {{{`: `status --json`
+  answered `"tokenState": "absent"`, and `status` printed `Not authenticated.` and nothing about the file. The exit
+  code stays 1 and `--json` keeps its five members (#755).
+- `aim-sdk status` lists the agents saved under `~/.aim/agents` after its verdict, one line each with the name and
+  agent ID, in name order. When the verdict is not authenticated it adds `The verdict above is about the SDK sign-in
+  that aim-sdk login stores; aim-sdk init saves an agent and no sign-in.` Measured right after a successful
+  `aim-sdk init` against a local server answering 201: `status` printed `Not authenticated.` and `Run 'aim-sdk login'
+  to authenticate`, exited 1, and said nothing about the agent. With no agent saved the output is unchanged, and
+  `--json` is unchanged (#755).
+- Tests: `tests/test_cli_status_verdict.py`.
+
+### Changed — `aim-sdk init` refuses `--token` as `npx @opena2a/aim-sdk init` does, refuses an agent name that is a path, and says whether the token was used
+
+- `aim-sdk init` reads the bootstrap token from `AIM_BOOTSTRAP_TOKEN` only. `--token` is refused before any
+  request, also when the variable is set, in the forms `--token <value>`, `--token=<value>` and an abbreviation such
+  as `--tok`: the command prints `Error: the bootstrap token is read from AIM_BOOTSTRAP_TOKEN, not from a flag (a
+  flag value is visible in the process list and shell history).` and the command with the variable, exits 1, and
+  does not print the value. `init --help` no longer lists the flag and says the token is read from
+  `AIM_BOOTSTRAP_TOKEN` only. Measured before: `aim-sdk init --token <value> --url http://127.0.0.1:9` used the
+  value and sent the exchange request. No release has carried `aim-sdk init`; the README now says what the
+  TypeScript SDK's README says (#755).
+- An agent name that holds `/` or `\`, or is `.` or `..`, is refused before the token is sent: `Error: an agent name
+  cannot hold '/' or '\', or be '.' or '..'. Nothing was sent.`, exit 1. Measured against a local server answering
+  201: `aim-sdk init --name '../../evil-py'` sent the name `../../evil-py`, saved the key to
+  `~/.aim/agents/______evil-py.json` and printed `agent = secure('../../evil-py')`. A name with spaces or dots that
+  is none of these, such as `ops agent` or `bot.v2`, is sent as before. `npx @opena2a/aim-sdk init` applies the same
+  rule (#755).
+- When the exchange request raises instead of answering, a second line says what became of the token: `The request
+  was not sent, so the token has not been used.` when `requests` raised `ConnectTimeout`, or a `ConnectionError`
+  whose cause is urllib3's `NewConnectionError`, as for a refused connection; otherwise `The server may have
+  received the request before it failed, so the token may have been used. If the agent is listed in the dashboard,
+  delete it, then run aim-sdk init again with a new token.`, as for a connection the server closed after reading
+  the request. Measured before on a closed port: the output ended with the `Could not reach AIM` sentence and said
+  nothing about the token (#755).
+- Tests: `tests/test_cli_init_bootstrap_token.py`. The helpers of `tests/test_cli_init_bootstrap_token.py` and
+  `tests/test_cli_init_cleartext_url.py`, and one test of `tests/test_cli_login_cleartext_url.py`, passed the token
+  as `--token` would; they now set `AIM_BOOTSTRAP_TOKEN`, and their assertions are unchanged.
+
+### Fixed — `aim-sdk logout` removes `sdk_credentials.json.lock` with the credentials it guards
+
+- `aim-sdk logout` removes `~/.aim/sdk_credentials.json.lock` after the credentials, and removes one found without
+  credentials, where it prints `No credentials to clear`. It takes the lock without waiting and removes the file
+  while it holds the lock, and only when no credentials file exists by then; the file stays while another process
+  holds the lock. Measured before, with a fresh HOME: after a token refresh against an unreachable server had
+  created the lock file, `logout` deleted `sdk_credentials.json` and left the 0-byte lock file (#755).
+- A process of this SDK that opened the lock file before `logout` removed it, and then took the lock, lets that lock
+  go and opens the path again. The Java SDK locks the same file and makes no such check (#755).
+- Tests: `tests/test_cli_logout_revocation.py`, `tests/test_refresh_cross_process_lock.py`.
+
 ### Fixed: a refused refresh of a downloaded SDK's credential names the download's maximum age, and the token is presented to the refresh route only
 
 - The server ends a downloaded SDK's credential `SDK_TOKEN_FAMILY_MAX_AGE` after the download (365 days by default),

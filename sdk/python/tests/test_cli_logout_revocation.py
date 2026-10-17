@@ -10,6 +10,7 @@ import inspect
 import json
 import os
 import sys
+import threading
 import time
 import uuid
 from types import SimpleNamespace
@@ -163,3 +164,59 @@ def test_logout_with_only_a_refresh_token_posts_without_a_bearer(home, monkeypat
     _, kwargs = posts.calls[0]
     assert "Authorization" not in kwargs.get("headers", {})
     assert kwargs["json"] == {"refreshToken": refresh}
+
+
+# --- #755: the lock file goes with the credentials it guards ------------------------
+
+def _lock_file(aim_dir):
+    return aim_dir / "sdk_credentials.json.lock"
+
+
+def test_logout_removes_the_lock_file_with_the_credentials(home, monkeypatch, capsys):
+    # A save takes the lock, which leaves its file beside the credentials.
+    assert credentials_module.save_sdk_credentials({"aimUrl": AIM_URL, "refreshToken": _token("refresh", 7 * 86400)})
+    assert _lock_file(home).exists()
+
+    rc, out = _run_logout(monkeypatch, capsys, Posts(raise_exc=requests.ConnectionError("refused")))
+
+    assert rc == 1
+    assert "Signed out locally only" in out
+    assert sorted(p.name for p in home.iterdir()) == []
+
+
+def test_logout_with_no_credentials_removes_a_lock_file_left_behind(home, monkeypatch, capsys):
+    home.mkdir(parents=True)
+    _lock_file(home).touch(mode=0o600)
+    posts = Posts(200, CONFIRMED)
+
+    rc, out = _run_logout(monkeypatch, capsys, posts)
+
+    assert rc == 0
+    assert "no credentials" in out.lower()
+    assert posts.calls == []
+    assert not _lock_file(home).exists()
+
+
+def test_logout_leaves_the_lock_file_while_another_holder_has_it(home, monkeypatch, capsys):
+    path = _write_credentials(home, _token("access"), _token("refresh", 7 * 86400))
+    # Anything that waited on the held lock would fail fast instead of hanging.
+    monkeypatch.setattr(credentials_module, "SDK_CREDENTIALS_LOCK_TIMEOUT", 0.2)
+    held, release = threading.Event(), threading.Event()
+
+    def holder():
+        with credentials_module.sdk_credentials_lock():
+            held.set()
+            release.wait(10)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    try:
+        assert held.wait(10)
+        rc, _ = _run_logout(monkeypatch, capsys, Posts(200, CONFIRMED))
+        assert _lock_file(home).exists()
+    finally:
+        release.set()
+        thread.join(10)
+
+    assert rc == 0
+    assert not path.exists()

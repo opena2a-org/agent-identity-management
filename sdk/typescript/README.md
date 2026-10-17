@@ -68,7 +68,7 @@ Agent "my-first-agent" is registered.
 The private key was generated on this machine and has not been sent anywhere.
 ```
 
-The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. Run `node dist/arp/cli/aim-arp.js init --help` from the same directory for every option.
+The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. A name that holds `/` or `\`, or is `.` or `..`, is refused before the token is sent. Run `node dist/arp/cli/aim-arp.js init --help` from the same directory for every option.
 
 Once a release after 1.3.1 is published, the same command runs from npm without the clone and the build, and prints the same output:
 

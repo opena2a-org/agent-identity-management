@@ -361,7 +361,7 @@ export async function runTelemetrySubcommand(
   }
   // A version request in the subcommand slot is a question about the bin, not
   // a typo'd subcommand; answer it like the top-level flag does.
-  if (sub === '--version' || sub === '-v') {
+  if (sub === '--version' || sub === '-v' || sub === '-V') {
     console.log(`aim-arp v${cliVersion()}`);
     return 0;
   }

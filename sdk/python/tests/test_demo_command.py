@@ -18,6 +18,23 @@ import pytest
 from aim_sdk import demo as demo_mod
 from aim_sdk.client import AgentType
 
+UNREACHABLE_REASON = demo_mod._unreachable_reason
+
+
+@pytest.fixture(autouse=True)
+def answering_server(monkeypatch):
+    """The demo asks the server once before it prints anything about it; these
+    tests stand in for a server that answered."""
+    monkeypatch.setattr(demo_mod, "_unreachable_reason", lambda aim_url: None)
+
+
+def _closed_port_url():
+    import socket
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return f"http://127.0.0.1:{s.getsockname()[1]}"
+
 
 def test_demo_agent_type_constant_is_demo():
     assert AgentType.DEMO == "demo"
@@ -138,3 +155,78 @@ def test_cleanup_with_no_agent_is_a_clean_no_op(capsys):
     out = capsys.readouterr().out
     assert rc == 0
     assert "Nothing to clean up" in out
+
+
+# --- #755: nothing about the server before it answers, in the SDK's own words ---------
+
+
+def test_a_closed_port_prints_one_plain_sentence_and_no_mode(monkeypatch, capsys):
+    monkeypatch.setattr(demo_mod, "_unreachable_reason", UNREACHABLE_REASON)
+    url = _closed_port_url()
+    port = url.rsplit(":", 1)[1]
+
+    with mock.patch("aim_sdk.credentials.load_sdk_credentials", return_value={"aimUrl": url}), \
+         mock.patch("aim_sdk.secure") as secure_mock:
+        rc = demo_mod.run(ci=True)
+
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert secure_mock.call_count == 0
+    assert out.splitlines() == [
+        f"Could not register the demo agent: Could not reach AIM at 127.0.0.1:{port}: connection refused "
+        f"(ConnectionError). Check that the AIM server is running and that the aim_url {url} is correct "
+        f"and reachable from this host."
+    ]
+
+
+def test_a_server_that_answers_with_an_error_status_is_reachable(monkeypatch):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Refuses(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(500)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Refuses)
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+    try:
+        assert UNREACHABLE_REASON(f"http://127.0.0.1:{server.server_port}") is None
+    finally:
+        thread.join(5)
+        server.server_close()
+
+
+@pytest.mark.parametrize("strict, line", [
+    (None, "  Enforcement: your organization's enforcement mode, set on the dashboard"),
+    ("true", "  Enforcement: strict, forced by AIM_STRICT_MODE"),
+])
+def test_the_banner_names_only_a_mode_this_process_forces(monkeypatch, capsys, strict, line):
+    monkeypatch.delenv("AIM_STRICT_MODE", raising=False)
+    if strict is not None:
+        monkeypatch.setenv("AIM_STRICT_MODE", strict)
+
+    with mock.patch("aim_sdk.credentials.load_sdk_credentials", return_value={"aimUrl": "http://localhost:8080"}), \
+         mock.patch("aim_sdk.secure", side_effect=ConnectionError("server unreachable")):
+        demo_mod.run(ci=True)
+
+    out = capsys.readouterr().out
+    assert line in out.splitlines()
+    assert "Strict Mode" not in out
+    assert "DISABLED" not in out
+
+
+def test_the_menu_names_no_mode_the_server_has_not_reported(capsys):
+    ctx = mock.MagicMock(strict_mode=False, dashboard_url="https://aim.example.test")
+
+    demo_mod._print_menu(ctx)
+
+    out = capsys.readouterr().out
+    assert ("  Dashboard: https://aim.example.test/dashboard | "
+            "Enforcement: your organization's enforcement mode, set on the dashboard") in out.splitlines()
+    assert "Strict Mode" not in out

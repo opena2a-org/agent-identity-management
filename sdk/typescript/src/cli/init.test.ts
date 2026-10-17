@@ -267,6 +267,26 @@ describe('flags', () => {
     expect(initHelpText()).not.toContain('--token');
   });
 
+  it('a name that is a path is refused before the token is sent (#755)', async () => {
+    for (const name of ['../../evil', 'agents/evil', '..\\evil', '/etc/evil', '.', '..']) {
+      errLines = [];
+      expect(await runInit(['--url', baseUrl, '--name', name], deps()), name).toBe(1);
+      expect(errLines[0], name).toBe('Error: an agent name cannot hold "/" or "\\", or be "." or "..". Nothing was sent.');
+    }
+    expect(seen).toHaveLength(0);
+    expect(existsSync(join(home, '.aim', 'agents'))).toBe(false);
+    expect(outLines).toEqual([]);
+    expect(initHelpText()).toContain('--name <name>    Agent name, without "/" or "\\" (default: my-first-agent)');
+  });
+
+  it('a name with dots that is not a path is registered (#755)', async () => {
+    for (const [name, file] of [['bot.v2', 'bot_v2.json'], ['...x', '___x.json']]) {
+      expect(await runInit(['--url', baseUrl, '--name', name], deps()), allOutput()).toBe(0);
+      expect(JSON.parse(seen[seen.length - 1].body).name).toBe(name);
+      expect(existsSync(join(home, '.aim', 'agents', file))).toBe(true);
+    }
+  });
+
   it('--help prints usage without contacting a server', async () => {
     expect(await runInit(['--help'], deps())).toBe(0);
     expect(outLines.join('\n')).toBe(initHelpText());
