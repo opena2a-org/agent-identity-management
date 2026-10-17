@@ -86,6 +86,22 @@ type FGAEngine struct {
 	asyncDone  chan struct{}
 	asyncWg    sync.WaitGroup
 	asyncOnce  sync.Once // makes Shutdown idempotent
+
+	// decisionObserver receives each final decision. Nil observes nothing.
+	decisionObserver func(FGADecision)
+}
+
+// FGADecision is one final Authorize decision, as the decision observer
+// receives it. It is a copy: the observer cannot change the decision.
+type FGADecision struct {
+	Time           time.Time
+	AgentID        uuid.UUID
+	OrganizationID uuid.UUID // the agent's organization; uuid.Nil when the agent could not be read
+	Capability     string    // the requested capability
+	Allowed        bool
+	Outcome        string
+	DeniedBy       string
+	DeniedReason   string
 }
 
 // FGARequest represents an authorization request to the FGA engine.
@@ -411,6 +427,14 @@ func (e *FGAEngine) SetRegistryASCURL(url string) {
 	e.registryASCURL = url
 }
 
+// SetDecisionObserver registers fn to receive every decision Authorize
+// makes, allowed or not, once the decision is final. fn runs on the caller's
+// goroutine before Authorize returns, so it must not block. Set it before
+// the engine serves requests; nil observes nothing.
+func (e *FGAEngine) SetDecisionObserver(fn func(FGADecision)) {
+	e.decisionObserver = fn
+}
+
 // Authorize executes the 5-step FGA authorization flow.
 //
 // Emits one parent span (`fga.authorize`) plus one child span per FGA
@@ -469,8 +493,10 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		// never blocks an authorize decision. Hybrid-keyed agents emit the
 		// classical+PQC pair joined with "+" (e.g. "Ed25519+ML-DSA-65").
 		genaiSignals := telemetry.AgentAuthzSignals{Capability: req.Capability}
+		var agentOrgID uuid.UUID
 		if e.agentSvc != nil {
 			if agent, agErr := e.agentSvc.GetAgent(ctx, req.AgentID); agErr == nil && agent != nil {
+				agentOrgID = agent.OrganizationID
 				keyAlgo := agent.KeyAlgorithm
 				if agent.PQCKeyAlgorithm != nil && *agent.PQCKeyAlgorithm != "" {
 					if keyAlgo == "" {
@@ -505,6 +531,18 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		telemetry.SetGenAIAgentAttributes(span, genaiSignals)
 
 		e.emitDecisionTelemetry(ctx, req, result)
+		if e.decisionObserver != nil {
+			e.decisionObserver(FGADecision{
+				Time:           time.Now().UTC(),
+				AgentID:        req.AgentID,
+				OrganizationID: agentOrgID,
+				Capability:     req.Capability,
+				Allowed:        result.Allowed,
+				Outcome:        result.Outcome,
+				DeniedBy:       result.DeniedBy,
+				DeniedReason:   result.DeniedReason,
+			})
+		}
 		span.End()
 	}()
 

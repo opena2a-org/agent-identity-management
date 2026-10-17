@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log"
 	"strings"
 
@@ -24,6 +25,14 @@ type AuthHandler struct {
 	orgRepo         domain.OrganizationRepository
 	auditService    *application.AuditService
 	sdkTokenService *application.SDKTokenService
+	signInFailed    func(SignInFailure)
+}
+
+// SetSignInFailureObserver registers fn to receive each password sign-in
+// LocalLogin refuses. fn runs on the request's goroutine, so it must not
+// block. Set it before the handler serves requests; nil observes nothing.
+func (h *AuthHandler) SetSignInFailureObserver(fn func(SignInFailure)) {
+	h.signInFailed = fn
 }
 
 // NewAuthHandler builds the auth handler. The SDK token service retires an
@@ -113,6 +122,12 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 	// Authenticate user (this also updates last_login_at)
 	user, err := h.authService.LoginWithPassword(c.Context(), req.Email, req.Password)
 	if err != nil {
+		reason, userID, orgID := signInFailedUnclassified, uuid.Nil, uuid.Nil
+		var refusal *application.SignInRefusal
+		if errors.As(err, &refusal) {
+			reason, userID, orgID = refusal.Reason, refusal.UserID, refusal.OrganizationID
+		}
+		reportSignInFailure(c, h.signInFailed, reason, userID, orgID)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid email or password",
 		})

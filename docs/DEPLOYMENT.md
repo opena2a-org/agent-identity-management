@@ -384,18 +384,26 @@ Remove a retired key once nothing it signed is still valid: card attestations ex
 
 ### SIEM Forwarding
 
-The backend forwards every audit log entry it writes to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the entries of every organization on the server.
+The backend forwards security events to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the events of every organization on the server. Three kinds of event are forwarded:
+
+| Event | `eventType` | `severity` |
+|-------|-------------|------------|
+| Every audit log entry the backend writes | `aim.audit.<action>` | `high`, `medium` or `info`, by action (see below) |
+| Every password sign-in that `POST /api/v1/public/login` or `POST /api/v1/auth/login/local` answers 401 | `aim.auth.signin_failed` | `low` |
+| Every FGA decision of `POST /api/v1/agents/:id/authorize` that does not allow the request | `aim.fga.denied` | `medium` |
+
+A failed sign-in and an FGA denial write no audit log entry, so each is forwarded as an event of its own. An allowed FGA decision is not forwarded.
 
 | Variable | Value |
 |----------|-------|
 | `SIEM_SPLUNK_HEC_URL` | The collector's event endpoint, such as `https://splunk.example.com:8088/services/collector/event`. It must use `https`; `http` is accepted only for a loopback host. |
 | `SIEM_SPLUNK_HEC_TOKEN` | The HEC token, sent as `Authorization: Splunk <token>`. |
 | `SIEM_SPLUNK_INDEX` | Optional. Unset, events go to the token's default index. |
-| `SIEM_MIN_SEVERITY` | Optional. `info` (the default), `low`, `medium`, `high` or `critical`. Entries below it are not sent. |
+| `SIEM_MIN_SEVERITY` | Optional. `info` (the default), `low`, `medium`, `high` or `critical`. Events below it are not sent: at `medium`, failed sign-ins are not sent. |
 
-One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to splunk`.
+One of the pair set without the other, an `http` URL to a host that is not loopback, or an unknown severity stops startup with an error that names the variable. With forwarding on, startup logs `siem: forwarding audit log entries at severity <severity> and above to splunk` and `siem: forwarding failed sign-ins (aim.auth.signin_failed) and FGA denials (aim.fga.denied)`.
 
-Each entry is one HEC event with sourcetype `opena2a:aim` and source `opena2a-aim`. Its `event` is:
+Each event is one HEC event with sourcetype `opena2a:aim` and source `opena2a-aim`. The `event` of an audit log entry is:
 
 ```json
 {
@@ -421,7 +429,63 @@ Each entry is one HEC event with sourcetype `opena2a:aim` and source `opena2a-ai
 
 `eventType` is `aim.audit.` followed by the entry's action. `severity` is `high` for `honeytoken_triggered` and `refresh_token_reuse`, `medium` for `verification_refused`, `credential_mint_refused` and `refresh_session_revoked`, and `info` for every other action.
 
-Delivery runs in the background, so a request that writes an entry never waits for the collector. Entries wait in a queue of 1,000 and are sent in batches of up to 100, at least every 5 seconds. A batch is tried up to 3 times, 1 second and then 2 seconds apart, when the collector cannot be reached or answers 408, 429 or 5xx. Any other refusal, such as a token the collector does not accept, is not retried. Each batch that is not delivered is logged with the collector's answer. When the queue is full, the entry is not forwarded, and a warning is logged for the first such entry and every thousandth after it; the entry is still in the audit log. At shutdown the queued entries are sent within 2 seconds, and the backend logs how many were sent, failed and dropped.
+The `event` of a failed sign-in is:
+
+```json
+{
+  "eventType": "aim.auth.signin_failed",
+  "timestamp": "2026-10-16T18:00:00Z",
+  "severity": "low",
+  "source": "opena2a-aim",
+  "details": {
+    "method": "password",
+    "reason": "password_mismatch",
+    "route": "/api/v1/auth/login/local",
+    "ipAddress": "<the caller's address>",
+    "userAgent": "<when sent>",
+    "userId": "<only when the submitted email matched a user>",
+    "organizationId": "<only when the submitted email matched a user>"
+  }
+}
+```
+
+The event never carries the submitted email, the password or a token, and the caller's answer is unchanged: an unknown email and a wrong password are still answered alike. `reason` names the check that refused the sign-in:
+
+| Route | `reason` | Check |
+|-------|----------|-------|
+| `POST /api/v1/public/login` | `account_deactivated` | The user is deactivated or deleted. |
+| `POST /api/v1/public/login` | `registration_rejected` | The email and password match a rejected registration request. |
+| `POST /api/v1/public/login` | `email_or_password_mismatch` | No user or registration request has the email and password. |
+| `POST /api/v1/auth/login/local` | `account_locked` | The email is locked out after repeated failures. |
+| `POST /api/v1/auth/login/local` | `unknown_email` | No user with the email was read. |
+| `POST /api/v1/auth/login/local` | `account_deactivated` | The user is deactivated or deleted. |
+| `POST /api/v1/auth/login/local` | `password_not_set` | The user has no password. |
+| `POST /api/v1/auth/login/local` | `password_mismatch` | The password is not the user's. |
+
+A request answered 400, without an email or a password or with a body that does not parse, is not forwarded.
+
+The `event` of an FGA denial is:
+
+```json
+{
+  "eventType": "aim.fga.denied",
+  "timestamp": "2026-10-16T18:00:00Z",
+  "agentId": "<agent id>",
+  "capability": "<the requested capability>",
+  "outcome": "DENY",
+  "severity": "medium",
+  "source": "opena2a-aim",
+  "details": {
+    "organizationId": "<the agent's organization>",
+    "deniedBy": "capability_check",
+    "deniedReason": "Agent does not have the requested capability"
+  }
+}
+```
+
+`outcome` is `DENY`, `DENY_ATTRIBUTE`, `DENY_CONTEXT` or `DENY_CHAIN`, as in the authorize answer, or `ERROR` when the engine failed and the route answered 500; `deniedReason` then holds the error.
+
+Delivery runs in the background, so a request never waits for the collector. Events wait in a queue of 1,000 and are sent in batches of up to 100, at least every 5 seconds. A batch is tried up to 3 times, 1 second and then 2 seconds apart, when the collector cannot be reached or answers 408, 429 or 5xx. Any other refusal, such as a token the collector does not accept, is not retried. Each batch that is not delivered is logged with the collector's answer. When the queue is full, the event is not forwarded, and a warning is logged for the first such event and every thousandth after it; an audit log entry is still in the audit log. At shutdown the queued events are sent within 2 seconds, and the backend logs how many were sent, failed and dropped.
 
 To check delivery, search Splunk for `sourcetype="opena2a:aim"`.
 

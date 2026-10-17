@@ -19,6 +19,14 @@ type PublicRegistrationHandler struct {
 	authService         *application.AuthService
 	jwtService          *auth.JWTService
 	auditService        *application.AuditService
+	signInFailed        func(SignInFailure)
+}
+
+// SetSignInFailureObserver registers fn to receive each password sign-in
+// Login refuses. fn runs on the request's goroutine, so it must not block.
+// Set it before the handler serves requests; nil observes nothing.
+func (h *PublicRegistrationHandler) SetSignInFailureObserver(fn func(SignInFailure)) {
+	h.signInFailed = fn
 }
 
 // NewPublicRegistrationHandler creates a new public registration handler
@@ -262,9 +270,14 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 	// Check users table first - if user exists there, they are automatically approved
 	// SECURITY: Debug logging removed to prevent credential/PII leakage
 	user, err := h.authService.GetUserByEmail(c.Context(), email)
+	// The user the email matched, named in a refused sign-in's report.
+	var userID, orgID uuid.UUID
 	if err == nil && user != nil {
+		userID, orgID = user.ID, user.OrganizationID
+
 		// Check if user account is deactivated
 		if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
+			reportSignInFailure(c, h.signInFailed, SignInFailedAccountDeactivated, userID, orgID)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"success": false,
 				"error":   "Your account has been deactivated. Please contact your administrator for assistance.",
@@ -333,6 +346,7 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 					})
 				} else {
 					// Status = rejected
+					reportSignInFailure(c, h.signInFailed, SignInFailedRegistrationRejected, userID, orgID)
 					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 						"success": false,
 						"error":   "Registration request has been rejected",
@@ -343,6 +357,7 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 	}
 
 	// User not found in either table or password incorrect
+	reportSignInFailure(c, h.signInFailed, SignInFailedEmailOrPasswordMismatch, userID, orgID)
 	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 		"success": false,
 		"error":   "Invalid email or password",

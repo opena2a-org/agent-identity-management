@@ -65,7 +65,40 @@ func (s *AuthService) LoginWithPassword(ctx context.Context, email, password str
 	return s.LoginWithPasswordExtended(ctx, email, password, "", "")
 }
 
-// LoginWithPasswordExtended authenticates with additional context for failure tracking
+// The reasons a SignInRefusal names, one per check that refuses a password
+// sign-in.
+const (
+	SignInRefusedAccountLocked      = "account_locked"      // the email has an active lockout
+	SignInRefusedUnknownEmail       = "unknown_email"       // no user with the email was read
+	SignInRefusedAccountDeactivated = "account_deactivated" // the user is deactivated or deleted
+	SignInRefusedPasswordNotSet     = "password_not_set"    // the user has no password
+	SignInRefusedPasswordMismatch   = "password_mismatch"   // the password is not the user's
+)
+
+// SignInRefusal is the error LoginWithPasswordExtended returns when it
+// refuses a sign-in. Its text is the refusal's message. Reason names the
+// check that refused it; UserID and OrganizationID name the user when the
+// email matched one, and are uuid.Nil otherwise.
+type SignInRefusal struct {
+	Reason         string
+	UserID         uuid.UUID
+	OrganizationID uuid.UUID
+	message        string
+}
+
+func (e *SignInRefusal) Error() string { return e.message }
+
+func signInRefusal(reason string, user *domain.User, message string) *SignInRefusal {
+	refusal := &SignInRefusal{Reason: reason, message: message}
+	if user != nil {
+		refusal.UserID = user.ID
+		refusal.OrganizationID = user.OrganizationID
+	}
+	return refusal
+}
+
+// LoginWithPasswordExtended authenticates with additional context for
+// failure tracking. A refused sign-in returns a *SignInRefusal.
 func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, password, ipAddress, userAgent string) (*domain.User, error) {
 	// Check for active lockout before attempting authentication
 	if s.authFailureRepo != nil {
@@ -75,7 +108,8 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 			log.Printf("Warning: failed to check lockout status for a sign-in: %s\n", redactEmailAddresses(err.Error()))
 		} else if lockout != nil {
 			remainingMins := int(time.Until(lockout.LockedUntil).Minutes()) + 1
-			return nil, fmt.Errorf("account is temporarily locked due to too many failed attempts. Please try again in %d minutes", remainingMins)
+			return nil, signInRefusal(SignInRefusedAccountLocked, nil,
+				fmt.Sprintf("account is temporarily locked due to too many failed attempts. Please try again in %d minutes", remainingMins))
 		}
 	}
 
@@ -84,25 +118,26 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 	if err != nil {
 		// Record failure for unknown user
 		s.recordAuthFailure(email, nil, nil, domain.AuthFailureInvalidCredentials, ipAddress, userAgent)
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, signInRefusal(SignInRefusedUnknownEmail, nil, "invalid credentials")
 	}
 
 	// Check if user account is deactivated
 	if user.Status == domain.UserStatusDeactivated || user.DeletedAt != nil {
 		s.recordAuthFailure(email, &user.OrganizationID, &user.ID, domain.AuthFailureAccountDeactivated, ipAddress, userAgent)
-		return nil, fmt.Errorf("your account has been deactivated. Please contact your administrator for assistance")
+		return nil, signInRefusal(SignInRefusedAccountDeactivated, user,
+			"your account has been deactivated. Please contact your administrator for assistance")
 	}
 
 	// Check if user has a password (local authentication enabled)
 	if user.PasswordHash == nil || *user.PasswordHash == "" {
-		return nil, fmt.Errorf("local authentication not configured for this user")
+		return nil, signInRefusal(SignInRefusedPasswordNotSet, user, "local authentication not configured for this user")
 	}
 
 	// Verify password
 	passwordHasher := auth.NewPasswordHasher()
 	if err := passwordHasher.VerifyPassword(password, *user.PasswordHash); err != nil {
 		s.recordAuthFailure(email, &user.OrganizationID, &user.ID, domain.AuthFailureInvalidCredentials, ipAddress, userAgent)
-		return nil, fmt.Errorf("invalid credentials")
+		return nil, signInRefusal(SignInRefusedPasswordMismatch, user, "invalid credentials")
 	}
 
 	// Email verification removed - handled during registration approval

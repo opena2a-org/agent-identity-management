@@ -220,6 +220,12 @@ func main() {
 	// Initialize handlers
 	h := initHandlers(services, repos, jwtService, keyVault, cfg, db)
 
+	// Forward failed sign-ins and FGA denials, which write no audit log
+	// entry, to the same SIEM.
+	if siemForwarder != nil {
+		observeSecurityDecisions(siemForwarder, services, h)
+	}
+
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:           "Agent Identity Management",
