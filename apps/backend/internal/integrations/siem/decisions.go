@@ -1,6 +1,7 @@
 package siem
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -28,11 +29,17 @@ func EventFromSignInFailure(f SignInFailure) *SIEMEvent {
 		"reason": f.Reason,
 		"route":  f.Route,
 	}
+	// The address and user agent are copied: the handler reads them as views
+	// of the request buffer (c.Get, and c.IP behind a trusted proxy), which
+	// the server rewrites when it reads the next request, and the forwarder
+	// serializes the event after the request has ended. The observer that
+	// builds this event runs inside the request, so here the views are still
+	// this sign-in's own.
 	if f.IPAddress != "" {
-		details["ipAddress"] = f.IPAddress
+		details["ipAddress"] = strings.Clone(f.IPAddress)
 	}
 	if f.UserAgent != "" {
-		details["userAgent"] = f.UserAgent
+		details["userAgent"] = strings.Clone(f.UserAgent)
 	}
 	if f.UserID != uuid.Nil {
 		details["userId"] = f.UserID.String()

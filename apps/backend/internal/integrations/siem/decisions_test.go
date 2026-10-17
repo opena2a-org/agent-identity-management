@@ -109,3 +109,24 @@ func TestEventFromFGADenial_WithoutTheAgentsOrganization(t *testing.T) {
 		"deniedReason": "failed to load FGA policy: connection refused",
 	}, event.Details, "the organization is left out when the agent was not read")
 }
+
+// A sign-in failure reaches the SIEM layer with the address and user agent
+// as the handler received them, which may be views of the request buffer
+// (see requestView). The forwarder serializes the event after the request
+// has ended, so the event copies both when it is built, inside the request.
+func TestEventFromSignInFailure_CopiesTheAddressAndUserAgentOutOfTheRequestBuffer(t *testing.T) {
+	view := newRequestView(t, "203.0.113.70", "client/1.0 (first request)")
+	event := EventFromSignInFailure(SignInFailure{
+		Time:      time.Now(),
+		Method:    "password",
+		Reason:    "password_mismatch",
+		Route:     "/api/v1/auth/login/local",
+		IPAddress: view.address,
+		UserAgent: view.userAgent,
+	})
+
+	view.overwrite()
+
+	assert.Equal(t, "203.0.113.70", event.Details["ipAddress"])
+	assert.Equal(t, "client/1.0 (first request)", event.Details["userAgent"])
+}

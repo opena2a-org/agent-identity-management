@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -40,12 +41,14 @@ func reportSignInFailure(c fiber.Ctx, observe func(SignInFailure), reason string
 		return
 	}
 	observe(SignInFailure{
-		Time:           time.Now().UTC(),
-		Route:          c.Route().Path,
-		Method:         "password",
-		Reason:         reason,
-		IPAddress:      c.IP(),
-		UserAgent:      c.Get("User-Agent"),
+		Time:   time.Now().UTC(),
+		Route:  c.Route().Path,
+		Method: "password",
+		Reason: reason,
+		// Copied out of the request buffer, which the server rewrites for the
+		// next request: an observer may keep the report past this request.
+		IPAddress:      strings.Clone(c.IP()),
+		UserAgent:      strings.Clone(c.Get("User-Agent")),
 		UserID:         userID,
 		OrganizationID: orgID,
 	})

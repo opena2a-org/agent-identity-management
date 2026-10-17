@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: a SIEM event copies the client address and user agent out of the request it reports
+
+- The `ipAddress` and `userAgent` of an `aim.audit.*` or `aim.auth.signin_failed` event are copied when the event is
+  built, inside the request, and the sign-in failure report a sign-in route hands its observer carries copies as
+  well. A handler receives both as views of the server's request buffer (`c.Get`, and `c.IP` behind a trusted
+  proxy), which the server rewrites when it reads the next request, and the forwarder serializes the event after the
+  request has ended. `go test -race` reports the forwarder's read of such a view against the next request's header
+  parse as a data race; it did so in `TestSIEMAuthDecisionsRoundTrip` (`/api/v1/auth/login/local`) in the
+  integration job, and not in every run. The client address of a login or logout audit row was copied already; its
+  user agent was not. No event field, severity or answer changes.
+- Tests: `apps/backend/internal/integrations/siem/audit_test.go`
+  (`TestEventFromAuditLog_CopiesTheAddressAndUserAgentOutOfTheRequestBuffer`),
+  `apps/backend/internal/integrations/siem/decisions_test.go`
+  (`TestEventFromSignInFailure_CopiesTheAddressAndUserAgentOutOfTheRequestBuffer`) and
+  `apps/backend/internal/interfaces/http/handlers/sign_in_failure_report_test.go`
+  (`TestReportSignInFailure_KeepsTheRequestsOwnAddressAndUserAgent`): each builds the event or the report from
+  views of a request buffer, rewrites the buffer as the next request's parse does, and reads the first request's
+  values back. `TestSIEMAuthDecisionsRoundTrip` is unchanged.
+
 ### Changed — `cmd/server` reads the environment only through `internal/config`, and a recorded table pins each variable
 
 - `internal/config` reads all 70 variables that `cmd/server` read, or that it read already, each into a typed field of
