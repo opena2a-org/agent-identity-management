@@ -1,8 +1,14 @@
 package crypto
 
 import (
+	"crypto/aes"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
@@ -589,4 +595,261 @@ func TestRotatePrivateKey_KeepsRowBinding(t *testing.T) {
 
 	_, err = kv.RotatePrivateKey(rowB, encrypted, newMasterKey)
 	assert.Error(t, err, "rotation must not re-bind a ciphertext to a different row")
+}
+
+// The server's master key line reads the vault's source and storage-key id:
+// environment for a key in KEYVAULT_MASTER_KEY, ephemeral for the key generated
+// in development, and storage-key id 1 when KEYVAULT_MASTER_KEY_ID is unset.
+func TestNewKeyVaultFromEnv_MasterKeySourceAndStorageKeyID(t *testing.T) {
+	t.Run("supplied in KEYVAULT_MASTER_KEY", func(t *testing.T) {
+		t.Setenv("KEYVAULT_MASTER_KEY", generateTestMasterKey())
+		t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+		t.Setenv("ENVIRONMENT", "production")
+		kv, err := NewKeyVaultFromEnv()
+		require.NoError(t, err)
+		assert.Equal(t, MasterKeySourceEnvironment, kv.MasterKeySource())
+		assert.Equal(t, "environment", kv.MasterKeySource())
+		assert.Equal(t, byte(1), kv.StorageKeyID())
+	})
+
+	t.Run("generated for development", func(t *testing.T) {
+		t.Setenv("KEYVAULT_MASTER_KEY", "")
+		t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+		t.Setenv("ENVIRONMENT", "development")
+		kv, err := NewKeyVaultFromEnv()
+		require.NoError(t, err)
+		assert.Equal(t, MasterKeySourceEphemeral, kv.MasterKeySource())
+		assert.Equal(t, "ephemeral", kv.MasterKeySource())
+		assert.Equal(t, byte(1), kv.StorageKeyID())
+	})
+
+	t.Run("passed to NewKeyVault", func(t *testing.T) {
+		kv, err := NewKeyVault(generateTestMasterKey())
+		require.NoError(t, err)
+		assert.Empty(t, kv.MasterKeySource())
+	})
+}
+
+// The server prints the master key line, not the constructor, so no other
+// caller of NewKeyVaultFromEnv prints the identity. On every path, accepted or
+// refused, the constructor prints no master key line, no identity and no
+// rendering of the key; a refused key gives an error and no vault.
+func TestNewKeyVaultFromEnv_PrintsNoMasterKeyLine(t *testing.T) {
+	supplied := fixedTestKey("constructor output supplied key", 32)
+	allZero := make([]byte, 32)
+	malformed := []byte(base64.StdEncoding.EncodeToString(fixedTestKey("constructor output malformed key", 32)))
+	malformed[20] = '*'
+
+	cases := []struct {
+		name        string
+		value       string
+		environment string
+		renderings  []string // nil for the generated key, read from the vault
+		wantSource  string
+		wantErr     string
+	}{
+		{
+			name:        "supplied key",
+			value:       base64.StdEncoding.EncodeToString(supplied),
+			environment: "production",
+			renderings:  keyRenderings(supplied),
+			wantSource:  MasterKeySourceEnvironment,
+		},
+		{
+			name:        "development branch",
+			environment: "development",
+			wantSource:  MasterKeySourceEphemeral,
+		},
+		{
+			name:        "empty outside development and test",
+			environment: "production",
+			wantErr:     "KEYVAULT_MASTER_KEY is required",
+		},
+		{
+			name:        "malformed",
+			value:       string(malformed),
+			environment: "production",
+			renderings:  []string{string(malformed)},
+			wantErr:     "failed to decode master key",
+		},
+		{
+			name:        "all zero",
+			value:       base64.StdEncoding.EncodeToString(allZero),
+			environment: "production",
+			renderings:  keyRenderings(allZero),
+			wantErr:     "master key must not be all zero bytes",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("KEYVAULT_MASTER_KEY", tc.value)
+			t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+			t.Setenv("ENVIRONMENT", tc.environment)
+			var kv *KeyVault
+			var err error
+			out := captureKeyVaultOutput(t, func() { kv, err = NewKeyVaultFromEnv() })
+			assert.NotContains(t, out, "KeyVault: master key")
+			assert.NotContains(t, out, "masterKeyIdentity")
+
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Nil(t, kv)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				if tc.renderings != nil {
+					assertNoKeyFragment(t, err.Error()+"\n"+out, tc.renderings)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, kv)
+			assert.Equal(t, tc.wantSource, kv.MasterKeySource())
+			renderings := tc.renderings
+			if renderings == nil {
+				// The development branch prints its warning, so the capture
+				// saw the constructor's output.
+				assert.Contains(t, out, "SECURITY WARNING: KEYVAULT_MASTER_KEY not set")
+				renderings = keyRenderings(kv.masterKey)
+			}
+			assertNoKeyFragment(t, out, renderings)
+			assert.NotContains(t, out, kv.MasterKeyIdentity())
+		})
+	}
+}
+
+// identityKnownAnswer is the identity of the master key whose bytes are 0x00
+// to 0x1f.
+const identityKnownAnswer = "3ad1f204acabb927f83759279994a5cf"
+
+// countingMasterKey returns the 32 bytes 0x00 to 0x1f.
+func countingMasterKey() []byte {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	return key
+}
+
+func TestMasterKeyIdentity_KnownAnswer(t *testing.T) {
+	key := countingMasterKey()
+	assert.Equal(t, identityKnownAnswer, masterKeyIdentity(key))
+
+	kv, err := NewKeyVault(base64.StdEncoding.EncodeToString(key))
+	require.NoError(t, err)
+	assert.Equal(t, identityKnownAnswer, kv.MasterKeyIdentity())
+}
+
+// Each construction below is one a mistaken implementation could use instead
+// of HMAC-SHA256 keyed with the decoded key over the label, truncated to 16
+// bytes. None gives the known answer, so TestMasterKeyIdentity_KnownAnswer
+// fails for each of them.
+func TestMasterKeyIdentity_KnownAnswerRefusesOtherConstructions(t *testing.T) {
+	key := countingMasterKey()
+	label := []byte(identityLabel)
+	keyBase64 := base64.StdEncoding.EncodeToString(key)
+	macOf := func(macKey, message []byte) []byte {
+		mac := hmac.New(sha256.New, macKey)
+		mac.Write(message)
+		return mac.Sum(nil)
+	}
+
+	// The construction itself gives the known answer, so the comparisons
+	// below are against the right value.
+	require.Equal(t, identityKnownAnswer, hex.EncodeToString(macOf(key, label)[:16]))
+
+	block, err := aes.NewCipher(key)
+	require.NoError(t, err)
+	zeroBlock := make([]byte, aes.BlockSize)
+	block.Encrypt(zeroBlock, zeroBlock)
+	labelThenKey := sha256.Sum256(append(append([]byte{}, label...), key...))
+	keyString := sha256.Sum256([]byte(keyBase64))
+
+	others := []struct {
+		name  string
+		value string
+	}{
+		{"AES encryption of a zero block under the master key", hex.EncodeToString(zeroBlock)},
+		{"the untruncated 32-byte output", hex.EncodeToString(macOf(key, label))},
+		{"SHA-256 of the label followed by the key", hex.EncodeToString(labelThenKey[:16])},
+		{"HMAC with key and label swapped", hex.EncodeToString(macOf(label, key)[:16])},
+		{"HMAC keyed with the base64 string", hex.EncodeToString(macOf([]byte(keyBase64), label)[:16])},
+		{"SHA-256 of the key string", hex.EncodeToString(keyString[:16])},
+	}
+	for _, other := range others {
+		assert.NotEqual(t, identityKnownAnswer, other.value, other.name)
+	}
+}
+
+var identityForm = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+func TestMasterKeyIdentity_Behaviour(t *testing.T) {
+	mint := func(t *testing.T) string {
+		t.Helper()
+		key := make([]byte, 32)
+		_, err := rand.Read(key)
+		require.NoError(t, err)
+		return base64.StdEncoding.EncodeToString(key)
+	}
+
+	t.Run("two keys minted at run time give different identities", func(t *testing.T) {
+		first, err := NewKeyVault(mint(t))
+		require.NoError(t, err)
+		second, err := NewKeyVault(mint(t))
+		require.NoError(t, err)
+		assert.Regexp(t, identityForm, first.MasterKeyIdentity())
+		assert.Regexp(t, identityForm, second.MasterKeyIdentity())
+		assert.NotEqual(t, first.MasterKeyIdentity(), second.MasterKeyIdentity())
+	})
+
+	t.Run("one key gives one identity across two constructions", func(t *testing.T) {
+		key := mint(t)
+		t.Setenv("KEYVAULT_MASTER_KEY", key)
+		t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+		t.Setenv("ENVIRONMENT", "production")
+		first, err := NewKeyVaultFromEnv()
+		require.NoError(t, err)
+		second, err := NewKeyVaultFromEnv()
+		require.NoError(t, err)
+		direct, err := NewKeyVault(key)
+		require.NoError(t, err)
+		assert.Regexp(t, identityForm, first.MasterKeyIdentity())
+		assert.Equal(t, first.MasterKeyIdentity(), second.MasterKeyIdentity())
+		assert.Equal(t, first.MasterKeyIdentity(), direct.MasterKeyIdentity())
+	})
+
+	t.Run("two development constructions give different identities", func(t *testing.T) {
+		t.Setenv("KEYVAULT_MASTER_KEY", "")
+		t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+		t.Setenv("ENVIRONMENT", "development")
+		first, err := NewKeyVaultFromEnv()
+		require.NoError(t, err)
+		second, err := NewKeyVaultFromEnv()
+		require.NoError(t, err)
+		assert.Regexp(t, identityForm, first.MasterKeyIdentity())
+		assert.Regexp(t, identityForm, second.MasterKeyIdentity())
+		assert.NotEqual(t, first.MasterKeyIdentity(), second.MasterKeyIdentity())
+	})
+
+	t.Run("a ring vault names its current key", func(t *testing.T) {
+		older, current := mint(t), mint(t)
+		ring, err := NewKeyVaultRing(2, map[byte]string{1: older, 2: current})
+		require.NoError(t, err)
+		currentOnly, err := NewKeyVault(current)
+		require.NoError(t, err)
+		olderOnly, err := NewKeyVault(older)
+		require.NoError(t, err)
+		assert.Equal(t, currentOnly.MasterKeyIdentity(), ring.MasterKeyIdentity())
+		assert.NotEqual(t, olderOnly.MasterKeyIdentity(), ring.MasterKeyIdentity())
+	})
+}
+
+// The identity is not a signing key: the label is not a signing purpose, and
+// the purposes the server derives and publishes keys for are the two it had.
+func TestMasterKeyIdentity_LabelIsNotASigningPurpose(t *testing.T) {
+	_, err := DeriveSigningKey(countingMasterKey(), SigningPurpose(identityLabel))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no signing key is derived for purpose")
+
+	assert.Equal(t, []SigningPurpose{PurposeCardAttestation, PurposeATCIssuer}, signingPurposes)
+	assert.Equal(t, []SigningPurpose{PurposeCardAttestation, PurposeATCIssuer}, publishedSigningPurposes)
 }

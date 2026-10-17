@@ -252,6 +252,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   credential file is unchanged. On the previous script the `200` run posted the refresh and then
   `/api/v1/sdk/download/python`.
 
+### Added: the server prints one line at start that names its KeyVault master key
+
+- Directly after `KeyVault initialized for automatic key generation`, the server prints one line through the standard
+  log package: `KeyVault: master key source=<environment|ephemeral> storageKeyId=<n> masterKeyIdentity=<32 lowercase hex>`.
+  `source` is `environment` when `KEYVAULT_MASTER_KEY` supplied the key, and `ephemeral` when the server generated one
+  because `ENVIRONMENT` is `development` or `test`. `storageKeyId` is the storage key id new ciphertexts are written
+  under (`KEYVAULT_MASTER_KEY_ID`, 1 when unset). `masterKeyIdentity` is the leftmost 16 bytes of HMAC-SHA256 keyed
+  with the decoded master key over the label `opena2a-aim/keyvault-master-key/v1/key-id`, in lowercase hex. Before
+  this change, a start with `KEYVAULT_MASTER_KEY` set printed no line about the master key: the KeyVault constructor
+  prints only on the development branch.
+- The identity names the key without revealing it: one key gives one identity across starts, and two keys give two
+  identities. It is a MAC output, not a run of the key, and no production Go file under `apps/backend` uses it for
+  anything but this line. A refused key prints no line, since the server stops at the KeyVault error before it.
+- `NewKeyVaultFromEnv` prints no new line; its two development warning lines are unchanged.
+- Tests: `apps/backend/internal/crypto/keyvault_test.go` (the source and storage key id, the constructor's output on
+  a supplied key, the development branch and three refused keys, a known answer, and the identity's behaviour),
+  `apps/backend/internal/crypto/keyvault_leak_test.go` (no run of the key in the line or the identity), and
+  `apps/backend/internal/crypto/keyvault_identity_surface_test.go`, which reads the backend's production Go files and
+  checks that one function computes the identity and one print, this line, prints it through the standard log
+  package.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
