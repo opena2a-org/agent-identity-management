@@ -405,6 +405,61 @@ export interface SDKToken {
   metadata?: Record<string, any>;
 }
 
+// Alert channels (/api/v1/alert-channels): where an organization's alerts are
+// sent, each at or above the channel's severity floor.
+export type AlertChannelKind = "slack" | "pagerduty" | "teams" | "email";
+
+export type AlertChannelSeverity = "info" | "warning" | "high" | "critical";
+
+// A channel's destination. slack and teams take webhookUrl, pagerduty takes
+// routingKey and email takes recipients. In an answer, webhookUrl and
+// routingKey are masked to "****" and their last four characters; recipients
+// are answered as stored.
+export interface AlertChannelConfig {
+  webhookUrl?: string;
+  routingKey?: string;
+  recipients?: string[];
+}
+
+// One channel as the server answers it (domain.AlertChannelView).
+// lastDeliveryCode is null when no answer came and always null for email;
+// the three lastDelivery fields are null until the first delivery.
+export interface AlertChannel {
+  id: string;
+  name: string;
+  kind: AlertChannelKind;
+  minSeverity: AlertChannelSeverity;
+  isActive: boolean;
+  config: AlertChannelConfig;
+  lastDeliveryStatus: "delivered" | "failed" | null;
+  lastDeliveryCode: number | null;
+  lastDeliveryAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// The body of a create or update (application.AlertChannelRequest). A create
+// needs name, kind, config and minSeverity. In an update every field is
+// optional: an omitted config keeps the stored destination, and a changed
+// kind needs a config.
+export interface AlertChannelRequest {
+  name?: string;
+  kind?: AlertChannelKind;
+  config?: AlertChannelConfig;
+  minSeverity?: AlertChannelSeverity;
+  isActive?: boolean;
+}
+
+// The outcome of a test message. statusCode is null when no answer came and
+// for an email channel. error is the class of a failure, never the
+// destination: "status <code>", "timeout", "refused address", "unreachable",
+// "email_unavailable" or "email_failed".
+export interface AlertChannelTestResult {
+  delivered: boolean;
+  statusCode: number | null;
+  error?: string;
+}
+
 // MCP Detection Types
 export type DetectionMethod =
   | "manual"
@@ -1787,6 +1842,110 @@ class APIClient {
     message: string;
   }> {
     return this.request(`/api/v1/webhooks/${id}/test`, { method: "POST" });
+  }
+
+  // Alert channels. No answer carries a channel's webhook URL or routing key;
+  // each is masked to its last four characters.
+  async listAlertChannels(): Promise<{ alertChannels: AlertChannel[]; total: number }> {
+    const response = await this.request<{ alertChannels?: AlertChannel[]; total?: number }>(
+      "/api/v1/alert-channels"
+    );
+    const alertChannels = response?.alertChannels ?? [];
+    return { alertChannels, total: response?.total ?? alertChannels.length };
+  }
+
+  async getAlertChannel(id: string): Promise<AlertChannel> {
+    return this.request(`/api/v1/alert-channels/${encodeURIComponent(id)}`);
+  }
+
+  async createAlertChannel(data: {
+    name: string;
+    kind: AlertChannelKind;
+    config: AlertChannelConfig;
+    minSeverity: AlertChannelSeverity;
+    isActive?: boolean;
+  }): Promise<AlertChannel> {
+    return this.request("/api/v1/alert-channels", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Sends only the fields in data: leave config out to keep the stored
+  // destination.
+  async updateAlertChannel(id: string, data: AlertChannelRequest): Promise<AlertChannel> {
+    return this.request(`/api/v1/alert-channels/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteAlertChannel(id: string): Promise<void> {
+    return this.request(`/api/v1/alert-channels/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Sends one test message through the channel. The server answers a message
+  // the destination did not accept with 502 and a body naming the failure's
+  // class; that body is returned here as the outcome, where request() would
+  // replace it with the generic server error line. Any other refusal throws
+  // as request() does.
+  async testAlertChannel(id: string): Promise<AlertChannelTestResult> {
+    const path = `/api/v1/alert-channels/${encodeURIComponent(id)}/test`;
+    const attempt = (token: string | null) => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      return fetch(`${this.baseURL}${path}`, {
+        method: "POST",
+        headers,
+        credentials: "omit", // the session travels only in the Authorization header
+      });
+    };
+
+    const token = this.getToken();
+    let response = await attempt(token);
+    if (response.status === 401) {
+      const refreshed = await this.refreshAccessToken(token);
+      if (!refreshed) {
+        // request() signs the session out and says so when the server refuses it.
+        return this.request<AlertChannelTestResult>(path, { method: "POST" }, true);
+      }
+      response = await attempt(this.getToken());
+      if (response.status === 401) {
+        return this.request<AlertChannelTestResult>(path, { method: "POST" }, true);
+      }
+    }
+
+    const body = await response.json().catch(() => null);
+    if (response.ok) {
+      return body as AlertChannelTestResult;
+    }
+    // A proxy's own 502 page has no such body, and stays a server error.
+    if (
+      response.status === 502 &&
+      body?.delivered === false &&
+      typeof body.error === "string" &&
+      (body.statusCode === null || typeof body.statusCode === "number")
+    ) {
+      return { delivered: false, statusCode: body.statusCode, error: body.error };
+    }
+    if (isServerErrorStatus(response.status)) {
+      throw serverError(response.status);
+    }
+    const message =
+      (typeof body?.error === "string" && body.error) ||
+      (typeof body?.message === "string" && body.message) ||
+      `HTTP ${response.status}`;
+    const requestError = new Error(message) as ApiRequestError;
+    requestError.status = response.status;
+    const retryAfter = retryAfterSeconds(response.headers.get("Retry-After"));
+    if (retryAfter !== undefined) {
+      requestError.retryAfterSeconds = retryAfter;
+    }
+    throw requestError;
   }
 
   // Verifications
