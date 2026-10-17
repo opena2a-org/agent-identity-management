@@ -20,12 +20,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD`, and the `SIEM_*` and `AIM_SIGNING_KEY_*` variables,
   which the SIEM settings and the signing key ring now read through `Config`). `cmd/server` reads the
   `Config` value. Variables other packages read (token lifetimes, rate limits, email delivery,
-  telemetry, the key vault) are read where they were, and four of the 70 are also read by other packages
-  with their own rules: `ENVIRONMENT` (the detection service, the rate limit and security header
+  telemetry, the key vault) are read where they were, and fourteen of the 70 are also read by other
+  packages with their own rules: `ENVIRONMENT` (the detection service, the rate limit and security header
   middleware, and the key vault; the detection service treats unset as not development, where
   `config.Load` reads unset as `development`), `JWT_SECRET` (the JWT package), `FRONTEND_URL` (the
-  registration service and the AIP handler) and `REGISTRY_BRIDGE_URL` (the registry client, which trims
-  it).
+  registration service and the AIP handler), `REGISTRY_BRIDGE_URL` (the registry client, which trims
+  it), `KEYVAULT_MASTER_KEY` (the key vault), `EMAIL_PROVIDER` and `EMAIL_FROM_ADDRESS` (the email
+  package, through its own wrapper over `os.Getenv`), and the seven OAuth client variables
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`,
+  `OKTA_CLIENT_ID`, `OKTA_CLIENT_SECRET` and `OKTA_DOMAIN` (`NewOAuthService` in the auth package, which
+  only its package's tests call).
 - One rule, stated on `config.Load` and applied to every value it reads: an empty value reads as unset and gives the default, and a value
   is used as written, never trimmed. `REDIS_HOST` set and empty still turns Redis off; a number or a
   duration that does not parse still gives the default; and a flag is still on only for its word:
@@ -832,10 +836,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Fixed — an A2A request that fails is no longer answered 2xx, and every failure response the A2A handler builds comes from one mapping
 
 - Each failure response the A2A handler builds names one failure kind, and `a2a_failures.go` holds the status and
-  reason every kind is answered with; the handler itself builds no other failure response. Two refusals come from
-  shared helpers the handler calls and keep the answers they had: an agent that is unknown or belongs to another
-  organization is answered 404 `{"error":"not found"}` by the tenant-scope helper, and a request with no organization
-  in its context is answered 401 by the application's error handler.
+  reason every kind is answered with; the handler itself builds no other failure response. Refusals that come from
+  shared helpers the handler calls keep the answers they had: an agent that is unknown or belongs to another
+  organization is answered 404 `{"error":"not found"}` by the tenant-scope helper; a request with no organization
+  in its context is answered 401 by the application's error handler; an agent credential that names another agent's
+  ID on `POST /api/v1/a2a/cards` is answered 403 `agent_path_mismatch` by the agent path binding, and 500 when the
+  authenticated agent cannot be read; and a request with an organization but no user in its context on
+  `POST /api/v1/a2a/consent/:id/revoke` is answered 401 by the application's error handler.
 - `a2a_failures_test.go` injects each failure an A2A route can meet on each of the 48 routes the A2A handler
   serves, 257 cases in all: malformed JSON, a path or query value that is not UTF-8 text or holds a NUL
   character, no organization in context, a policy evaluation that names another organization, an unknown,
