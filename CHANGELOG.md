@@ -75,7 +75,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `apps/backend/internal/crypto/keyvault_ring_test.go`,
   `apps/backend/internal/application/agent_private_key_rewrap_test.go`, and
   `apps/backend/internal/application/agent_private_key_rewrap_integration_test.go`, which rotates twice on a scratch
-  database and decrypts every row before, during and after each sweep.
+  database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
+  up by moving two rows before that sweep runs.
 
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
