@@ -375,7 +375,10 @@ export interface EnforcementResult {
 /**
  * Carries out an enforcement action. `EnforcementEngine` implements it; an
  * `EventEngine` constructed with one runs each matched rule's action through it
- * before calling the enforcement handlers.
+ * before calling the enforcement handlers. When the executor's result sets
+ * `outcome`, the engine sets `success` to `outcome === 'executed'`; when it
+ * leaves `outcome` unset, the engine sets `outcome` to `executed` for
+ * `success: true` and `failed` for `success: false`.
  */
 export interface EnforcementExecutor {
   execute(action: EnforcementAction, event: ARPEvent, targetPid?: number): Promise<EnforcementResult>;

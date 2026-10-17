@@ -260,6 +260,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   whose event had no PID; a handler on an `EventEngine` with no executor, and one for an alert whose callback threw,
   were given `success: true` as well.
 
+- An `EventEngine` built with a custom executor gives enforcement handlers a result whose `success` agrees with its
+  `outcome`. When the executor's result sets `outcome`, the engine sets `success` to `outcome === 'executed'`; when it
+  leaves `outcome` unset, the engine sets `outcome` from `success`, as before. Run against the code before this change,
+  a result with `success: true` and `outcome` `failed`, `no-target` or `not-executed` reached the handlers with
+  `success: true`, and a result with `success: false` and `outcome: 'executed'` reached them with `success: false`.
+  The executor's other fields reach the handlers unchanged (#753).
+
 - `pause` and `kill` call `process.kill` only for a PID that is a positive integer. Any other value (absent, 0,
   negative, fractional, or a string) is `outcome: 'no-target'` and no signal is sent. Unchanged and known: a kill
   sends SIGKILL to the same PID 5 s after SIGTERM when that PID is still in use, without checking that it still names

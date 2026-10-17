@@ -112,6 +112,7 @@ func TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment(t *testing.T) {
 		{name: "production", environment: "production"},
 		{name: "staging", environment: "staging"},
 		{name: "capitalised development", environment: "Development"},
+		{name: "testing", environment: "testing"},
 		{name: "development", environment: "development", wantVault: true},
 		{name: "test", environment: "test", wantVault: true},
 	}

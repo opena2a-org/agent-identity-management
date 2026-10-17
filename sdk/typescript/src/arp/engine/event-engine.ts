@@ -183,12 +183,14 @@ export class EventEngine {
         event,
       };
     }
-    // A custom executor may leave `outcome` unset; derive it so `success` and
-    // `outcome` always agree for handlers.
+    // A custom executor may leave `outcome` unset, or return a `success` that
+    // disagrees with it. Derive `outcome` from `success` when it is unset, and
+    // otherwise derive `success` from `outcome`, so handlers see the two agree.
     if (result.outcome === undefined) {
       return { ...result, outcome: result.success ? 'executed' : 'failed' };
     }
-    return result;
+    const success = result.outcome === 'executed';
+    return result.success === success ? result : { ...result, success };
   }
 
   private evaluateRules(event: ARPEvent): AlertRule[] {

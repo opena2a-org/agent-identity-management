@@ -205,8 +205,8 @@ JWT_SESSION_MAX_AGE=8h       # Longest a sign-in lasts, however often it is refr
 SDK_TOKEN_FAMILY_MAX_AGE=8760h  # Longest a downloaded SDK's credential lasts from its download, however often it is refreshed
 
 # Key Vault master key: base64-encoded 32 bytes that encrypt agent private keys.
-# Required in every environment except development. Generate it once with
-# `openssl rand -base64 32` and keep the same value across restarts.
+# Required in every environment except development and test. Generate it once
+# with `openssl rand -base64 32` and keep the same value across restarts.
 KEYVAULT_MASTER_KEY=your-base64-encoded-32-byte-key
 
 # CORS Configuration
@@ -281,7 +281,7 @@ ENABLE_ALERTS=true
 ENABLE_COMPLIANCE_REPORTS=true
 ```
 
-`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development`. Agent private keys are encrypted under it, and each of the server's Ed25519 signing keys that is not provisioned is derived from it (see [Server Signing Keys](#server-signing-keys)). Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. To replace it, follow [Rotating `KEYVAULT_MASTER_KEY`](#rotating-keyvault_master_key). With `ENVIRONMENT=production` the server refuses to start without it. In development, a server started without it generates a new key at each start, and anything encrypted under that key cannot be decrypted after a restart. Setting `ENVIRONMENT=development` does not fix a missing key: set the key.
+`KEYVAULT_MASTER_KEY` is required in every environment except `ENVIRONMENT=development` and `ENVIRONMENT=test`. Agent private keys are encrypted under it, and each of the server's Ed25519 signing keys that is not provisioned is derived from it (see [Server Signing Keys](#server-signing-keys)). Generate it once with `openssl rand -base64 32`, store it with your other secrets, and keep the same value across restarts and upgrades. To replace it, follow [Rotating `KEYVAULT_MASTER_KEY`](#rotating-keyvault_master_key). Without it, the server refuses to start unless `ENVIRONMENT` is exactly `development` or `test`: unset, empty, `production`, `staging`, `Development` and `testing` all refuse. With `ENVIRONMENT=development` or `ENVIRONMENT=test`, a server started without it generates a new key at each start, and anything encrypted under that key, stored agent private keys included, cannot be decrypted after a restart. `ENVIRONMENT=test` is for the repository's own tests and also raises both rate limits tenfold, so never set it in a deployment. Setting `ENVIRONMENT=development` or `ENVIRONMENT=test` does not fix a missing key: set the key.
 
 ### Rotating `KEYVAULT_MASTER_KEY`
 
