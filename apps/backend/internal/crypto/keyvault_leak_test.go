@@ -21,8 +21,9 @@ import (
 // anything the key vault writes: its errors, standard output, standard error,
 // or the standard log package (which the default log/slog logger also writes
 // through). The tests below look for any run of leakWindow characters of the
-// key in each form it takes when printed, so a key ID or prefix fails them as
-// well as the whole key.
+// key in each form it takes when printed, so a prefix or any other run of the
+// key fails them as well as the whole key. The master key identity is a MAC
+// output, not a run of the key; the same windows run over it.
 
 // leakWindow is the shortest run of a key rendering that counts as a leak. It
 // catches a short prefix, while a chance match between a random key and fixed
@@ -162,6 +163,71 @@ func TestKeyVault_MasterKeyNeverReachesOutput(t *testing.T) {
 		require.NoError(t, err)
 		assertNoKeyFragment(t, out, append(keyRenderings(current), keyRenderings(supplied)...))
 	})
+}
+
+// The master key line the server prints at start, and the identity it
+// carries, hold no run of the key they name, for each fixed test key and for a
+// generated one.
+func TestKeyVault_MasterKeyLineCarriesNoRunOfTheKey(t *testing.T) {
+	supplied := fixedTestKey("supplied master key", 32)
+	current := fixedTestKey("current master key", 32)
+	older := fixedTestKey("older master key", 32)
+
+	cases := []struct {
+		name       string
+		build      func(t *testing.T) (*KeyVault, error)
+		renderings func(kv *KeyVault) []string
+	}{
+		{
+			name: "supplied in KEYVAULT_MASTER_KEY",
+			build: func(t *testing.T) (*KeyVault, error) {
+				t.Setenv("KEYVAULT_MASTER_KEY", base64.StdEncoding.EncodeToString(supplied))
+				t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+				t.Setenv("ENVIRONMENT", "production")
+				return NewKeyVaultFromEnv()
+			},
+			renderings: func(*KeyVault) []string { return keyRenderings(supplied) },
+		},
+		{
+			name: "generated for development",
+			build: func(t *testing.T) (*KeyVault, error) {
+				t.Setenv("KEYVAULT_MASTER_KEY", "")
+				t.Setenv("KEYVAULT_MASTER_KEY_ID", "")
+				t.Setenv("ENVIRONMENT", "development")
+				return NewKeyVaultFromEnv()
+			},
+			renderings: func(kv *KeyVault) []string { return keyRenderings(kv.masterKey) },
+		},
+		{
+			name: "a ring with an older key",
+			build: func(t *testing.T) (*KeyVault, error) {
+				t.Setenv("KEYVAULT_MASTER_KEY", base64.StdEncoding.EncodeToString(current))
+				t.Setenv("KEYVAULT_MASTER_KEY_ID", "2")
+				t.Setenv("KEYVAULT_MASTER_KEY_1", base64.StdEncoding.EncodeToString(older))
+				t.Setenv("ENVIRONMENT", "production")
+				return NewKeyVaultFromEnv()
+			},
+			renderings: func(*KeyVault) []string { return append(keyRenderings(current), keyRenderings(older)...) },
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var kv *KeyVault
+			var err error
+			out := captureKeyVaultOutput(t, func() {
+				kv, err = tc.build(t)
+				if err == nil {
+					// As cmd/server/main.go prints it.
+					log.Printf(masterKeyLineFormat, kv.MasterKeySource(), kv.StorageKeyID(), kv.MasterKeyIdentity())
+				}
+			})
+			require.NoError(t, err)
+			require.Contains(t, out, "KeyVault: master key source=", "the capture is missing the master key line")
+			renderings := tc.renderings(kv)
+			assertNoKeyFragment(t, kv.MasterKeyIdentity(), renderings)
+			assertNoKeyFragment(t, out, renderings)
+		})
+	}
 }
 
 func TestKeyVault_RejectedMasterKeyNeverReachesErrorOrOutput(t *testing.T) {

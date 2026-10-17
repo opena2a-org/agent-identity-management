@@ -765,6 +765,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		log.Fatal("Failed to initialize KeyVault:", err)
 	}
 	log.Println("KeyVault initialized for automatic key generation")
+	// One line per start: where the current master key came from, the storage-key
+	// id new ciphertexts are written under, and the key's identity, never the key.
+	log.Printf("KeyVault: master key source=%s storageKeyId=%d masterKeyIdentity=%s", keyVault.MasterKeySource(), keyVault.StorageKeyID(), keyVault.MasterKeyIdentity())
 
 	// Server signing keys: one per purpose (card attestation, ATC issuer), so
 	// a signature made for one purpose never verifies for another. Each key is either

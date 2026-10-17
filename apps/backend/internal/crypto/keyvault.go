@@ -3,9 +3,12 @@ package crypto
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +30,7 @@ type KeyVault struct {
 	masterKey []byte          // the current master key (AES-256, 32 bytes); derived signing keys come from it
 	currentID byte            // the storage-key id of masterKey; every new ciphertext carries it
 	ring      map[byte][]byte // every master key the vault decrypts under, by storage-key id, masterKey included
+	source    string          // where masterKey came from, set by NewKeyVaultFromEnv; see MasterKeySource
 }
 
 // NewKeyVault creates a KeyVault holding one master key, under storage-key id 1
@@ -136,6 +140,39 @@ func (kv *KeyVault) HasStorageKeyID(id byte) bool {
 	return ok
 }
 
+const (
+	// MasterKeySourceEnvironment is the source of a current master key read
+	// from KEYVAULT_MASTER_KEY.
+	MasterKeySourceEnvironment = "environment"
+	// MasterKeySourceEphemeral is the source of a current master key generated
+	// at start because ENVIRONMENT is development or test.
+	MasterKeySourceEphemeral = "ephemeral"
+)
+
+// MasterKeySource returns where the current master key of a vault built by
+// NewKeyVaultFromEnv came from: MasterKeySourceEnvironment or
+// MasterKeySourceEphemeral. It is empty for a vault built from keys passed to
+// NewKeyVault or NewKeyVaultRing.
+func (kv *KeyVault) MasterKeySource() string {
+	return kv.source
+}
+
+// MasterKeyIdentity returns the identity of the current master key, the key
+// every new ciphertext is encrypted under: 32 lowercase hex characters. It
+// names the key without revealing it, so two starts can be compared; it is not
+// a key and is used for nothing else.
+func (kv *KeyVault) MasterKeyIdentity() string {
+	return masterKeyIdentity(kv.masterKey)
+}
+
+// masterKeyIdentity is the leftmost 16 bytes of HMAC-SHA256 keyed with the
+// decoded master key over a fixed label, in lowercase hex.
+func masterKeyIdentity(masterKey []byte) string {
+	mac := hmac.New(sha256.New, masterKey)
+	mac.Write([]byte("opena2a-aim/keyvault-master-key/v1/key-id"))
+	return hex.EncodeToString(mac.Sum(nil)[:16])
+}
+
 // ephemeralKeyEnvironments are the ENVIRONMENT values that may run on a
 // generated master key. Matching is exact: an unset, misspelled or unrecognised
 // value is never treated as development.
@@ -222,7 +259,10 @@ func newKeyVaultFromEnv(getenv func(string) string) (*KeyVault, error) {
 		keys[id] = masterKey
 	}
 
+	source := MasterKeySourceEnvironment
 	if masterKeyBase64 == "" {
+		source = MasterKeySourceEphemeral
+
 		// A generated key changes at every restart, which changes the server
 		// signing key and leaves stored agent private keys undecryptable, so
 		// only an explicit development or test setting may accept it.
@@ -254,7 +294,12 @@ func newKeyVaultFromEnv(getenv func(string) string) (*KeyVault, error) {
 		return nil, err
 	}
 	keys[currentID] = current
-	return newKeyVaultRing(currentID, keys)
+	kv, err := newKeyVaultRing(currentID, keys)
+	if err != nil {
+		return nil, err
+	}
+	kv.source = source
+	return kv, nil
 }
 
 // Stored agent private keys use format v2:
