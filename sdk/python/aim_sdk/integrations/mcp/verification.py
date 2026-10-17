@@ -33,19 +33,24 @@ def verify_mcp_action(
         risk_level: Risk level ("low", "medium", "high")
         timeout_seconds: Verification timeout in seconds
 
+    The action is verified through the agent's signed verification route
+    (POST /api/v1/sdk-api/verifications), as every other adapter does, so
+    the backend records a verification event with the agent's id and
+    action_type. mcp_server_id and risk_level travel in the context.
+
     Returns:
-        Dictionary containing verification result:
+        The dictionary AIMClient.verify_capability returns on an allow:
         {
+            "verified": True,
             "verification_id": "uuid",
-            "status": "approved",
-            "timestamp": "2025-10-08T...",
             ...
         }
 
     Raises:
-        PermissionError: If verification fails or action is denied
-        ValueError: If MCP server not found
-        Exception: If request fails
+        ActionDeniedError (a PermissionError): If AIM denies the action
+        VerificationUnavailableError: If AIM gave no decision
+        AuthenticationError: If AIM refused the agent's credentials
+        ValueError: If mcp_server_id or action_type is empty
 
     Example:
         from aim_sdk.integrations.mcp import verify_mcp_action
@@ -68,33 +73,22 @@ def verify_mcp_action(
     if not action_type:
         raise ValueError("action_type cannot be empty")
 
-    # Prepare verification payload
-    payload = {
-        "action_type": action_type,
-        "resource": resource,
-        "context": context or {},
-        "risk_level": risk_level,
-        "mcp_server_id": mcp_server_id
-    }
-
-    # Make API request with proper authentication
-    try:
-        return aim_client._make_request(
-            method="POST",
-            endpoint=f"/api/v1/mcp-servers/{mcp_server_id}/verify-capability",
-            data=payload
-        )
-    except TimeoutError:
-        raise TimeoutError(f"MCP action verification timed out after {timeout_seconds}s")
-    except Exception as e:
-        error_str = str(e)
-        if "403" in error_str:
-            raise PermissionError(f"MCP action verification denied: {error_str}")
-        elif "404" in error_str:
-            raise ValueError(f"MCP server with ID '{mcp_server_id}' not found")
-        elif "401" in error_str:
-            raise PermissionError("Authentication failed. Check your AIM credentials.")
-        raise
+    # The route this used before, POST /api/v1/mcp-servers/{id}/verify-capability,
+    # reads a "capability" member this payload never sent and records no
+    # verification event for the agent.
+    #
+    # An empty resource is sent as None: the backend signs an empty resource
+    # as null, so a signed "" never verifies.
+    return aim_client.verify_capability(
+        capability=action_type,
+        resource=resource or None,
+        context={
+            **(context or {}),
+            "mcp_server_id": mcp_server_id,
+            "risk_level": risk_level,
+        },
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def log_mcp_action_result(

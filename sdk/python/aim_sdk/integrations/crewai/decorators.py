@@ -79,7 +79,9 @@ def aim_verified_task(
             try:
                 verification_result = _agent.verify_action(
                     action_type=_action_name,
-                    resource=resource,
+                    # None, never "": the backend signs an empty resource as
+                    # null, so a signed "" never verifies.
+                    resource=resource or None,
                     context={
                         "function": func.__name__,
                         "risk_level": risk_level,

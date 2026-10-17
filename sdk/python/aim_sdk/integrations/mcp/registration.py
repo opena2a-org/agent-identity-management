@@ -134,7 +134,8 @@ def list_mcp_servers(
             method="GET",
             endpoint=f"/api/v1/sdk-api/agents/{aim_client.agent_id}/mcp-servers?limit={limit}&offset={offset}"
         )
-        return response if isinstance(response, list) else response.get("servers", [])
+        # The route answers {"mcpServers": [...], "total": n}.
+        return response if isinstance(response, list) else response.get("mcpServers", [])
     except AttributeError:
         # Fallback: If _make_request doesn't exist, this is an older client version
         raise NotImplementedError(

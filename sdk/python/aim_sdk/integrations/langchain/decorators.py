@@ -104,7 +104,9 @@ def aim_verify(
             # while VerificationUnavailableError stays distinguishable.
             verdict, decision = _agent._verify_and_enforce(
                 capability=_action_name,
-                resource=_resource or "",
+                # None, never "": the backend signs an empty resource as null,
+                # so a signed "" never verifies.
+                resource=_resource or None,
                 context={
                     "function": func.__name__,
                     "args_count": len(args),

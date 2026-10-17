@@ -99,7 +99,9 @@ class AIMTaskCallback:
             # Log as action (no verification_id since this is post-execution logging)
             self.agent.verify_action(
                 action_type="crewai_task:completed",
-                resource="",
+                # None, never "": the backend signs an empty resource as
+                # null, so a signed "" never verifies.
+                resource=None,
                 context={
                     "output_summary": output_summary,
                     "status": "completed",
@@ -133,7 +135,7 @@ class AIMTaskCallback:
         try:
             self.agent.verify_action(
                 action_type="crewai_task:failed",
-                resource="",
+                resource=None,
                 context={
                     "error": str(error),
                     "error_type": type(error).__name__,

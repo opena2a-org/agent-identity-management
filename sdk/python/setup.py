@@ -64,6 +64,16 @@ setup(
             "mcp>=1.23.0",  # Official MCP SDK (CVE-2025-53366, CVE-2025-66416 fix)
             "anyio>=4.0.0",  # Async runtime for MCP client
         ],
+        # The distributions aim_sdk.integrations.langchain and .crewai import,
+        # pinned to the versions the framework integration tests
+        # (scripts/test-sdk-python-framework-integration.sh) run against.
+        "langchain": [
+            "langchain-core==1.6.12",
+            "pydantic==2.12.5",
+        ],
+        "crewai": [
+            "crewai==1.15.28",
+        ],
         "rich": [
             "rich>=13.0.0",  # Beautiful terminal output (Stripe-style formatting)
         ],
