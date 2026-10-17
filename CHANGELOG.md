@@ -145,6 +145,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   client refuses a vault whose certificate it does not trust, and that a wrong 1Password bearer is refused. No test
   reaches a vendor service; a run against vendor accounts is not part of this change.
 
+### Changed — the README is shorter, and the passages it no longer carries are in `docs/`
+
+- What a verification request does to the trust score is now only in `docs/server-features.md` (Trust-gated
+  capabilities), which already held the README's three sentences word for word; the README links that section, and
+  `TestRootReadme_StatesWhenTheTrustScoreIsRecalculated` and `test_root_readme_short_form.py` read the paragraph
+  there. The full list of 11 jobs is in `docs/USE-CASES.md`; the README names nine and links it. The Ed25519 keypair
+  and YAML capability policies of local-only mode moved from the deployment table to the sentence under it.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each

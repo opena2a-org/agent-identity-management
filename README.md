@@ -75,9 +75,7 @@ The decorator files a request for `db:write`, and the agent's audit log records 
 
 The SDK built from this repository printed the registration capture, and the release on PyPI printed the refusal; the release on PyPI prints `✓` where this repository's build prints `[OK]`, and adds `✓ Registered db:write (medium)` after the refusal's first line.
 
-The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`.
-
-A verification request (`POST /api/v1/verifications`) does not recalculate the score. A request for a capability the agent was granted leaves the score unchanged. When a verified agent that holds at least one granted capability, and is not marked compromised, requests a capability outside its grants, the score drops by a fixed 0.10 if the request is blocked and 0.05 if it is let through, never below 0.
+The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`. What a verification request does to it: [Trust-gated capabilities](docs/server-features.md#trust-gated-capabilities).
 
 The same one-line shape works in [Java](#java); TypeScript has no `secure()` call ([local mode](sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
 
@@ -86,14 +84,14 @@ The same one-line shape works in [Java](#java); TypeScript has no `secure()` cal
 - Protect an agent's calls in Python: [Quick start](#quick-start).
 - Protect them in Java: [Java quick start](sdk/java/README.md#quick-start).
 - Check capabilities and keep an audit log with no server: [local mode in TypeScript](sdk/typescript/README.md#local-mode-with-opena2aaim-core).
-- Audit a codebase: the [opena2a CLI's commands](https://github.com/opena2a-org/opena2a#commands).
 - Register an agent from an app or the terminal: [Register an agent](docs/use-cases/register-my-agent.md).
 - Track what an agent does: [Audit agent actions](docs/use-cases/audit-agent-actions.md).
 - Restrict what an agent can do: [Enforce capabilities](docs/use-cases/enforce-capabilities.md).
 - Add identity to your agent framework: [Embed in an app](docs/use-cases/embed-in-my-app.md).
 - Govern many agents: [Fleet governance](docs/use-cases/fleet-governance.md).
 - Gate privileged actions, attest MCP servers and forward audit logs to Splunk: [Server features](docs/server-features.md).
-- Run AIM on your own machines: [Install AIM (self-hosted)](#install-aim-self-hosted).
+
+All 11 jobs: [docs/USE-CASES.md](docs/USE-CASES.md#what-you-can-do).
 
 ## Deployment
 
@@ -101,9 +99,9 @@ The same one-line shape works in [Java](#java); TypeScript has no `secure()` cal
 |---|---|---|
 | **AIM Cloud** | Managed | Hosted at [aim.opena2a.org/get-started](https://aim.opena2a.org/get-started). Python and Java SDKs work out of the box. |
 | [**Self-hosted**](#install-aim-self-hosted) | Your infrastructure | PostgreSQL audit, REST API, dashboard, OAuth, 5-step FGA, 9-factor trust score, MCP attestation, PAM, audit log forwarding to Splunk. |
-| [**Local-only**](sdk/typescript/README.md#local-mode-with-opena2aaim-core) | One machine, no server | TypeScript SDK + opena2a CLI. Ed25519 keypair, `audit.jsonl`, YAML capability policies, 8-factor local trust score. Local mode is in the TypeScript SDK only. |
+| [**Local-only**](sdk/typescript/README.md#local-mode-with-opena2aaim-core) | One machine, no server | TypeScript SDK + opena2a CLI. 8-factor local trust score. Local mode is in the TypeScript SDK only. |
 
-Local only mode keeps its own event format in `~/.opena2a/aim-core/audit.jsonl`, separate from the server's audit log.
+Local only mode keeps its own event format in `~/.opena2a/aim-core/audit.jsonl`, separate from the server's audit log. It includes an Ed25519 keypair and YAML capability policies.
 
 ## SDKs
 

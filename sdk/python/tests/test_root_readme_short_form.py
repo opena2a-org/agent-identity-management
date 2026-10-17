@@ -107,8 +107,9 @@ KEPT_SENTENCES = [
 
 # Text that other tests read from this README: the policy a quickstart-default stack
 # names, what a pending agent's call raises in monitoring mode and is refused with in
-# strict mode, and when the trust score is recalculated. The last marker is held as a
-# whole paragraph. The token-rotation line and its Redis condition are in the notes
+# strict mode, and when the trust score is recalculated. What a verification request
+# does to the score is held as a whole paragraph in docs/server-features.md, which the
+# README links. The token-rotation line and its Redis condition are in the notes
 # docs/quick-start.md holds, not here.
 PINNED_SENTENCES = [
     "`default_policy`",
@@ -117,6 +118,7 @@ PINNED_SENTENCES = [
     "trust-score/recalculate",
 ]
 PINNED_PARAGRAPH = "A verification request (`POST /api/v1/verifications`)"
+PINNED_PARAGRAPH_PAGE = REPO_ROOT / "docs" / "server-features.md"
 
 
 def only(found, marker):
@@ -125,12 +127,14 @@ def only(found, marker):
 
 
 def test_readme_is_under_its_target_plus_the_sentences_it_keeps():
-    """The target counts the short form alone; each kept or pinned sentence, and the
-    pinned paragraph, adds its own words and nothing more. Text added anywhere else, or
-    a kept sentence repeated, fails here."""
+    """The target counts the short form alone; each kept or pinned sentence adds its own
+    words and nothing more. Text added anywhere else, or a kept sentence repeated, fails
+    here. The pinned paragraph is held once in docs/server-features.md and adds no words
+    here."""
     kept = sum(only([s for s in sentences() if m.lower() in s.lower()], m) for m in KEPT_SENTENCES)
     pinned = sum(only([s for s in sentences() if m in s], m) for m in PINNED_SENTENCES)
-    pinned += only([p for p, _ in paragraphs() if PINNED_PARAGRAPH in p], PINNED_PARAGRAPH)
+    held = [p for p in PINNED_PARAGRAPH_PAGE.read_text(encoding="utf-8").split("\n\n") if PINNED_PARAGRAPH in p]
+    assert len(held) == 1, f"docs/server-features.md must say {PINNED_PARAGRAPH!r} once, in one paragraph: {held}"
     budget = WORD_TARGET + kept + pinned
     words = len(text().split())
     assert words <= budget, (

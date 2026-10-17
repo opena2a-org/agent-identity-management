@@ -98,8 +98,8 @@ func verificationScoreWrites(t *testing.T, mode domain.EnforcementMode, capabili
 // A verification request does not recalculate the trust score. A request for a
 // granted capability leaves it unchanged; a request outside the agent's grants
 // takes a fixed deduction, 0.10 when blocked and 0.05 when let through. These
-// are the numbers the root README states, and 0.82 to 0.72 is the change a
-// denied call shows in the score history.
+// are the numbers docs/server-features.md states, and 0.82 to 0.72 is the
+// change a denied call shows in the score history.
 func TestAgentService_VerifyCapability_DoesNotRecalculateTheTrustScore(t *testing.T) {
 	t.Run("granted capability, three calls", func(t *testing.T) {
 		allowed, reason, written := verificationScoreWrites(t, domain.EnforcementModeStrict, "db:read", 3)
@@ -123,34 +123,40 @@ func TestAgentService_VerifyCapability_DoesNotRecalculateTheTrustScore(t *testin
 	})
 }
 
-// The root README says when the server's trust score is calculated and what a
-// verification request does to it. It said the score "runs on every action"
-// and "Updates on every action", which a run of allowed calls disproves.
+// The root README says when the server's trust score is calculated and links
+// docs/server-features.md, which says what a verification request does to it.
+// The README said the score "runs on every action" and "Updates on every
+// action", which a run of allowed calls disproves.
 func TestRootReadme_StatesWhenTheTrustScoreIsRecalculated(t *testing.T) {
 	requirePublicRepositoryFiles(t)
 
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "README.md"))
 	require.NoError(t, err)
 	readme := string(raw)
+	raw, err = os.ReadFile(filepath.Join("..", "..", "..", "..", "docs", "server-features.md"))
+	require.NoError(t, err)
+	guide := string(raw)
 
-	for _, sentence := range regexp.MustCompile(`[.!?](\s+|$)`).Split(readme, -1) {
-		lower := strings.ToLower(sentence)
-		if !strings.Contains(lower, "trust") {
-			continue
-		}
-		for _, claim := range []string{"every action", "real-time"} {
-			assert.NotContains(t, lower, claim, "README.md claims the trust score changes per action: %q", sentence)
+	for name, page := range map[string]string{"README.md": readme, "docs/server-features.md": guide} {
+		for _, sentence := range regexp.MustCompile(`[.!?](\s+|$)`).Split(page, -1) {
+			lower := strings.ToLower(sentence)
+			if !strings.Contains(lower, "trust") {
+				continue
+			}
+			for _, claim := range []string{"every action", "real-time"} {
+				assert.NotContains(t, lower, claim, "%s claims the trust score changes per action: %q", name, sentence)
+			}
 		}
 	}
 
 	var paragraph string
-	for _, p := range strings.Split(readme, "\n\n") {
+	for _, p := range strings.Split(guide, "\n\n") {
 		if strings.Contains(p, "A verification request (`POST /api/v1/verifications`)") {
 			paragraph = p
 			break
 		}
 	}
-	require.NotEmpty(t, paragraph, "README.md must say what a verification request does to the trust score")
+	require.NotEmpty(t, paragraph, "docs/server-features.md must say what a verification request does to the trust score")
 	assert.Contains(t, paragraph, "does not recalculate the score")
 	assert.Contains(t, paragraph, "leaves the score unchanged")
 
@@ -162,4 +168,6 @@ func TestRootReadme_StatesWhenTheTrustScoreIsRecalculated(t *testing.T) {
 
 	assert.Contains(t, readme, "or calls `POST /api/v1/agents/:id/trust-score/recalculate`",
 		"README.md must name the request that recalculates the score")
+	assert.Contains(t, readme, "](docs/server-features.md#trust-gated-capabilities)",
+		"README.md must link the passage that says what a verification request does to the score")
 }
