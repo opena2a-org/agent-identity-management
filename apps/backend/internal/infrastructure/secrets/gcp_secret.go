@@ -7,9 +7,11 @@ import (
 	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
-	gax "github.com/googleapis/gax-go/v2"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/google/uuid"
+	gax "github.com/googleapis/gax-go/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	domainsecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 )
@@ -145,6 +147,10 @@ func (b *GCPSecretBackend) Retrieve(namespaceID uuid.UUID) (*domainsecrets.Secre
 		Name: fmt.Sprintf("%s/versions/latest", b.secretName(namespaceID)),
 	})
 	if err != nil {
+		// A service that answers NOT_FOUND was reached: the secret is missing or deleted.
+		if status.Code(err) == codes.NotFound {
+			return nil, fmt.Errorf("no credential found in gcp for namespace %s", namespaceID)
+		}
 		return nil, fmt.Errorf("%w: gcp retrieve failed: %v", domainsecrets.ErrBackendUnavailable, err)
 	}
 
