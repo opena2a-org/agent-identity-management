@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the SDK integration scripts pass aim-bootstrap and the server the user, password and database name of `DATABASE_URL` percent-decoded (#761)
+
+- `scripts/lib/aim-backend.sh`, which `scripts/test-sdk-python-framework-integration.sh` and
+  `scripts/test-sdk-java-helpers-integration.sh` source, exported the user, the password and the database name of
+  `DATABASE_URL` as `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` with their `%XX` escapes. `cmd/migrate`
+  opens `DATABASE_URL`, whose user, password and database name lib/pq decodes; aim-bootstrap and the server read the
+  `POSTGRES_*` values without decoding them. Run against PostgreSQL 18 with an at-sign written `%40` in the password,
+  the migrations applied, and then `aim-bootstrap --default`, and the server started alone with the same variables,
+  failed with `password authentication failed for user "aim"`. The script now decodes the three values before it
+  exports them, and the same run seeds the admin and passes the server's `/health/ready` check.
+- A `%` in one of the three that does not begin a `%XX`, which lib/pq refuses as well, and `%00`, which no environment
+  variable can carry, stop the run with a message that names the part of the URL and quotes none of it.
+- Tests: `apps/backend/cmd/bootstrap/aim_backend_script_test.go`.
+
 ### Fixed — audit rows keep the user agent and client address of the request that wrote them (#751)
 
 - `AuditService.LogAction` and `AuditService.LogAgentAction` copy the client address and user agent into the row.
