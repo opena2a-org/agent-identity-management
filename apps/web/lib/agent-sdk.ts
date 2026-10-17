@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { apiBaseUrl } from "./api-base-url";
 
 /**
  * Downloads the SDK for a specific agent
@@ -17,11 +18,8 @@ export async function downloadSDK(
     throw new Error('Not authenticated');
   }
 
-  // Get runtime-detected API URL from api client's baseURL
-  const apiBaseURL = (api as any).baseURL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
   const response = await fetch(
-    `${apiBaseURL}/api/v1/agents/${agentId}/sdk?lang=${language}`,
+    `${apiBaseUrl()}/api/v1/agents/${agentId}/sdk?lang=${language}`,
     {
       method: 'GET',
       headers: {
