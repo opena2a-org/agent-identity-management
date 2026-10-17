@@ -368,7 +368,7 @@ def test_help_documents_the_environment_variable(monkeypatch, capsys):
 # --- the exchange answer: fields are checked, server text is one plain line ------
 
 ESC = "\x1b"
-RLO = "‮"
+RLO = "\u202e"
 SECOND_LINE = "SECOND LINE: text chosen by the server"
 
 
@@ -494,8 +494,8 @@ def test_answer_with_a_uuid_agent_id_and_status_pending_is_saved_and_printed(fak
 
 
 def test_terminal_line_replaces_control_and_bidi_characters_and_caps_the_length():
-    replaced = ["\x00", "\t", "\n", "\r", ESC, "\x7f", "\x85", "\x9b", "؜", "‎", "‏",
-                "‪", "‫", "‬", "‭", RLO, "⁦", "⁧", "⁨", "⁩", "\ud800"]
+    replaced = ["\x00", "\t", "\n", "\r", ESC, "\x7f", "\x85", "\x9b", "\u061c", "\u200e", "\u200f",
+                "\u202a", "\u202b", "\u202c", "\u202d", RLO, "\u2066", "\u2067", "\u2068", "\u2069", "\ud800"]
     for ch in replaced:
         assert cli._terminal_line(f"a{ch}b") == "a�b", repr(ch)
     kept = "HTTP 400: café, שלום, 名前 (x/y?z#1%2.3:4) \U0001F916"

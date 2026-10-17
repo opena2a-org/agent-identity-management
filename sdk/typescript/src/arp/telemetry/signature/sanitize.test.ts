@@ -73,7 +73,11 @@ describe('sanitizeTerminalLine', () => {
   });
 
   it('replaces the bidirectional formatting characters', () => {
-    const bidi = ['؜', '‎', '‏', '‪', '‫', '‬', '‭', '‮', '⁦', '⁧', '⁨', '⁩'];
+    const bidi = [
+      '\u061c', '\u200e', '\u200f',
+      '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
+      '\u2066', '\u2067', '\u2068', '\u2069',
+    ];
     for (const ch of bidi) {
       expect(sanitizeTerminalLine(`a${ch}b`), `U+${ch.codePointAt(0)!.toString(16)}`).toBe(`a${R}b`);
     }
