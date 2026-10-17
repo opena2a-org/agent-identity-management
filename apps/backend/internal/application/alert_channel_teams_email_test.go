@@ -182,7 +182,7 @@ func TestAlertChannelCreate_TeamsConfig(t *testing.T) {
 	}{
 		{"http", teams("http://example.com/x"), "config.webhookUrl must be the https URL of a Teams workflow"},
 		{"no host", teams("https:///x"), "config.webhookUrl"},
-		{"user information", teams("https://user:pass@example.com/x"), "config.webhookUrl"},
+		{"user information", teams("https://user:PLACEHOLDER@example.com/x"), "config.webhookUrl"},
 		{"not a URL", teams("example.com/x"), "config.webhookUrl"},
 		{"no URL", json.RawMessage(`{}`), "config.webhookUrl is required"},
 		{"routing key", json.RawMessage(`{"webhookUrl":"` + teamsURL() + `","routingKey":"` + routingKey() + `"}`), "unknown field: config.routingKey"},
@@ -197,7 +197,7 @@ func TestAlertChannelCreate_TeamsConfig(t *testing.T) {
 			var requestErr *AlertChannelRequestError
 			require.ErrorAs(t, err, &requestErr)
 			assert.Contains(t, requestErr.Reason, tc.reason)
-			assert.NotContains(t, requestErr.Reason, "pass", "a refusal never repeats the URL")
+			assert.NotContains(t, requestErr.Reason, "PLACEHOLDER", "a refusal never repeats the URL")
 			assert.Empty(t, store.channels)
 		})
 	}
