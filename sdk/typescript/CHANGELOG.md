@@ -236,6 +236,16 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   and with six renamed copies beside it, all six stayed. Test:
   `src/arp/intelligence/runtime-twin.log-rotation.test.ts` (#756).
 
+- The ARP process monitor (`ProcessMonitor`, which `AgentRuntimeProtection` starts unless
+  `monitors.process.enabled` is `false`) reads the process table with one call per poll,
+  `ps -ax -o pid=,ppid=,user=,%cpu=,%mem=,command=` run without a shell, and takes each child's command, user, CPU
+  and memory from that listing, with no `ps` call per process. The row of that `ps` itself, a child of the agent
+  while it prints, is left out by its pid, parent and command line, so it is never reported as a new or terminated
+  child process. In 1.3.1 it was reported as `Child process terminated: PID <n>`, a pid no spawn event had named. A
+  `Child process terminated` event is emitted only for a child that was running at `start()` or had a
+  `New child process` event, and a poll whose `ps` call fails emits no event. A child that starts and exits between
+  two polls still produces no event. Test: `tests/arp/monitors/process-monitor.test.ts`.
+
 - `SecretsClient.storeCredential` and `SecretsClient.rotateCredential` send the algorithm as `encryptionAlg`, the
   member `POST /api/v1/secrets/namespaces/{id}/credentials` and `POST /api/v1/secrets/namespaces/{id}/rotate` read,
   so the server is given the algorithm passed in the `encryptionAlgorithm` option (default
