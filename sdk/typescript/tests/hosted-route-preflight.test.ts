@@ -234,11 +234,11 @@ describe('hosted-route-preflight against a loopback server', () => {
   });
 
   it('refuses a base URL that carries a user name or password', async () => {
-    const run = await runPreflight(['https://user:secret@127.0.0.1:9']);
+    const run = await runPreflight(['https://FAKEUSER:FAKEPASS@127.0.0.1:9']);
 
     expect(run.code).toBe(2);
     expect(run.stderr).toContain('user name or password');
-    expect(run.stderr).not.toContain('secret');
+    expect(run.stderr).not.toContain('FAKEPASS');
   });
 });
 
