@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { apiBaseUrl } from "@/lib/api-base-url";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -224,7 +225,7 @@ function DevelopersPageContent() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+      const apiUrl = apiBaseUrl();
       let url = `${apiUrl}${selectedEndpoint.path}`;
 
       // Replace path parameters with actual values
@@ -294,7 +295,7 @@ function DevelopersPageContent() {
     if (!selectedEndpoint) return "";
 
     const token = isAuthenticated ? userToken : manualToken;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+    const apiUrl = apiBaseUrl();
     let curl = `curl -X ${selectedEndpoint.method} '${apiUrl}${selectedEndpoint.path}'`;
 
     if (selectedEndpoint.requiresAuth && token) {
@@ -935,7 +936,7 @@ function DevelopersPageContent() {
                           variant="outline"
                           onClick={() =>
                             copyToClipboard(
-                              `fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}', {\n  method: '${selectedEndpoint.method}',\n  headers: {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ""}\n  },\n  ${selectedEndpoint.method !== "GET" ? `body: JSON.stringify(${requestBody})\n` : ""}})\n.then(res => res.json())\n.then(data => console.log(data));`,
+                              `fetch('${apiBaseUrl()}${selectedEndpoint.path}', {\n  method: '${selectedEndpoint.method}',\n  headers: {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN',\n    ` : ""}\n  },\n  ${selectedEndpoint.method !== "GET" ? `body: JSON.stringify(${requestBody})\n` : ""}})\n.then(res => res.json())\n.then(data => console.log(data));`,
                               "js"
                             )
                           }
@@ -948,7 +949,7 @@ function DevelopersPageContent() {
                         </Button>
                       </div>
                       <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm">
-                        <code>{`fetch('${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}', {
+                        <code>{`fetch('${apiBaseUrl()}${selectedEndpoint.path}', {
   method: '${selectedEndpoint.method}',
   headers: {
     'Content-Type': 'application/json',
@@ -968,7 +969,7 @@ function DevelopersPageContent() {
                           variant="outline"
                           onClick={() =>
                             copyToClipboard(
-                              `import requests\n\nurl = '${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}'\nheaders = {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ""}\n}\n${selectedEndpoint.method !== "GET" ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}\nprint(response.json())`,
+                              `import requests\n\nurl = '${apiBaseUrl()}${selectedEndpoint.path}'\nheaders = {\n    'Content-Type': 'application/json',\n    ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ""}\n}\n${selectedEndpoint.method !== "GET" ? `data = ${requestBody}\n\nresponse = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers, json=data)` : `response = requests.${selectedEndpoint.method.toLowerCase()}(url, headers=headers)`}\nprint(response.json())`,
                               "python"
                             )
                           }
@@ -983,7 +984,7 @@ function DevelopersPageContent() {
                       <pre className="glass-contrast p-4 rounded-inset overflow-x-auto text-sm">
                         <code>{`import requests
 
-url = '${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${selectedEndpoint.path}'
+url = '${apiBaseUrl()}${selectedEndpoint.path}'
 headers = {
     'Content-Type': 'application/json',
     ${selectedEndpoint.requiresAuth ? `'Authorization': 'Bearer YOUR_TOKEN'\n` : ""}\n}

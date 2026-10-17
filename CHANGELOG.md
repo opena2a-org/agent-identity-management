@@ -11,6 +11,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: on a `-frontend` hostname, the API documentation page and the MCP server dialog call the API the dashboard signs in to
+
+- The API documentation page (`/dashboard/developers`) built the URL its request runner calls, and the URL in its cURL,
+  JavaScript and Python samples, from the `NEXT_PUBLIC_API_URL` the dashboard was built with. The MCP server detail
+  dialog fetched a server's attestations and audit log from the same value. The API client resolves its address in
+  another order (`getApiUrl` in `apps/web/lib/api.ts`), where that value comes after the `-backend` host it derives from
+  a `-frontend` hostname. On such a hostname, sign-in went to the `-backend` host while these requests went to the
+  build's value; the published `aim-dashboard` image is built with `NEXT_PUBLIC_API_URL=http://localhost:8080`.
+- `apiBaseUrl()` in `apps/web/lib/api-base-url.ts` returns the address the API client resolved, through the client's
+  `baseURL` getter, which the register-agent and agent-detail dialogs already read. The page, the dialog and
+  `downloadSDK` in `apps/web/lib/agent-sdk.ts` build their URLs from it. `apps/web/lib/api.ts` is unchanged.
+- Tests: `apps/web/app/dashboard/developers/page.api-url.test.tsx` and
+  `apps/web/components/modals/mcp-detail-modal.api-url.test.tsx` open the page and the dialog on
+  `aim-frontend.example.com` with `NEXT_PUBLIC_API_URL=http://localhost:8080`, and check that the runner's request, the
+  three samples and the dialog's two requests name `https://aim-backend.example.com`. Both tests fail on the previous
+  code, where the runner's request and the dialog's two requests named `http://localhost:8080`.
+  `apps/web/lib/agent-sdk.test.ts` checks the SDK download URL the same way. `apps/web/api-url-readers.test.ts` parses the non-test source files under `apps/web`, outside
+  `node_modules` and dot-directories, and fails when a file other than `lib/api.ts` and `next.config.ts` reads
+  `process.env.NEXT_PUBLIC_API_URL`. `apps/web/lib/api.backend-host.test.ts` checks that `apiBaseUrl()` returns the
+  origin the client sends its requests to.
+
 ### Fixed — the SDK integration scripts pass aim-bootstrap and the server the user, password and database name of `DATABASE_URL` percent-decoded (#761)
 
 - `scripts/lib/aim-backend.sh`, which `scripts/test-sdk-python-framework-integration.sh` and
