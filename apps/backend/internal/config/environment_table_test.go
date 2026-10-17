@@ -301,8 +301,9 @@ func sortedNames(set map[string]bool) []string {
 }
 
 // TestEnvironmentTable_NamesEveryVariableLoadReads fails when Load reads a
-// variable the table has no rows for, or the table has rows for a variable
-// Load does not read.
+// variable through lookupEnv that the table has no rows for, or the table has
+// rows for a variable Load does not read. A read that bypasses lookupEnv is
+// caught by TestConfigReadsTheEnvironmentOnlyThroughLookupEnv in cmd/server.
 func TestEnvironmentTable_NamesEveryVariableLoadReads(t *testing.T) {
 	table := readEnvironmentTable(t)
 	table.apply(t, environmentRow{Variable: "APP_PORT"})

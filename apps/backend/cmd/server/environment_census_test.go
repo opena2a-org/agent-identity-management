@@ -83,3 +83,71 @@ func TestServerReadsTheEnvironmentOnlyThroughConfig(t *testing.T) {
 			strings.Join(reads, "\n  "))
 	}
 }
+
+// configDir is internal/config, relative to this package's directory.
+const configDir = "../../internal/config"
+
+// lookupEnvDefinition returns the position of the reader assigned to the
+// package variable lookupEnv in internal/config/config.go, in the form
+// environmentReads reports a read.
+func lookupEnvDefinition(t *testing.T) string {
+	t.Helper()
+	name := filepath.Join(configDir, "config.go")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, name, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", name, err)
+	}
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok || len(value.Names) != 1 || value.Names[0].Name != "lookupEnv" || len(value.Values) != 1 {
+				continue
+			}
+			sel, ok := value.Values[0].(*ast.SelectorExpr)
+			if !ok {
+				t.Fatalf("%s: lookupEnv is not assigned a reader of the os package", fset.Position(value.Pos()))
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if !ok {
+				t.Fatalf("%s: lookupEnv is not assigned a reader of the os package", fset.Position(value.Pos()))
+			}
+			return fmt.Sprintf("%s: %s.%s", fset.Position(sel.Pos()), pkg.Name, sel.Sel.Name)
+		}
+	}
+	t.Fatalf("%s declares no package variable lookupEnv", name)
+	return ""
+}
+
+// TestConfigReadsTheEnvironmentOnlyThroughLookupEnv fails when a non-test
+// file of internal/config reads an environment variable other than through
+// the package variable lookupEnv. The environment table test records the
+// names Load asks lookupEnv for, so a read that bypasses lookupEnv would be
+// missing from the table without that test noticing.
+func TestConfigReadsTheEnvironmentOnlyThroughLookupEnv(t *testing.T) {
+	reads, parsed := environmentReads(t, filepath.Join(configDir, "*.go"))
+	if parsed < 2 {
+		t.Fatalf("parsed %d non-test files of internal/config; expected config.go and its siblings", parsed)
+	}
+	definition := lookupEnvDefinition(t)
+	var outside []string
+	found := false
+	for _, read := range reads {
+		if read == definition {
+			found = true
+			continue
+		}
+		outside = append(outside, read)
+	}
+	if !found {
+		t.Errorf("the census found no read at the lookupEnv definition %s; reads found:\n  %s", definition, strings.Join(reads, "\n  "))
+	}
+	if len(outside) > 0 {
+		t.Errorf("internal/config reads the environment other than through lookupEnv; read the variable through getenv, getEnv or lookupEnv and add it to the environment table:\n  %s",
+			strings.Join(outside, "\n  "))
+	}
+}
