@@ -64,9 +64,12 @@ func (table environmentTable) variables() []string {
 }
 
 // apply leaves every variable of the table unset, then sets the baseline,
-// the row's other variables and the row's own value.
+// the row's other variables and the row's own value. No container marker file
+// exists for the row, so HOST's default is the one outside a container
+// wherever the table runs.
 func (table environmentTable) apply(t *testing.T, row environmentRow) {
 	t.Helper()
+	noContainerMarkers(t)
 	unset := func(name string) {
 		t.Setenv(name, "")
 		os.Unsetenv(name)
@@ -107,6 +110,12 @@ func loadForRow() (cfg *Config, failure string) {
 func renderSetting(cfg *Config, name string) (string, bool) {
 	q := func(s string) string { return fmt.Sprintf("%q", s) }
 	switch name {
+	case "HOST":
+		return q(cfg.Server.Host), true
+	case "KUBERNETES_SERVICE_HOST":
+		// Load reads it only to tell whether the server runs in a container,
+		// which sets the host HOST's default resolves to.
+		return q(cfg.Server.Host), true
 	case "APP_PORT":
 		return q(cfg.Server.Port), true
 	case "ENVIRONMENT":

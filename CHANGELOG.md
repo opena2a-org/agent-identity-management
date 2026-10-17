@@ -36,6 +36,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   with `node` among them, and the executable lint and its tests. `sdk/typescript/tests/repo-doc-lints.test.ts`
   checks that the guide names every script its cases run and states their number.
 
+### Security: the API server listens on 127.0.0.1 outside a container unless `HOST` is set (#757)
+
+- The API listener binds `HOST` and `APP_PORT`, joined with `net.JoinHostPort`. With `HOST` unset or empty, the host is
+  `127.0.0.1` outside a container and `0.0.0.0` in one. The server counts as in a container when `/.dockerenv` or
+  `/run/.containerenv` exists or `KUBERNETES_SERVICE_HOST` is set and not empty. An IPv6 literal such as `HOST=::1`
+  listens on IPv6. The image built from `infrastructure/docker/Dockerfile.backend` sets `HOST=0.0.0.0`.
+- `config.Load` reads `HOST` and `KUBERNETES_SERVICE_HOST` with the server settings, by its one rule: an empty value
+  reads as unset, and a value is used as written. The startup summary keeps its port line and ends with
+  `API listener: <host>:<port> (HOST sets the address; unset, it is 0.0.0.0 in a container and 127.0.0.1 outside one)`,
+  and the metrics wiring's lines name the same address.
+- Outside a container, set `HOST=0.0.0.0` to accept connections from other hosts. `apps/backend/.env.example` and
+  `docs/guides/INSTALLATION.md` describe the setting.
+- `apps/backend/deployments/otel-demo/smoke-backend.sh`, `apps/backend/deployments/smoke/rest-list-endpoints-smoke.sh`
+  and `sdk/typescript/scripts/release-smoke.sh` start their backend with `HOST=127.0.0.1`, and `release-smoke.sh`
+  calls it at `http://127.0.0.1:<port>`.
+- Tests: `apps/backend/cmd/server/api_listener_test.go` starts the API listener with `HOST` unset and no container
+  detected and checks it bound `127.0.0.1` and answers `GET /health` there, starts it with `HOST=::1` and checks it bound
+  `::1`, checks the address for each `HOST` and container case without listening, and checks the summary's last line.
+  `apps/backend/internal/config/listen_host_test.go` covers `ListenHost`, `RunningInContainer` and `Load`.
+  `internal/config/testdata/environment_table.json` has five rows each for `HOST` and `KUBERNETES_SERVICE_HOST`
+  (unset, empty, whitespace only, a valid and an invalid value), 390 rows for 72 variables in all, and the table test
+  runs each row with no container marker file, so the `HOST` default it checks is the one outside a container.
+
 ### Fixed: a SIEM event copies the client address and user agent out of the request it reports
 
 - The `ipAddress` and `userAgent` of an `aim.audit.*` or `aim.auth.signin_failed` event are copied when the event is

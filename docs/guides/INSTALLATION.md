@@ -106,6 +106,13 @@ go run cmd/server/main.go
 
 Server will start on `http://localhost:8080`
 
+With `HOST` unset, the server listens on `127.0.0.1` outside a container, so
+other hosts on your network cannot reach it. Set `HOST=0.0.0.0` to accept their
+connections, or set `HOST` to another address of this machine to listen there.
+It counts as a container when `/.dockerenv` or `/run/.containerenv` exists or
+`KUBERNETES_SERVICE_HOST` is set, and there it listens on `0.0.0.0`. The image
+built from `infrastructure/docker/Dockerfile.backend` sets `HOST=0.0.0.0`.
+
 ### 6. Start Frontend
 
 ```bash

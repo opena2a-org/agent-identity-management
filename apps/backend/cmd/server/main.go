@@ -242,7 +242,8 @@ func main() {
 	// default) serves /metrics; this listener serves it only behind
 	// METRICS_AUTH_TOKEN. See metrics_wiring.go.
 	// CRITICAL: Must be wired BEFORE Prometheus middleware to avoid circular recording
-	metricsSrv, err := wireMetrics(app, ":"+cfg.Server.Port, cfg.Server.MetricsListenAddr, cfg.Server.MetricsAuthToken)
+	apiAddr := apiListenAddr(cfg.Server)
+	metricsSrv, err := wireMetrics(app, apiAddr, cfg.Server.MetricsListenAddr, cfg.Server.MetricsAuthToken)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -307,7 +308,6 @@ func main() {
 	mountAPIRoutes(app, h, services, jwtService, repos.SDKToken, db)
 
 	// Start server
-	port := cfg.Server.Port
 	for _, line := range startupSummary(cfg, redisClient) {
 		log.Print(line)
 	}
@@ -346,7 +346,7 @@ func main() {
 
 	// Graceful shutdown
 	go func() {
-		if err := app.Listen(":" + port); err != nil {
+		if err := app.Listen(apiAddr, apiListenConfig(cfg.Server.Host)); err != nil {
 			log.Fatal(err)
 		}
 	}()
@@ -527,12 +527,13 @@ func initRedis(cfg *config.Config) (*redis.Client, error) {
 }
 
 // startupSummary is the summary the server logs before it listens: the port,
-// the database and the Redis lines.
+// the database and the Redis lines, then the address the API listener binds.
 func startupSummary(cfg *config.Config, redisClient *redis.Client) []string {
 	return []string{
 		fmt.Sprintf("Agent Identity Management API starting on port %s", cfg.Server.Port),
 		fmt.Sprintf("Database: %s@%s:%d", cfg.Database.User, cfg.Database.Host, cfg.Database.Port),
 		redisStartupSummary(cfg, redisClient),
+		apiListenerStartupLine(apiListenAddr(cfg.Server)),
 	}
 }
 

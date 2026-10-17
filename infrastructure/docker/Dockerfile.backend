@@ -89,7 +89,10 @@ LABEL org.opencontainers.image.title="AIM Server"
 LABEL org.opencontainers.image.description="Open-source non-human identity platform for AI agents — cryptographic identity, governance, and access control"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
-# Expose port
+# Expose port. HOST=0.0.0.0 lets the published port reach the API listener on
+# a runtime the server does not detect as a container; outside a container
+# with HOST unset, the server listens on 127.0.0.1.
+ENV HOST=0.0.0.0
 EXPOSE 8080
 
 # Run the application

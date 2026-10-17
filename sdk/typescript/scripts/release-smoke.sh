@@ -84,7 +84,9 @@ if [ -n "$EXTERNAL_BASE_URL" ]; then
     [ -n "${ADMIN_PASSWORD:-}" ] || { echo "FAIL: AIM_SMOKE_BASE_URL is set but ADMIN_PASSWORD is not"; exit 1; }
     BASE_URL="${EXTERNAL_BASE_URL%/}"
 else
-    BASE_URL="http://localhost:${SMOKE_BACKEND_PORT}"
+    # The hermetic backend listens on 127.0.0.1 (HOST below), so the URL
+    # names that address and not a name that may resolve to ::1 first.
+    BASE_URL="http://127.0.0.1:${SMOKE_BACKEND_PORT}"
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-Smoke-$(openssl rand -hex 12)-A1}"
     SMOKE_PG_PASSWORD="$(openssl rand -hex 16)"
 fi
@@ -187,7 +189,7 @@ else
 
     (
         cd "$BACKEND_DIR"
-        export APP_PORT="$SMOKE_BACKEND_PORT" ENVIRONMENT="development"
+        export HOST="127.0.0.1" APP_PORT="$SMOKE_BACKEND_PORT" ENVIRONMENT="development"
         export POSTGRES_HOST="localhost" POSTGRES_PORT="$SMOKE_POSTGRES_PORT" POSTGRES_USER="postgres"
         export POSTGRES_PASSWORD="$SMOKE_PG_PASSWORD" POSTGRES_DB="$SMOKE_PG_DB" POSTGRES_SSL_MODE="disable"
         export REDIS_HOST="" OTEL_EXPORTER_OTLP_ENDPOINT=""
