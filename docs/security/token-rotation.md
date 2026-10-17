@@ -354,10 +354,12 @@ If you need long-lived credentials:
    )
    ```
 
-2. **Download Fresh SDK** each time:
+2. **Download Fresh SDK** each time: sign in to the dashboard and download the
+   SDK again from its SDK page (`/dashboard/sdk`). A downloaded SDK's credential
+   cannot download another SDK; the download takes a sign-in. The flight-search
+   example prints these steps:
    ```bash
-   # Get fresh tokens for each debug session
-   ./get_fresh_sdk.sh
+   python3 examples/flight-search-agent/get_fresh_sdk.py
    ```
 
 3. **Use Test Environment** with relaxed policies

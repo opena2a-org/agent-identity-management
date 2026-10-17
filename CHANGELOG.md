@@ -236,6 +236,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   with the previous code, it read `servers` and returned an empty list for an agent with one registered MCP server.
 - Tests: the three test files above, run by the script.
 
+### Changed: the flight-search example's `get_fresh_sdk.py` prints the dashboard's sign-in and download steps instead of refreshing a stored credential
+
+- `examples/flight-search-agent/get_fresh_sdk.py` refreshed the refresh token in `~/.aim/credentials.json`, wrote
+  the new refresh token back to that file, and posted to `/api/v1/sdk/download/python` with the access token the
+  refresh returned. The backend registers no route at that path; the SDK download is `GET /api/v1/sdk/download`,
+  which refuses an access token minted by refreshing a downloaded SDK's credential (see the
+  `SDK_TOKEN_FAMILY_MAX_AGE` entry below). The script now sends no request and leaves `~/.aim/credentials.json`
+  as it was: it prints the steps to sign in at the dashboard's `/auth/login`, download the Python SDK from
+  `/dashboard/sdk` and extract it into `./fresh-sdk/`. `docs/security/token-rotation.md` named a
+  `get_fresh_sdk.sh` the repository does not have; it now names these steps and the script.
+- Tests: `sdk/typescript/tests/flight-search-demo-helpers-stack-from-environment.test.ts` runs the script with a
+  stored credential against a stand-in that answers a POST `401`, and against one that answers it `200` with a new
+  token pair. Both runs send no request and name the dashboard's sign-in and SDK pages, and after the `200` run the
+  credential file is unchanged. On the previous script the `200` run posted the refresh and then
+  `/api/v1/sdk/download/python`.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
