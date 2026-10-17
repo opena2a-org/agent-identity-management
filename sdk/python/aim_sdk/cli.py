@@ -98,9 +98,10 @@ BOOTSTRAP_TOKEN_PREFIX = "aim_ob_"
 BOOTSTRAP_TOKEN_HEADER = "X-AIM-Bootstrap-Token"
 DEFAULT_INIT_AGENT_NAME = "my-first-agent"
 INIT_REQUEST_TIMEOUT_SECONDS = 30
-# The hosts `aim-sdk init` sends the bootstrap token to over http:, as
+# The hosts `aim-sdk init` and `aim-sdk login` reach over http:, as
 # urlsplit().hostname gives them. The host is compared as written in the URL
-# and is never resolved; any other host needs an https: address.
+# and is never resolved; any other host needs an https: address, or
+# `aim-sdk login --allow-http`.
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 # An agent or organization ID `init` saves and prints. The server sends a UUID;
@@ -163,19 +164,20 @@ def invalid_server_url_reason(aim_url):
     return None
 
 
-# Whitespace, C0, DEL and C1: refused in `aim-sdk init --url`, see _init_url_refusal.
-_INIT_URL_SPACE_OR_CONTROL = re.compile(r'[\s\x00-\x1f\x7f-\x9f]')
+# Whitespace, C0, DEL and C1: refused in `aim-sdk init --url` and
+# `aim-sdk login --url`, see _url_text_refusal.
+_URL_SPACE_OR_CONTROL = re.compile(r'[\s\x00-\x1f\x7f-\x9f]')
 
 
-def _init_url_refusal(aim_url):
+def _url_text_refusal(aim_url):
     """
-    Why `aim-sdk init` refuses `aim_url`, an address that passed
-    invalid_server_url_reason, or None.
+    Why `aim-sdk init` and `aim-sdk login` refuse `aim_url`, an address that
+    passed invalid_server_url_reason, before the loopback check, or None.
 
     A backslash is refused because the loopback check reads the host with
     urlsplit while requests connects with urllib3, which ends the host at a
     backslash where urlsplit does not: for 'http://aim.example.test\\@127.0.0.1'
-    the check would read 127.0.0.1 and requests would send the token to
+    the check would read 127.0.0.1 and requests would connect to
     aim.example.test. Whitespace and control characters, which no server
     address holds, are refused too. The reason does not quote the address,
     which may hold a password or the token.
@@ -183,9 +185,76 @@ def _init_url_refusal(aim_url):
     url = (aim_url or "").strip()
     if "\\" in url:
         return "--url has a backslash"
-    if _INIT_URL_SPACE_OR_CONTROL.search(url):
+    if _URL_SPACE_OR_CONTROL.search(url):
         return "--url has whitespace or a control character"
     return None
+
+
+class _UrlRefusal:
+    """
+    Why `aim-sdk init` or `aim-sdk login` refuses an address: the lines it
+    prints, and, when the refusal is the http: host rule, the address as those
+    lines show it. `aim-sdk login --allow-http` lifts that rule only; nothing
+    lifts a backslash, whitespace or a control character.
+    """
+
+    __slots__ = ('lines', 'cleartext_address')
+
+    def __init__(self, lines, cleartext_address=None):
+        self.lines = lines
+        self.cleartext_address = cleartext_address
+
+
+def _cleartext_url_refusal(aim_url, verb, token=None):
+    """
+    Why `aim-sdk <verb>` ('init' or 'login') refuses `aim_url`, an address
+    that passed invalid_server_url_reason, as a _UrlRefusal, or None.
+
+    The one rule both verbs apply before any request: _url_text_refusal, then
+    an http: address only on a host in LOOPBACK_HOSTS. The lines name the host
+    as urlsplit reads it, which leaves out a user:password part, with `token`
+    masked in it, and the example commands keep the port the address names.
+    """
+    problem = _url_text_refusal(aim_url)
+    if problem:
+        return _UrlRefusal([
+            f"Error: {problem}.",
+            "Pass the server's http(s) address, for example:",
+            f"  aim-sdk {verb} --url https://aim.example.com",
+            f"or omit --url to use {DEFAULT_AIM_URL}.",
+        ])
+
+    url_parts = urlsplit(aim_url.strip())
+    if url_parts.scheme != 'http' or url_parts.hostname in LOOPBACK_HOSTS:
+        return None
+    host = url_parts.hostname
+    shown = _redact_token(f"[{host}]" if ':' in host else host, token)
+    try:
+        port = url_parts.port
+    except ValueError:
+        port = None
+    host_port = shown if port is None else f"{shown}:{port}"
+
+    if verb == 'login':
+        rule = "aim-sdk login receives your access and refresh tokens over http: only from this machine"
+    else:
+        rule = "aim-sdk init sends the bootstrap token over http: only to this machine"
+    lines = [
+        f"Error: {rule} (localhost, 127.0.0.1 or [::1]), and {shown} is not this machine. "
+        "Nothing was sent or saved.",
+        "Pass the server's https address, for example:",
+        f"  aim-sdk {verb} --url https://{host_port}",
+    ]
+    if verb == 'login':
+        lines += [
+            "or, on a network you trust, accept that the tokens cross it unencrypted:",
+            f"  aim-sdk login --url http://{host_port} --allow-http",
+            "Self-hosted: put a TLS-terminating proxy in front of the dashboard and the API "
+            "(docs/DEPLOYMENT.md, \"Enable HTTPS\").",
+        ]
+    else:
+        lines.append(f"or omit --url to use {DEFAULT_AIM_URL}.")
+    return _UrlRefusal(lines, cleartext_address=f"http://{host_port}")
 
 
 # The outcomes poll_device_token reports by name. A grant state counts only on
@@ -209,7 +278,10 @@ LOGIN_EXIT_CODES_HELP = """\
 exit codes:
   0   signed in, or an existing sign-in was kept
   1   the login did not complete: the code was denied or expired, the login
-      was cancelled, or the server refused the request
+      was cancelled, the server refused the request, or the address was
+      refused before any request. An http: address is accepted only on this
+      machine (localhost, 127.0.0.1 or [::1]); --allow-http accepts one on
+      another host, and the tokens then cross the network unencrypted
   2   the command line was not valid
   75  the AIM server was unavailable: it answered HTTP 502, 503 or 504, or
       gave no HTTP answer. Nothing was stored; run the same command again later
@@ -514,6 +586,15 @@ def login(args):
         print("  aim-sdk login --url https://aim.example.com")
         print(f"or omit --url to use {DEFAULT_AIM_URL}.")
         return 1
+    # Before any request: the whole sign-in goes to this address.
+    refusal = _cleartext_url_refusal(args.url, 'login')
+    if refusal and not (refusal.cleartext_address and getattr(args, 'allow_http', False)):
+        print("\n".join(refusal.lines))
+        return 1
+    if refusal:
+        print(f"Warning: {refusal.cleartext_address} is not this machine and the address is http:. "
+              "The access and refresh tokens this sign-in receives will cross the network unencrypted, "
+              "and anyone on the path can read and reuse them. --allow-http accepted that.", flush=True)
 
     aim_url = args.url.strip().rstrip('/')
 
@@ -980,26 +1061,18 @@ def init(args):
         print("Generate one from the onboarding screen in the AIM dashboard.")
         return 1
 
-    url_problem = invalid_server_url_reason(args.url) or _init_url_refusal(args.url)
+    url_problem = invalid_server_url_reason(args.url)
     if url_problem:
         print(f"Error: {url_problem}.")
         print("Pass the server's http(s) address, for example:")
         print("  aim-sdk init --url https://aim.example.com")
         print(f"or omit --url to use {DEFAULT_AIM_URL}.")
         return 1
-    aim_url = args.url.strip().rstrip('/')
-
-    url_parts = urlsplit(aim_url)
-    if url_parts.scheme == 'http' and url_parts.hostname not in LOOPBACK_HOSTS:
-        # Only the host is shown: urlsplit keeps a user:password part out of it.
-        host = url_parts.hostname
-        shown = _redact_token(f"[{host}]" if ':' in host else host, token)
-        print("Error: aim-sdk init sends the bootstrap token over http: only to this machine "
-              f"(localhost, 127.0.0.1 or [::1]), and {shown} is not this machine. Nothing was sent or saved.")
-        print("Pass the server's https address, for example:")
-        print(f"  aim-sdk init --url https://{shown}")
-        print(f"or omit --url to use {DEFAULT_AIM_URL}.")
+    refusal = _cleartext_url_refusal(args.url, 'init', token)
+    if refusal:
+        print("\n".join(refusal.lines))
         return 1
+    aim_url = args.url.strip().rstrip('/')
 
     name = (args.name or '').strip()
     if not name:
@@ -1140,6 +1213,12 @@ def main():
         '--no-browser',
         action='store_true',
         help='Print the approval page and the code without opening a browser',
+    )
+    login_parser.add_argument(
+        '--allow-http',
+        action='store_true',
+        help=('Accept an http: address on a host other than this machine (localhost, 127.0.0.1 or [::1]); '
+              'the access and refresh tokens then cross the network unencrypted'),
     )
     login_parser.set_defaults(func=login)
 
