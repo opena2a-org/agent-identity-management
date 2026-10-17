@@ -193,8 +193,12 @@ docker compose down -v
 ################################################################################
 
 # Server configuration
-SERVER_HOST=0.0.0.0
-SERVER_PORT=8080
+# HOST is the address the API listens on. Unset, it is 127.0.0.1 outside a
+# container and 0.0.0.0 in one; the image built from
+# infrastructure/docker/Dockerfile.backend sets HOST=0.0.0.0. Set HOST=0.0.0.0
+# where other machines connect to the API directly.
+# HOST=127.0.0.1
+APP_PORT=8080
 ENVIRONMENT=production  # development | production | testing
 
 # JWT Configuration
