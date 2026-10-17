@@ -59,6 +59,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `go test -race ./tests/integration/` from `apps/backend` passed 19 top-level tests, skipped 266 and failed none, and
   each of the 266 skips gives `BACKEND_URL is unset` as its reason.
 
+### Fixed — the backend's `.env.example` and the deployment guide name `APP_PORT` and `HOST`, the variables the server reads
+
+- `apps/backend/.env.example` set `PORT=8080`, and the `.env` reference in `docs/DEPLOYMENT.md` set
+  `SERVER_HOST=0.0.0.0` and `SERVER_PORT=8080`. The server reads none of the three, so a port or host set there had no
+  effect. Both now set `APP_PORT=8080`, and the deployment guide shows `HOST`, commented out, with the address the API
+  listens on when it is unset.
+
 ### Fixed — audit rows keep the user agent and client address of the request that wrote them (#751)
 
 - `AuditService.LogAction` and `AuditService.LogAgentAction` copy the client address and user agent into the row.
