@@ -117,6 +117,28 @@ func (s *AlertService) SetWebhookService(webhookService *WebhookService) {
 	s.webhookService = asWebhookEventDispatcher(webhookService)
 }
 
+// alertInsertObservable is an alert repository that gives each alert it
+// inserts to the observers added with OnCreate, as
+// *repository.AlertRepository does.
+type alertInsertObservable interface {
+	OnCreate(fn func(*domain.Alert))
+}
+
+// OnAlertCreated adds fn to the observers of the service's alert repository,
+// which gives fn each alert it inserts, whether this service or another
+// holder of the same repository wrote it, and not a repeat counted on an open
+// alert. It reports false, and adds nothing, when the repository does not
+// give out the alerts it inserts. Call it at startup, before the repository
+// is shared.
+func (s *AlertService) OnAlertCreated(fn func(*domain.Alert)) bool {
+	repo, ok := s.alertRepo.(alertInsertObservable)
+	if !ok {
+		return false
+	}
+	repo.OnCreate(fn)
+	return true
+}
+
 // CreateAlert creates a new alert and triggers webhooks.
 //
 // An alert with a DedupeKey is coalesced: when an unacknowledged alert in the
@@ -148,15 +170,15 @@ func (s *AlertService) CreateAlert(ctx context.Context, alert *domain.Alert) err
 // triggerAlertWebhook sends webhook notification for alert events
 func (s *AlertService) triggerAlertWebhook(ctx context.Context, alert *domain.Alert, event domain.WebhookEvent) {
 	data := map[string]interface{}{
-		"alertId":       alert.ID.String(),
-		"alertType":     string(alert.AlertType),
-		"severity":      string(alert.Severity),
-		"title":         alert.Title,
-		"description":   alert.Description,
-		"resourceType":  alert.ResourceType,
-		"resourceId":    alert.ResourceID.String(),
-		"acknowledged":  alert.IsAcknowledged,
-		"createdAt":     alert.CreatedAt,
+		"alertId":      alert.ID.String(),
+		"alertType":    string(alert.AlertType),
+		"severity":     string(alert.Severity),
+		"title":        alert.Title,
+		"description":  alert.Description,
+		"resourceType": alert.ResourceType,
+		"resourceId":   alert.ResourceID.String(),
+		"acknowledged": alert.IsAcknowledged,
+		"createdAt":    alert.CreatedAt,
 	}
 
 	if alert.AgentName != "" {
@@ -372,21 +394,21 @@ func (s *AlertService) ResolveAlert(
 
 // UnusualAccessPatternConfig defines thresholds for anomaly detection
 type UnusualAccessPatternConfig struct {
-	HighVolumeThreshold    int           // Number of requests that triggers high volume alert
-	TimeWindowMinutes      int           // Time window for rate limiting checks
-	OffHoursStart          int           // Hour when off-hours begin (e.g., 22 = 10 PM)
-	OffHoursEnd            int           // Hour when off-hours end (e.g., 6 = 6 AM)
-	NewResourceAlertDelay  time.Duration // Don't alert on new resources within this period
+	HighVolumeThreshold   int           // Number of requests that triggers high volume alert
+	TimeWindowMinutes     int           // Time window for rate limiting checks
+	OffHoursStart         int           // Hour when off-hours begin (e.g., 22 = 10 PM)
+	OffHoursEnd           int           // Hour when off-hours end (e.g., 6 = 6 AM)
+	NewResourceAlertDelay time.Duration // Don't alert on new resources within this period
 }
 
 // DefaultUnusualAccessConfig returns default configuration
 func DefaultUnusualAccessConfig() UnusualAccessPatternConfig {
 	return UnusualAccessPatternConfig{
-		HighVolumeThreshold:    100,             // 100+ requests in window
-		TimeWindowMinutes:      5,               // 5-minute window
-		OffHoursStart:          0,               // Midnight UTC (disabled - 0 to 0 means never off-hours)
-		OffHoursEnd:            0,               // Midnight UTC (disabled - use org timezone settings when available)
-		NewResourceAlertDelay:  24 * time.Hour,  // Don't alert for 24h on new resources
+		HighVolumeThreshold:   100,            // 100+ requests in window
+		TimeWindowMinutes:     5,              // 5-minute window
+		OffHoursStart:         0,              // Midnight UTC (disabled - 0 to 0 means never off-hours)
+		OffHoursEnd:           0,              // Midnight UTC (disabled - use org timezone settings when available)
+		NewResourceAlertDelay: 24 * time.Hour, // Don't alert for 24h on new resources
 	}
 }
 
@@ -671,9 +693,9 @@ type TrustScoreDropConfig struct {
 // DefaultTrustScoreDropConfig returns default configuration
 func DefaultTrustScoreDropConfig() TrustScoreDropConfig {
 	return TrustScoreDropConfig{
-		SignificantDropThreshold: 0.1,  // 10% drop
-		CriticalDropThreshold:    0.2,  // 20% drop
-		LowScoreThreshold:        0.5,  // 50% trust score
+		SignificantDropThreshold: 0.1, // 10% drop
+		CriticalDropThreshold:    0.2, // 20% drop
+		LowScoreThreshold:        0.5, // 50% trust score
 	}
 }
 

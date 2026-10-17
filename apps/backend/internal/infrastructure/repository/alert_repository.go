@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,11 +14,39 @@ import (
 )
 
 type AlertRepository struct {
-	db *sql.DB
+	db       *sql.DB
+	onCreate []func(*domain.Alert)
 }
 
 func NewAlertRepository(db *sql.DB) *AlertRepository {
 	return &AlertRepository{db: db}
+}
+
+// OnCreate adds fn to the observers given each alert the repository inserts:
+// every alert Create writes, and an alert CreateCoalesced inserts as a new
+// row. A repeat CreateCoalesced counts on an open alert, and an alert whose
+// write fails, is given to none. Every observer runs, in the order it was
+// added, on the writer's goroutine, so none may block. A panic in one is
+// recovered and logged; the observers after it still run and the write still
+// succeeds. Add observers at startup, before the repository is shared.
+func (r *AlertRepository) OnCreate(fn func(*domain.Alert)) {
+	r.onCreate = append(r.onCreate, fn)
+}
+
+// created gives the inserted alert to each observer.
+func (r *AlertRepository) created(alert *domain.Alert) {
+	for _, fn := range r.onCreate {
+		observeAlert(fn, alert)
+	}
+}
+
+func observeAlert(fn func(*domain.Alert), alert *domain.Alert) {
+	defer func() {
+		if p := recover(); p != nil {
+			log.Printf("ERROR: an observer of alert %s panicked: %v", alert.ID, p)
+		}
+	}()
+	fn(alert)
 }
 
 // alertExecer is what insertAlert needs: *sql.DB or *sql.Tx.
@@ -26,7 +55,11 @@ type alertExecer interface {
 }
 
 func (r *AlertRepository) Create(alert *domain.Alert) error {
-	return insertAlert(r.db, alert)
+	if err := insertAlert(r.db, alert); err != nil {
+		return err
+	}
+	r.created(alert)
+	return nil
 }
 
 func insertAlert(exec alertExecer, alert *domain.Alert) error {
@@ -322,6 +355,7 @@ func (r *AlertRepository) CreateCoalesced(alert *domain.Alert, since, seenAt tim
 	if err := tx.Commit(); err != nil {
 		return false, err
 	}
+	r.created(alert)
 	return true, nil
 }
 

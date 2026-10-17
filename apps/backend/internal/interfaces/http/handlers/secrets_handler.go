@@ -204,6 +204,7 @@ func (h *SecretsHandler) CreateNamespace(c fiber.Ctx) error {
 	if err := h.secretsService.CreateNamespace(ns); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
+	h.recordSecretsChange(c, orgID, domain.AuditActionCreate, secretNamespaceResource, ns)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"id":          ns.ID,
@@ -295,15 +296,17 @@ func (h *SecretsHandler) DeleteNamespace(c fiber.Ctx) error {
 	// SECURITY (A3d-iii): verify the namespace's owning agent belongs to
 	// the caller's org before deletion. Returns 404 for any cross-tenant
 	// or non-existent ID (existence secrecy + delete-protection).
-	if LoadOwnedViaAgent(c, h.secretsService.GetNamespace, id, orgID,
+	ns := LoadOwnedViaAgent(c, h.secretsService.GetNamespace, id, orgID,
 		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
-		h.agentRepo) == nil {
+		h.agentRepo)
+	if ns == nil {
 		return nil
 	}
 
 	if err := h.secretsService.DeleteNamespace(id); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
+	h.recordSecretsChange(c, orgID, domain.AuditActionDelete, secretNamespaceResource, ns)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Namespace deleted"})
 }
@@ -344,9 +347,10 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 	// the caller's org before writing credential material. Without this
 	// check, a caller in org A could plant credentials inside a namespace
 	// owned by an agent in org B. Returns 404 on cross-tenant.
-	if LoadOwnedViaAgent(c, h.secretsService.GetNamespace, nsID, orgID,
+	ns := LoadOwnedViaAgent(c, h.secretsService.GetNamespace, nsID, orgID,
 		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
-		h.agentRepo) == nil {
+		h.agentRepo)
+	if ns == nil {
 		return nil
 	}
 
@@ -356,6 +360,7 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
+	h.recordSecretsChange(c, orgID, domain.AuditActionCreate, secretCredentialResource, ns)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"message": "Credential stored"})
 }
@@ -401,9 +406,10 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 	// the caller's org before rotating credentials. Without this check, a
 	// caller in org A could overwrite credentials inside a namespace
 	// owned by an agent in org B. Returns 404 on cross-tenant.
-	if LoadOwnedViaAgent(c, h.secretsService.GetNamespace, nsID, orgID,
+	ns := LoadOwnedViaAgent(c, h.secretsService.GetNamespace, nsID, orgID,
 		func(n *secrets.SecretNamespace) uuid.UUID { return n.AgentID },
-		h.agentRepo) == nil {
+		h.agentRepo)
+	if ns == nil {
 		return nil
 	}
 
@@ -413,8 +419,42 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
+	h.recordSecretsChange(c, orgID, domain.AuditActionUpdate, secretCredentialResource, ns)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"message": "Credential rotated"})
+}
+
+// The resource types of the audit entries the secrets management routes write.
+const (
+	secretNamespaceResource  = "secret_namespace"
+	secretCredentialResource = "secret_credential"
+)
+
+// recordSecretsChange writes the audit entry of a secrets management request
+// that succeeded: in the caller's organization, under the caller's user id,
+// with the namespace as its resource. The metadata names the namespace's
+// backend and nothing else, never the credential, its length or its
+// encryption parameters. The change has been made, so a failed write is
+// logged and the answer is unchanged.
+func (h *SecretsHandler) recordSecretsChange(c fiber.Ctx, orgID uuid.UUID, action domain.AuditAction, resourceType string, ns *secrets.SecretNamespace) {
+	if h.auditService == nil {
+		return
+	}
+	entry := &domain.AuditLog{
+		OrganizationID: orgID,
+		Action:         action,
+		ResourceType:   resourceType,
+		ResourceID:     ns.ID,
+		IPAddress:      c.IP(),
+		UserAgent:      c.Get("User-Agent"),
+		Metadata:       map[string]interface{}{"backendType": string(ns.BackendType)},
+	}
+	if userID, err := getUserID(c); err == nil && userID != uuid.Nil {
+		entry.UserID = &userID
+	}
+	if err := h.auditService.Log(c.Context(), entry); err != nil {
+		log.Printf("secrets: audit entry for %s %s %s not written: %v", action, resourceType, ns.ID, err)
+	}
 }
 
 // GetAuditLog handles GET /api/v1/secrets/audit

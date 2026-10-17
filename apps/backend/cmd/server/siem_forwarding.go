@@ -52,10 +52,21 @@ func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(s
 // write no audit log entry: each password sign-in POST /api/v1/public/login
 // or POST /api/v1/auth/login/local refuses, as aim.auth.signin_failed, and
 // each FGA decision that does not allow the request, as aim.fga.denied. An
-// allowed decision is not forwarded. main calls it once the handlers exist,
-// when a SIEM is configured. Enqueue never blocks, so a slow or failing SIEM
-// never delays an answer.
+// allowed decision is not forwarded. It also forwards each alert the alert
+// repository inserts, whichever service raised it, as aim.alert.created; a
+// repeat counted on an open alert is not forwarded. main calls it once the
+// handlers exist, when a SIEM is configured. Enqueue never blocks, so a slow
+// or failing SIEM never delays an answer.
 func observeSecurityDecisions(forwarder *siem.Forwarder, services *Services, h *Handlers) {
+	alertsObserved := services.Alert != nil && services.Alert.OnAlertCreated(func(alert *domain.Alert) {
+		forwarder.Enqueue(siem.EventFromAlert(alert))
+	})
+	if alertsObserved {
+		log.Printf("siem: forwarding alerts (%s)", siem.EventAlertCreated)
+	} else {
+		log.Printf("ERROR: siem: alerts are not forwarded: the alert repository does not give out the alerts it inserts")
+	}
+
 	services.FGA.SetDecisionObserver(func(d application.FGADecision) {
 		if d.Allowed {
 			return
