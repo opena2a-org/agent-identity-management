@@ -158,7 +158,9 @@ class AIMCallbackHandler(BaseCallbackHandler):
                 context={
                     "tool_output": output[:500] if self.log_outputs else "[hidden]",
                     "tags": tool_data.get("tags", []),
-                    "run_id": run_id,
+                    # LangChain passes run_id as a uuid.UUID, which the
+                    # request body cannot carry as JSON.
+                    "run_id": str(run_id),
                     "status": "success",
                     **tool_data.get("metadata", {})
                 },
@@ -204,7 +206,7 @@ class AIMCallbackHandler(BaseCallbackHandler):
                         "error": str(error)[:500],
                         "error_type": type(error).__name__,
                         "status": "failed",
-                        "run_id": run_id,
+                        "run_id": str(run_id),
                         **tool_data.get("metadata", {})
                     },
                     timeout_seconds=1  # Non-blocking

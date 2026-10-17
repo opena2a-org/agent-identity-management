@@ -124,7 +124,9 @@ class AIMCrewWrapper:
         try:
             verification_result = self.aim_agent.verify_action(
                 action_type="crewai_crew:kickoff",
-                resource=resource,
+                # None, never "": the backend signs an empty resource as
+                # null, so a signed "" never verifies.
+                resource=resource or None,
                 context={
                     "crew_agents": len(self.crew.agents) if hasattr(self.crew, 'agents') else 0,
                     "crew_tasks": len(self.crew.tasks) if hasattr(self.crew, 'tasks') else 0,
@@ -211,7 +213,9 @@ class AIMCrewWrapper:
         try:
             verification_result = self.aim_agent.verify_action(
                 action_type="crewai_crew:kickoff_async",
-                resource=resource,
+                # None, never "": the backend signs an empty resource as
+                # null, so a signed "" never verifies.
+                resource=resource or None,
                 context={
                     "crew_agents": len(self.crew.agents) if hasattr(self.crew, 'agents') else 0,
                     "crew_tasks": len(self.crew.tasks) if hasattr(self.crew, 'tasks') else 0,

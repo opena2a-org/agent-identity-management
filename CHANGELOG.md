@@ -180,6 +180,39 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   authorization decision for a resolved agent, for a missing agent row and for a nil row, and an SDK verification span
   for a verified agent and for none, with request agent IDs that differ from the expected identifier.
 
+### Fixed — the Python SDK's LangChain, CrewAI and MCP adapters run against a real backend, which records a verification for each framework call
+
+- `scripts/test-sdk-python-framework-integration.sh` builds the backend, runs its migrations on the database
+  `DATABASE_URL` names, seeds the admin with `aim-bootstrap --default`, starts the server on a free port with
+  `ENVIRONMENT=test`, as the CI end-to-end job does, and runs `tests/test_langchain_integration.py`, `tests/test_crewai_integration.py` and `tests/test_mcp_integration.py` in
+  `sdk/python` with `pytest -m integration`. Each test asserts, through
+  `GET /api/v1/verification-events/agent/{id}`, that the backend recorded one verification event, with the agent's id
+  and the verified action, for each framework call the test makes. The run fails on a failure, an error or a skip.
+  No test calls a model provider: tools and callbacks run through LangChain's tool runtime, and crews run on a CrewAI
+  LLM that returns a fixed answer. The script refuses to start when the SDK directory or a directory above it holds a
+  `.aim` entry, gives the tests a fresh `HOME` and no inherited environment, and prints none of the secrets it
+  generates.
+- `sdk/python/setup.py` has two new extras: `langchain` (`langchain-core==1.6.12`, `pydantic==2.12.5`) and `crewai`
+  (`crewai==1.15.28`).
+- Run against the backend with the previous adapter code, each of these calls left no verification event; each now
+  leaves one:
+  - `AIMCallbackHandler.on_tool_end`, for a tool LangChain ran with the handler in its callbacks. LangChain passes
+    `run_id` as a `uuid.UUID`, the request body could not be encoded (`Object of type UUID is not JSON serializable`),
+    and nothing was sent. The handler sends `run_id` as a string, in `on_tool_error` as well.
+  - A verification with an empty resource: `AIMCrewWrapper.kickoff` and `kickoff_async` with `inputs={}`,
+    `AIMTaskCallback.on_task_complete` and `on_task_error`, `@aim_verified_task` on a function called with no
+    argument, and `@aim_verify` on a tool LangChain called with keyword arguments. The backend answered `401`
+    (`Signature verification failed`): it signs an empty resource as `null`, and these adapters signed `""`. They now
+    send no resource in that case.
+  - `verify_mcp_action` and `MCPActionWrapper.execute_tool`. `POST /api/v1/mcp-servers/{id}/verify-capability`
+    answered `200`; the route reads a `capability` member the adapter did not send. `verify_mcp_action` now verifies
+    through the agent's verification route, `POST /api/v1/sdk-api/verifications`, with `mcp_server_id` and
+    `risk_level` in the context, and returns the dictionary `AIMClient.verify_capability` returns. It does not look the
+    server up.
+- `list_mcp_servers` reads the `mcpServers` member that `GET /api/v1/sdk-api/agents/{id}/mcp-servers` answers. Run
+  with the previous code, it read `servers` and returned an empty list for an agent with one registered MCP server.
+- Tests: the three test files above, run by the script.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
