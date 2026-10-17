@@ -232,6 +232,8 @@ def test_dead_url_exits_nonzero_fast_names_url_and_opens_no_browser(
     url = f"http://127.0.0.1:{closed_port}"
     opened = []
     monkeypatch.setattr(cli.webbrowser, "open", lambda *a, **k: opened.append(a) or True)
+    # As at a terminal, where the browser opens: capsys output is not one.
+    monkeypatch.setattr(cli, "_no_browser_reason", lambda args: None)
     monkeypatch.setattr("aim_sdk.credentials.load_sdk_credentials", lambda *a, **k: None)
 
     start = time.monotonic()
@@ -266,6 +268,8 @@ def test_device_login_wait_is_bounded_by_the_code_lifetime_and_times_out_nonzero
     server = server_factory(handler)
     opened = []
     monkeypatch.setattr(cli.webbrowser, "open", lambda *a, **k: opened.append(a) or True)
+    # As at a terminal, where the browser opens: capsys output is not one.
+    monkeypatch.setattr(cli, "_no_browser_reason", lambda args: None)
     monkeypatch.setattr("aim_sdk.credentials.load_sdk_credentials", lambda *a, **k: None)
     monkeypatch.setattr("aim_sdk.credentials.save_sdk_credentials", lambda c: (_ for _ in ()).throw(AssertionError("nothing may be stored")))
 

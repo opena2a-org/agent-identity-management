@@ -143,10 +143,19 @@ def aim(monkeypatch, tmp_path):
     a.stop()
 
 
+class _Terminal(io.StringIO):
+    """Captured output that reports a terminal: the CLI opens a browser only at
+    one, so `aim.opened == []` here means the outage stopped the login before
+    the browser, not that the output was not a terminal."""
+
+    def isatty(self):
+        return True
+
+
 def _login(aim, monkeypatch, *extra, url=None):
     """Run `aim-sdk login --url <stub> --force` through the entry point."""
     monkeypatch.setattr(sys, "argv", ["aim-sdk", "login", "--url", url or aim.url, "--force", *extra])
-    buf = io.StringIO()
+    buf = _Terminal()
     with redirect_stdout(buf):
         rc = cli.main()
     return rc, buf.getvalue()

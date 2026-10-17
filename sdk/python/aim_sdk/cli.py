@@ -193,6 +193,18 @@ def _init_url_refusal(aim_url):
 # comes from the local deadline: on any other answer these are just body text.
 _POLL_OUTCOMES = ('authorization_pending', 'slow_down', 'expired_token', 'access_denied', 'timeout')
 
+LOGIN_BROWSER_AND_WAIT_HELP = f"""\
+browser and wait:
+  A browser opens on the approval page only when standard output is a
+  terminal; when output goes to a pipe, a file or a CI log, the page and the
+  code are printed and no browser opens.
+  --no-browser prints the page and the code without opening a browser, at a
+  terminal too.
+  The command waits for the approval for up to the lesser of the code's
+  lifetime the server states and {LOGIN_MAX_WAIT_SECONDS} seconds, and exits 1
+  if the code is not approved in that time.
+"""
+
 LOGIN_EXIT_CODES_HELP = """\
 exit codes:
   0   signed in, or an existing sign-in was kept
@@ -202,6 +214,25 @@ exit codes:
   75  the AIM server was unavailable: it answered HTTP 502, 503 or 504, or
       gave no HTTP answer. Nothing was stored; run the same command again later
 """
+
+
+def _no_browser_reason(args):
+    """
+    Why `aim-sdk login` opens no browser, or None when it opens one.
+
+    The browser is for a person at a terminal: a standard output that is a
+    pipe, a file or a CI log has nobody in front of it, and --no-browser asks
+    for none. The page and the code are printed either way.
+    """
+    if getattr(args, 'no_browser', False):
+        return '--no-browser was passed'
+    try:
+        at_terminal = sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        at_terminal = False
+    if not at_terminal:
+        return 'standard output is not a terminal'
+    return None
 
 
 def _probe_failure(aim_url, timeout):
@@ -565,13 +596,22 @@ def login(args):
     print(f"  Code: {user_code}")
     print()
     print(f"Waiting for approval... (the code expires in {max_wait}s; Ctrl+C to cancel)")
+    no_browser_reason = _no_browser_reason(args)
+    if no_browser_reason:
+        print(f"No browser was opened ({no_browser_reason}): open the page above and approve the code. "
+              f"This command waits up to {max_wait} seconds for the approval and exits 1 if the code "
+              f"is not approved in that time.")
+    # A pipe or a log file is block-buffered: without this flush the page and
+    # the code would stay in the buffer for the whole wait.
+    sys.stdout.flush()
 
-    # Open the browser on the page with the code filled in; the page still
-    # requires a signed-in user and one explicit click.
-    try:
-        webbrowser.open(verification_uri_complete)
-    except Exception:
-        pass
+    if no_browser_reason is None:
+        # Open the browser on the page with the code filled in; the page still
+        # requires a signed-in user and one explicit click.
+        try:
+            webbrowser.open(verification_uri_complete)
+        except Exception:
+            pass
 
     deadline = time.monotonic() + max_wait
     try:
@@ -1083,7 +1123,7 @@ def main():
     login_parser = subparsers.add_parser(
         'login',
         help='Login to AIM server',
-        epilog=LOGIN_EXIT_CODES_HELP,
+        epilog=LOGIN_BROWSER_AND_WAIT_HELP + "\n" + LOGIN_EXIT_CODES_HELP,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     login_parser.add_argument(
@@ -1095,6 +1135,11 @@ def main():
         '--force', '-f',
         action='store_true',
         help='Force re-authentication even if already logged in',
+    )
+    login_parser.add_argument(
+        '--no-browser',
+        action='store_true',
+        help='Print the approval page and the code without opening a browser',
     )
     login_parser.set_defaults(func=login)
 
