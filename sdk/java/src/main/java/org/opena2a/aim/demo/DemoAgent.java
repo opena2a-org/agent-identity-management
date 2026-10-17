@@ -793,7 +793,9 @@ All security events are automatically logged with structured data for:
 - MCP events (server connections, attestations)
 
 This enables enterprise security teams to integrate AIM with their existing
-security infrastructure (Splunk, ELK, Datadog, etc.)
+security infrastructure: one JSON event per line, which a test of Splunk HEC's
+published format accepted as an event's "event" field. ELK and Datadog were not
+tested.
 """);
 
         try {
@@ -858,7 +860,7 @@ security infrastructure (Splunk, ELK, Datadog, etc.)
                     "Session ID", sessionId.substring(0, 8) + "...",
                     "Events Logged", 4,
                     "Output Format", "JSON (SOC/SIEM compatible)",
-                    "Integration", "Splunk, ELK, Datadog, etc."
+                    "Integration", "Splunk HEC event field (tested against its format); ELK, Datadog not tested"
             ), null);
 
         } catch (Exception e) {

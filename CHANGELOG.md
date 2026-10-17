@@ -180,6 +180,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   authorization decision for a resolved agent, for a missing agent row and for a nil row, and an SDK verification span
   for a verified agent and for none, with request agent IDs that differ from the expected identifier.
 
+### Fixed — the Java SDK's helper classes run against a real backend, and its SIEM claim says what a test against Splunk HEC's published format measured
+
+- `scripts/test-sdk-java-helpers-integration.sh` brings up the backend as the Python adapters' script does (both
+  source `scripts/lib/aim-backend.sh`, and both pass it `ENVIRONMENT=test`) and runs `mvn -B test -Dtest='org.opena2a.aim.integration.*IntegrationTest'` in
+  `sdk/java` with `AIM_URL` set. `HelpersAgainstBackendIntegrationTest` registers one agent per helper with
+  `AIMClient.secure`, using the credentials of `GET /api/v1/sdk/download?sdk=java`, and reads the agent's verification
+  events through `GET /api/v1/verification-events/agent/{id}`. The run fails on a failure, an error or a skip. Without
+  `AIM_URL` the class is skipped, so a plain `mvn test` runs as before. The script refuses to start when the SDK
+  directory or a directory above it holds a `.aim` entry, or the SDK directory holds `sdk_credentials.json` or
+  `credentials.json`, and the test JVM's `user.home` is a fresh directory.
+- Measured against the backend: `AIMToolExecutor.execute`, `AIMFunctionCallingAdvisor.execute` (a function that ran
+  and one refused for want of an approval) and `AIMChatModelListener`'s `onRequest`, `onResponse` and `wrap` record no
+  verification. The `AIMClient` each helper holds records one when the test calls its `verifyCapability`. The helpers
+  are not changed.
+- `SecurityLoggerHecFormatTest` logs one event through each of SecurityLogger's 15 public `log*` overloads to a file.
+  Each call adds one line, each line is one JSON object, and a receiver written from Splunk's pages "Format events for
+  HTTP Event Collector" and "Troubleshoot HTTP Event Collector" accepted each line, sent unchanged, as an event's
+  `event` field. A line names its time in `timestamp`, an ISO-8601 UTC string; HEC's `time` takes epoch seconds.
+- `docs/sdk/java.md`, the `SecurityEvent` javadoc and the demo agent's SecurityLogger text said the output is
+  compatible with Splunk, ELK, Datadog and other platforms. They now say what the test measured, and that ELK and
+  Datadog were not tested.
+- Tests: `HelpersAgainstBackendIntegrationTest`, run by the script, and `SecurityLoggerHecFormatTest`.
+
 ### Fixed — the Python SDK's LangChain, CrewAI and MCP adapters run against a real backend, which records a verification for each framework call
 
 - `scripts/test-sdk-python-framework-integration.sh` builds the backend, runs its migrations on the database
