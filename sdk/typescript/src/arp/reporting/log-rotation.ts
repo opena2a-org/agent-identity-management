@@ -25,7 +25,12 @@ export const LOG_ROTATED_COPIES_KEPT = 5;
  * in the same millisecond from renaming to the same name, which matters for a
  * log every agent on the machine shares. After the rename, the rotated copies
  * beyond the newest `keep` are deleted; their names sort by timestamp, so
- * lexical order is age order.
+ * lexical order is age order. Only names of that form count as rotated copies:
+ * another file whose name starts with `<name>.` is neither counted nor deleted.
+ *
+ * When `filePath` is a symbolic link, the file it points to is rotated, beside
+ * that file, and the link is left in place, so the next append through the
+ * link starts the new file where the link points.
  *
  * Returns true when the file was renamed. Never throws: a missing file, a
  * rename lost to another process or a failed delete leaves the caller free to
@@ -38,6 +43,9 @@ export function rotateLogIfNeeded(
 ): boolean {
   let size: number;
   try {
+    // Renaming the link itself would leave its target growing and put a
+    // regular file at the link's path, so later appends miss the target.
+    filePath = fs.realpathSync(filePath);
     size = fs.statSync(filePath).size;
   } catch {
     return false; // Nothing to rotate yet.
@@ -54,14 +62,19 @@ export function rotateLogIfNeeded(
   return true;
 }
 
-/** Delete the rotated copies of `filePath` beyond the newest `keep`. Best effort. */
+/**
+ * Delete the rotated copies of `filePath` beyond the newest `keep`: the names
+ * `<name>.<13 digits>.<digits>.<8 hex digits>`, as `rotateLogIfNeeded` writes
+ * them. Best effort.
+ */
 function deleteRotatedCopiesBeyond(filePath: string, keep: number): void {
   try {
     const dir = path.dirname(filePath);
-    const prefix = path.basename(filePath) + '.';
+    const base = path.basename(filePath).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rotatedCopy = new RegExp(`^${base}\\.\\d{13}\\.\\d+\\.[0-9a-f]{8}$`);
     const copies = fs
       .readdirSync(dir)
-      .filter((name) => name.startsWith(prefix))
+      .filter((name) => rotatedCopy.test(name))
       .sort();
     for (const name of copies.slice(0, Math.max(copies.length - keep, 0))) {
       try {

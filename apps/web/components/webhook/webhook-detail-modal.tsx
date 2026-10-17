@@ -170,7 +170,8 @@ export function WebhookDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      {/* minmax(0,1fr): the column stays the dialog's width instead of growing to its widest descendant. */}
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto grid-cols-[minmax(0,1fr)]">
         <DialogHeader>
           <DialogTitle>{webhook.name}</DialogTitle>
           <DialogDescription>
@@ -237,7 +238,7 @@ export function WebhookDetailModal({
                 <div className="space-y-2">
                   <Label>Webhook URL</Label>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 bg-muted px-3 py-2 rounded text-sm">
+                    <code className="flex-1 min-w-0 break-all bg-muted px-3 py-2 rounded text-sm">
                       {webhook.url}
                     </code>
                     <Button variant="outline" size="sm" onClick={handleCopyUrl}>

@@ -232,7 +232,8 @@ export function WebhookCreateModal({ isOpen, onClose, onSuccess }: WebhookCreate
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      {/* minmax(0,1fr): the column stays the dialog's width instead of growing to the payload example's longest line. */}
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto grid-cols-[minmax(0,1fr)]">
         <DialogHeader>
           <DialogTitle>Create Webhook</DialogTitle>
           <DialogDescription>
