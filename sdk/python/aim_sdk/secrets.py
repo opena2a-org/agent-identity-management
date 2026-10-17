@@ -24,6 +24,7 @@ import base64
 import hashlib
 import os
 import time
+import warnings
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -252,13 +253,22 @@ class SecretsClient:
         encryption_alg: str = "X25519-ChaCha20-Poly1305",
         ephemeral_public_key: Optional[bytes] = None,
     ) -> Dict[str, Any]:
-        """Store an encrypted credential blob in a namespace."""
+        """Store an encrypted credential blob in a namespace.
+
+        ephemeral_public_key is deprecated and is not sent: the store route reads
+        encryptedBlob and encryptionAlg only.
+        """
+        if ephemeral_public_key is not None:
+            warnings.warn(
+                "The 'ephemeral_public_key' parameter of store_credential() is deprecated "
+                "and is not sent: the store route reads encryptedBlob and encryptionAlg only.",
+                DeprecationWarning,
+                stacklevel=2
+            )
         payload = {
             "encryptedBlob": base64.b64encode(encrypted_blob).decode("utf-8"),
-            "encryptionAlgorithm": encryption_alg,
+            "encryptionAlg": encryption_alg,
         }
-        if ephemeral_public_key:
-            payload["ephemeralPublicKey"] = base64.b64encode(ephemeral_public_key).decode("utf-8")
         return self._client._make_request(
             "POST", f"/api/v1/secrets/namespaces/{namespace_id}/credentials", data=payload
         )
@@ -270,13 +280,22 @@ class SecretsClient:
         encryption_alg: str = "X25519-ChaCha20-Poly1305",
         ephemeral_public_key: Optional[bytes] = None,
     ) -> Dict[str, Any]:
-        """Rotate (replace) the credential in a namespace."""
+        """Rotate (replace) the credential in a namespace.
+
+        ephemeral_public_key is deprecated and is not sent: the rotate route reads
+        encryptedBlob and encryptionAlg only.
+        """
+        if ephemeral_public_key is not None:
+            warnings.warn(
+                "The 'ephemeral_public_key' parameter of rotate_credential() is deprecated "
+                "and is not sent: the rotate route reads encryptedBlob and encryptionAlg only.",
+                DeprecationWarning,
+                stacklevel=2
+            )
         payload = {
             "encryptedBlob": base64.b64encode(encrypted_blob).decode("utf-8"),
-            "encryptionAlgorithm": encryption_alg,
+            "encryptionAlg": encryption_alg,
         }
-        if ephemeral_public_key:
-            payload["ephemeralPublicKey"] = base64.b64encode(ephemeral_public_key).decode("utf-8")
         return self._client._make_request(
             "POST", f"/api/v1/secrets/namespaces/{namespace_id}/rotate", data=payload
         )

@@ -283,6 +283,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `http://aim.example.test\@127.0.0.1`, `urlsplit` reads the host `127.0.0.1` and urllib3 `aim.example.test`.
 - Test: `tests/test_cli_init_cleartext_url.py`.
 
+### Fixed — request bodies carry the members the server reads, under the server's names
+
+- `AIMClient.report_execution_status` sends `executed`, `executedAt` and, when there is one, `executionError`. The
+  `strict_mode` parameter stays, for the decorators that pass it, and is not sent: the server takes the enforcement
+  mode from the agent's organization, and `POST /api/v1/sdk-api/verifications/:id/execution-status` binds no member
+  for it.
+- `register_agent` (and `secure`) post no `organizationDomain` to `POST /api/v1/agents`, with SDK credentials or
+  with an API key. The route registers the agent in the organization of the credential the request authenticates
+  with and binds no domain.
+- `SecretsClient.store_credential` and `rotate_credential` send the algorithm as `encryptionAlg`, the member
+  `POST /api/v1/secrets/namespaces/:id/credentials` and `/rotate` read, and send no `ephemeralPublicKey`, which
+  neither route reads. The `encryption_alg` parameter keeps its name.
+- `A2AClient.register_skill` takes `input_modes`, `output_modes` and `examples` (keyword-only) and sends them as
+  `inputModes`, `outputModes` and `examples`, members `POST /api/v1/a2a/skills` binds.
+- Tests: `tests/test_client_request_bodies.py` and `tests/test_a2a_request_bodies.py` send each call through the HTTP
+  layer and assert the body; the A2A tests read the members each handler binds and the server's messages from the
+  backend source. `test_store_credential`, `test_store_credential_with_an_ephemeral_key` and
+  `test_rotate_credential` in `tests/test_secrets.py` assert the store and rotate bodies.
+
+### Deprecated — arguments the server does not read
+
+- `register_agent(organization_domain=...)` is accepted for one more minor version, emits a `DeprecationWarning` and
+  is not sent. Its docstring no longer describes it as a domain for auto-approval: no server route reads it.
+- `register_skill(input_schema=..., output_schema=...)` emit a `DeprecationWarning` and are not sent; the skill
+  route binds no schema.
+- `store_credential(ephemeral_public_key=...)` and `rotate_credential(ephemeral_public_key=...)` emit a
+  `DeprecationWarning` and are not sent; the store and rotate routes read `encryptedBlob` and `encryptionAlg` only.
+- `A2AClient.update_trust_score` sends no request and raises `A2ATrustScoreWriteRefused`, a subclass of `A2AError`
+  with `status_code` 405, the status the server answers `PUT /api/v1/a2a/trust/:id` with. The error carries the
+  server's reason and names `GET /api/v1/a2a/trust/:id` and `POST /api/v1/a2a/trust/:id/interaction`
+  (`record_successful_interaction`, `record_failed_interaction`). The method is removed at the next major version.
+
 ### Fixed — the docs in the SDK download point at the test suite in the repository (#735)
 
 - The SDK download (`GET /api/v1/sdk/download?sdk=python`) carries `docs/` and leaves out `tests/`. `docs/README.md`

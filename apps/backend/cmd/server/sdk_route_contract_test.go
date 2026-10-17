@@ -39,10 +39,6 @@ import (
 // call is fixed and lower the ceiling with it; never add an entry or raise the
 // ceiling.
 var sdkRouteContractAllowList = map[string]string{
-	pyClient + " report_execution_status POST /api/v1/sdk-api/verifications/{verification_id}/execution-status member strictMode": "the server takes strict mode from the agent's organization on purpose and never from the request",
-	pyClient + " _register_via_oauth POST /api/v1/agents member organizationDomain":                                               allowOrganizationDomain,
-	pyClient + " _register_via_api_key POST /api/v1/agents member organizationDomain":                                             allowOrganizationDomain,
-
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member agentId":        allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member aimAttestation": allowWholeAgentCard,
 	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member capabilities":   allowWholeAgentCard,
@@ -72,13 +68,11 @@ var sdkRouteContractAllowList = map[string]string{
 	a2aClient + " registerSkill POST /api/v1/a2a/skills member verifiedAt":       allowWholeSkill,
 }
 
-const sdkRouteContractAllowListCeiling = 26
+const sdkRouteContractAllowListCeiling = 23
 
 const (
-	pyClient  = "sdk/python/aim_sdk/client.py"
 	a2aClient = "sdk/typescript/src/a2a/A2AClient.ts"
 
-	allowOrganizationDomain = "the agent create struct has no organizationDomain; only the public registration handler reads one, so the intended route is unclear"
 	allowWholeAgentCard     = "the client sends whatever card fields its caller passes; the update struct reads name, description, version, endpoint and skills, and url is not plainly endpoint"
 	allowVerifyRequestShape = "the server verifies an agentId and requestHash, while the client sends the method, path, body and public key; matching them changes the protocol, not a name"
 	allowPolicyShape        = "the server evaluates a different request (event, clientAgentId, remoteAgentId, skillId); no member maps one to one"
