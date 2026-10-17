@@ -293,7 +293,7 @@ Each stored agent private key carries in its header the storage key id of the ma
 | `KEYVAULT_MASTER_KEY_ID` | The storage key id of `KEYVAULT_MASTER_KEY`, a number from 1 to 255. Unset, it is 1, the id of every key a release without the ring stored in format v2. |
 | `KEYVAULT_MASTER_KEY_<id>` | Another master key in the ring under that id, for example `KEYVAULT_MASTER_KEY_1`. The server decrypts under it and never encrypts under it. |
 
-The server refuses to start when `KEYVAULT_MASTER_KEY_ID` is not a number from 1 to 255, when a `KEYVAULT_MASTER_KEY_<id>` names the current id, when a `KEYVAULT_MASTER_KEY_<id>` is set without `KEYVAULT_MASTER_KEY`, when a key in the ring is malformed (the error names the variable), and when two ids hold the same key.
+The server refuses to start when `KEYVAULT_MASTER_KEY_ID` is not a number from 1 to 255, when a `KEYVAULT_MASTER_KEY_<id>` names the current id, when a `KEYVAULT_MASTER_KEY_<id>` is set without `KEYVAULT_MASTER_KEY`, when a key in the ring is malformed (for a `KEYVAULT_MASTER_KEY_<id>`, the error names that variable), and when two ids hold the same key.
 
 To rotate from id 1 to id 2:
 
