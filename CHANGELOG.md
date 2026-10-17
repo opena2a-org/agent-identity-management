@@ -37,6 +37,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `apps/web/lib/api.alert-channels.test.ts`, `apps/web/components/webhook/webhook-dialog-width.test.tsx`
   (runs where a Chromium build for the installed Playwright is present).
 
+### Fixed — the tests in `apps/backend/tests/integration` that need a running backend are skipped unless `BACKEND_URL` names one (#764)
+
+- `WaitForBackend` and `ensureAIMBackendRunning`, the probes those tests call before their first request, skip the
+  test before sending a request when neither `BACKEND_URL` nor the deprecated `TEST_BASE_URL` is set, and the skip
+  message names `BACKEND_URL`. Before this change they sent `GET /health` to the address the suite falls back to,
+  `http://localhost:8080`, and let the test go on when the answer named the AIM service. Against a local server that
+  answered that way and refused the admin password, a test then failed at the admin sign-in with
+  `admin login failed: request failed with status 401`.
+- With `BACKEND_URL` set, the probes send `GET /health` to that address, let the test go on when the answer names the
+  AIM service, and skip it when nothing listens there, when another service answers or when the answer is not JSON.
+  With `BACKEND_URL` unset and `TEST_BASE_URL` set, they let the test go on against the `TEST_BASE_URL` address when
+  the answer names the AIM service. Both probes call one function, `skipUnlessAIMBackend` in `test_helper.go`.
+- `tests/README.md` gives `BACKEND_URL` no default and says when the tests are skipped, and
+  `docs/guides/QUICK_START.md` sets `BACKEND_URL=http://localhost:8080` in the command that runs the suite.
+- Tests: `apps/backend/tests/integration/backend_probe_test.go` runs each probe against a local server that answers
+  `GET /health` with the AIM service name and refuses the admin sign-in with 401. With neither variable set and that
+  server on the address the suite falls back to, the test is skipped and the server receives no request; with either
+  variable naming the server, the test goes on after one `GET /health`; with `BACKEND_URL` naming a closed address, a
+  server for another service or a server whose answer is not JSON, the test is skipped. With neither variable set,
+  `go test -race ./tests/integration/` from `apps/backend` passed 19 top-level tests, skipped 266 and failed none, and
+  each of the 266 skips gives `BACKEND_URL is unset` as its reason.
+
 ### Fixed — audit rows keep the user agent and client address of the request that wrote them (#751)
 
 - `AuditService.LogAction` and `AuditService.LogAgentAction` copy the client address and user agent into the row.

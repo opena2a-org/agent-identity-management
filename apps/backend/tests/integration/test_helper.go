@@ -24,21 +24,66 @@ type TestConfig struct {
 
 var testBaseURLDeprecationOnce sync.Once
 
-// getBaseURL returns the address of the backend under test: BACKEND_URL, or
-// http://localhost:8080 when it is unset. TEST_BASE_URL is deprecated and is
-// read only when BACKEND_URL is unset. Every helper in this package takes its
-// address from here.
-func getBaseURL() string {
+// defaultBaseURL is the address getBaseURL returns when neither BACKEND_URL nor
+// TEST_BASE_URL is set. In that case skipUnlessAIMBackend skips a live test
+// before it sends a request, to this address or any other.
+var defaultBaseURL = "http://localhost:8080"
+
+// backendURLFromEnv returns the address the environment names for the backend
+// under test, BACKEND_URL or, when it is unset, the deprecated TEST_BASE_URL,
+// and whether either variable is set.
+func backendURLFromEnv() (string, bool) {
 	if url := os.Getenv("BACKEND_URL"); url != "" {
-		return url
+		return url, true
 	}
 	if url := os.Getenv("TEST_BASE_URL"); url != "" {
 		testBaseURLDeprecationOnce.Do(func() {
 			fmt.Fprintln(os.Stderr, "integration tests: TEST_BASE_URL is deprecated; set BACKEND_URL instead")
 		})
+		return url, true
+	}
+	return "", false
+}
+
+// getBaseURL returns the address of the backend under test: BACKEND_URL, or
+// http://localhost:8080 when it is unset. TEST_BASE_URL is deprecated and is
+// read only when BACKEND_URL is unset. Every helper in this package takes its
+// address from here.
+func getBaseURL() string {
+	if url, ok := backendURLFromEnv(); ok {
 		return url
 	}
-	return "http://localhost:8080"
+	return defaultBaseURL
+}
+
+// skipUnlessAIMBackend skips t unless BACKEND_URL or TEST_BASE_URL is set and
+// GET /health at baseURL answers with the AIM backend's service name. With
+// neither variable set it skips before sending a request, whatever listens on
+// the default address: a development instance there can have an admin
+// password and data of its own, and is not the backend under test until a
+// variable names it.
+func skipUnlessAIMBackend(t *testing.T, client *http.Client, baseURL string) {
+	t.Helper()
+	if _, ok := backendURLFromEnv(); !ok {
+		t.Skip("BACKEND_URL is unset: the tests that need a running AIM backend run only against the address it names, for example BACKEND_URL=http://localhost:8080 (tests/README.md)")
+	}
+
+	resp, err := client.Get(baseURL + "/health")
+	if err != nil {
+		t.Skipf("AIM backend not reachable at %s: %v (is the backend running?)", baseURL, err)
+	}
+	defer resp.Body.Close()
+
+	// Check if it's actually the AIM backend by verifying the response
+	var healthResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
+		t.Skipf("AIM backend not responding correctly at %s: response is not valid JSON (another service may be running on this port)", baseURL)
+	}
+
+	// AIM health endpoint returns {"status": "healthy", "service": "agent-identity-management"}
+	if healthResp["service"] != "agent-identity-management" {
+		t.Skipf("AIM backend not running at %s: got service=%v (expected 'agent-identity-management'). Another service may be running on this port.", baseURL, healthResp["service"])
+	}
 }
 
 // GetTestConfig returns test configuration from environment or defaults
@@ -95,30 +140,12 @@ var (
 	adminTokens   = map[string]string{}
 )
 
-// WaitForBackend waits for backend to be ready
-// This validates that the AIM backend is actually running (not some other service)
+// WaitForBackend skips the test unless BACKEND_URL or TEST_BASE_URL names an
+// AIM backend that answers (skipUnlessAIMBackend). It returns nil when the
+// test goes on; a skip ends the test before it returns.
 func (tc *TestContext) WaitForBackend() error {
-	// First, check if any server is listening
-	resp, err := tc.Client.Get(tc.Config.BaseURL + "/health")
-	if err != nil {
-		tc.T.Skipf("AIM backend not reachable at %s: %v (is the backend running?)", tc.Config.BaseURL, err)
-		return nil // Skip will exit the test
-	}
-	defer resp.Body.Close()
-
-	// Check if it's actually the AIM backend by verifying the response
-	var healthResp map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&healthResp); err != nil {
-		tc.T.Skipf("AIM backend not responding correctly at %s: response is not valid JSON (another service may be running on this port)", tc.Config.BaseURL)
-		return nil
-	}
-
-	// AIM health endpoint returns {"status": "healthy", "service": "agent-identity-management"}
-	if healthResp["service"] != "agent-identity-management" {
-		tc.T.Skipf("AIM backend not running at %s: got service=%v (expected 'agent-identity-management'). Another service may be running on this port.", tc.Config.BaseURL, healthResp["service"])
-		return nil
-	}
-
+	tc.T.Helper()
+	skipUnlessAIMBackend(tc.T, tc.Client, tc.Config.BaseURL)
 	return nil
 }
 

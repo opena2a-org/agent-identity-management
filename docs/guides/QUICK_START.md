@@ -158,10 +158,14 @@ ENVIRONMENT=test ./aim-server
 # Or, for the backend in docker-compose.yml
 ENVIRONMENT=test docker compose up -d backend
 
-# Then, in another terminal, run the suite
+# Then, in another terminal, run the suite against that backend
 cd apps/backend
-go test ./tests/integration/... -v
+BACKEND_URL=http://localhost:8080 go test ./tests/integration/... -v
 ```
+
+The tests that need a running backend send their requests to the address in `BACKEND_URL`, and are skipped when
+neither it nor the deprecated `TEST_BASE_URL` is set. `tests/README.md` lists the suite's other variables, among them
+`TEST_ADMIN_PASSWORD`, the admin password the suite signs in with.
 
 Under `ENVIRONMENT=test` the backend starts without `KEYVAULT_MASTER_KEY`, on a key it generates at every start, so
 the agent private keys one run stores cannot be decrypted by the next. Set `KEYVAULT_MASTER_KEY` (generate one with
