@@ -1176,6 +1176,221 @@ def verify_delivery(secret, timestamp, signature, body, now):
     return abs(now - int(timestamp)) <= TOLERANCE_SECONDS
 ```
 
+## Alert channels
+
+An alert channel sends an organization's alerts to Slack or PagerDuty, each in that service's published
+format. Every alert the server stores is sent, whichever part of the server raised it, to each active
+channel of its organization whose severity floor admits the alert's severity. A repeat that is counted
+on an open alert is not sent again.
+
+| Route | Who |
+|-------|-----|
+| `POST /api/v1/alert-channels` | Admin, manager or member |
+| `GET /api/v1/alert-channels` | Any user of the organization |
+| `GET /api/v1/alert-channels/:id` | Any user of the organization |
+| `PUT /api/v1/alert-channels/:id` | Admin, manager or member |
+| `DELETE /api/v1/alert-channels/:id` | Admin, manager or member |
+| `POST /api/v1/alert-channels/:id/test` | Admin, manager or member |
+
+A viewer is answered `403` on the routes that change a channel or send a message. Every route that
+names a channel looks it up in the caller's organization: a channel of another organization is answered
+`404 {"error":"not found"}`, the same as one that does not exist.
+
+### POST /api/v1/alert-channels
+
+Create a channel.
+
+**Request (Slack):**
+```json
+{
+  "name": "Security on-call",
+  "kind": "slack",
+  "config": {"webhookUrl": "https://hooks.slack.com/services/<the path Slack gives the webhook>"},
+  "minSeverity": "warning"
+}
+```
+
+**Request (PagerDuty):**
+```json
+{
+  "name": "PagerDuty security service",
+  "kind": "pagerduty",
+  "config": {"routingKey": "<the 32-character integration key>"},
+  "minSeverity": "high"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | 1 to 100 characters. A name another channel of the organization has is answered `409`. |
+| `kind` | Yes | `slack` or `pagerduty`. |
+| `config` | Yes | For `slack`, `{"webhookUrl": ...}`: a Slack incoming webhook URL, `https://hooks.slack.com/services/` followed by the webhook's path. For `pagerduty`, `{"routingKey": ...}`: the 32-character integration key of a PagerDuty Events API v2 integration. |
+| `minSeverity` | Yes | The severity floor: `info`, `warning`, `high` or `critical`. |
+| `isActive` | No | `false` creates the channel inactive. Defaults to `true`. |
+
+**Response (201 Created):** the channel.
+```json
+{
+  "id": "3f1c2b7a-5d4e-4c3b-9a8f-1e2d3c4b5a69",
+  "name": "Security on-call",
+  "kind": "slack",
+  "minSeverity": "warning",
+  "isActive": true,
+  "config": {"webhookUrl": "****Q7fz"},
+  "lastDeliveryStatus": null,
+  "lastDeliveryCode": null,
+  "lastDeliveryAt": null,
+  "createdAt": "2026-10-16T00:00:00Z",
+  "updatedAt": "2026-10-16T00:00:00Z"
+}
+```
+
+Each `config` value is answered as `****` followed by its last 4 characters, on every route. The webhook
+URL or routing key is the credential that posts to the destination: the server stores it as given in its
+database and sends it only to that destination; no answer, log line or audit log entry carries it.
+
+A create or update the server refuses is answered `400`:
+
+| Answer | When |
+|--------|------|
+| `{"error":"unknown field: color"}` | The body has a key the route does not take. A `config` key the kind does not take is named `config.<key>`, for example `unknown field: config.channel`. |
+| `{"error":"unsupported kind: sms"}` | `kind` is not `slack` or `pagerduty`. |
+| `{"error":"minSeverity must be one of info, warning, high, critical"}` | `minSeverity` is missing or is another value. |
+| `{"error":"config.webhookUrl must be a Slack incoming webhook URL: https://hooks.slack.com/services/ followed by the webhook's path"}` | The URL has another form, or the check a webhook URL goes through refuses it. The answer never repeats the URL. |
+| `{"error":"config.routingKey must be the 32-character integration key"}` | The routing key is not 32 characters. |
+| `{"error":"name must be at most 100 characters"}` | `name` is longer than 100 characters; an empty one is answered `name is required`. |
+
+### GET /api/v1/alert-channels
+
+The organization's channels: `{"alertChannels": [<channel>, ...], "total": <count>}`. In each channel,
+`lastDeliveryStatus` is `delivered` or `failed` after its latest delivery, `lastDeliveryCode` is the HTTP
+status of that delivery's final attempt (`null` when no answer came), and `lastDeliveryAt` is when it
+ended. All three are `null` until the first delivery.
+
+### GET /api/v1/alert-channels/:id
+
+One channel.
+
+### PUT /api/v1/alert-channels/:id
+
+Update a channel. The body takes the create fields, all optional, refused as on create. When `config`
+is left out, the stored destination stays. A `config` replaces the stored one whole and is checked as on
+create; changing `kind` needs one. The answer is the channel.
+
+### DELETE /api/v1/alert-channels/:id
+
+Delete a channel. The answer is `204 No Content`.
+
+A create, update and delete each write one audit log entry: action `create`, `update` or `delete`,
+resource type `alert_channel`, and metadata `kind` and `minSeverity` only.
+
+### POST /api/v1/alert-channels/:id/test
+
+Send one test message through the channel at once, with no retry, and record it as the channel's last
+delivery. The request has no body.
+
+- Slack is sent `{"text": "AIM test message for alert channel <name>"}`, the name escaped as in
+  [Slack message](#slack-message).
+- PagerDuty is sent a `trigger` event with `payload.severity` `info`, `payload.summary`
+  `AIM test event for alert channel <name>` and `dedup_key` `aim-channel-test-<channel id>`. **A test
+  message to PagerDuty opens an alert on the PagerDuty service** the routing key belongs to, which
+  notifies as that service is set up to; resolve it in PagerDuty.
+
+When the destination accepts the message, the answer is `200`:
+```json
+{"delivered": true, "statusCode": 200}
+```
+
+Otherwise it is `502`, with the status the destination answered (`null` when no answer came) and the
+class of the failure, never the destination: `status <code>`, `timeout`, `refused address` (an address
+the server does not send to) or `unreachable`.
+```json
+{"delivered": false, "statusCode": 404, "error": "status 404"}
+```
+
+### Severity floor
+
+The severities rank `info` < `warning` < `high` < `critical`. A channel is sent each alert whose severity
+ranks at or above its `minSeverity`: a `warning` channel is sent `warning`, `high` and `critical` alerts;
+a `critical` channel only `critical` ones. An alert stored with any other severity is sent to no channel.
+
+### Slack message
+
+A `POST` to the channel's webhook URL with `Content-Type: application/json` and a body that carries
+`text` and nothing else (no `blocks`). The text has these lines:
+
+1. `AIM alert, severity <severity>: <title>`
+2. the alert's description
+3. `Agent: <agent name>`, only when the alert names an agent
+4. `<FRONTEND_URL>/dashboard/admin/alerts`, the dashboard's alerts page
+
+Slack reads `&`, `<` and `>` as control characters, so every string taken from the alert is sent with
+them written as `&amp;`, `&lt;` and `&gt;`: an alert titled `<!here> & co` is shown as that text and does
+not notify the channel.
+
+```json
+{"text": "AIM alert, severity high: Capability Violation Detected: billing-agent\nAgent 'billing-agent' attempted unauthorized capability 'db:write' ...\nAgent: billing-agent\nhttps://aim.example.com/dashboard/admin/alerts"}
+```
+
+### PagerDuty event
+
+A `POST` to `https://events.pagerduty.com/v2/enqueue`, the PagerDuty Events API v2, with
+`Content-Type: application/json`. The address is fixed; a channel names only its routing key.
+
+```json
+{
+  "routing_key": "<the channel's routing key>",
+  "event_action": "trigger",
+  "dedup_key": "9b2e4c1a-7f3d-4e6b-8a5c-2d1f0e9b8a7c",
+  "payload": {
+    "summary": "Capability Violation Detected: billing-agent",
+    "source": "billing-agent",
+    "severity": "error",
+    "timestamp": "2026-10-16T22:40:00Z",
+    "class": "security_breach",
+    "custom_details": {
+      "alertId": "9b2e4c1a-7f3d-4e6b-8a5c-2d1f0e9b8a7c",
+      "organizationId": "7d9f2b4a-1c3e-4f5a-8b6c-9d0e1f2a3b4c",
+      "alertType": "security_breach",
+      "severity": "high",
+      "description": "Agent 'billing-agent' attempted unauthorized capability 'db:write' ...",
+      "resourceType": "agent",
+      "resourceId": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  }
+}
+```
+
+| Field | Value |
+|-------|-------|
+| `dedup_key` | The alert's id. |
+| `payload.summary` | The alert's title, cut to 1,024 characters. |
+| `payload.source` | The alert's agent name; for an alert that names no agent, the host of `FRONTEND_URL`. |
+| `payload.severity` | AIM `critical` is `critical`, `high` is `error`, `warning` is `warning`, `info` is `info`. |
+| `payload.timestamp` | When the alert was raised, RFC 3339. |
+| `payload.class` | The alert type. |
+| `payload.custom_details` | The alert's id, organization, type, AIM severity, description, resource type and resource id. |
+
+Neither body carries an AIM credential, the channel's config beyond its own destination, or another
+channel's data.
+
+### Delivery, retries and the queue bound
+
+Each stored alert is put on a queue that holds 1,024 alerts; storing the alert never waits for it. Four
+workers take alerts off the queue. A worker sends an alert to all of its channels at the same time and
+takes the next alert when each of those deliveries has ended.
+
+An attempt waits up to 10 seconds for the destination. A `2xx` answer is delivered. A `429`, a `5xx` or
+an attempt that got no answer is retried up to 3 times, after waits of 1, 4 and 16 seconds, so a
+delivery makes at most 4 attempts. Any other answer, and an address the server does not send to, is
+not retried. The final outcome is recorded as the channel's last delivery. Requests follow no redirect
+and go to the destination directly, whatever `HTTP_PROXY` or `HTTPS_PROXY` say; the address of every
+connection is checked when it is opened, as for webhooks.
+
+When 1,024 alerts are already waiting, a new alert is sent to no channel: the server logs
+`alert <alert id>: alert channel queue full`, and the alert itself is stored and shown as usual. Alerts
+still in the queue when the server stops are not sent.
+
 ---
 
 **📖 For more examples, see [Postman Collection](../postman/AIM.postman_collection.json)**
