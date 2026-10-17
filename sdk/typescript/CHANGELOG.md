@@ -159,6 +159,23 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   fails it names the directory and the error code (`ENOTDIR`, `EACCES`), says the token has not been used, and sends
   nothing. The README describes the command under Quick Start.
 
+### Fixed — `SecretsClient` encodes its query values, and sends the store and rotate members the server reads (#751)
+
+- `getAuditLog` and `listNamespaces` encode each query value. `getAuditLog` put `since` in the path as passed, so
+  `since: '2026-10-16T10:00:00+02:00'` was sent as `since=2026-10-16T10:00:00+02:00`. Run against the backend's
+  `GET /api/v1/secrets/audit` handler on the previous code, that query read `since` as
+  `2026-10-16T10:00:00 02:00`, which its RFC 3339 parse refuses, and the route answered `200` and listed the agent's
+  entries with no time filter. The request now carries `since=2026-10-16T10%3A00%3A00%2B02%3A00`, which the handler
+  reads as the timestamp passed and filters by. A `since` in UTC (`Z`) or with a negative offset has no `+` and was
+  read as passed before this change too.
+- `storeCredential` and `rotateCredential` send `encryptedBlob` and `encryptionAlg`, the members the server's store
+  and rotate routes read. The `ephemeralPublicKey` option, which neither route reads, is deprecated and no longer
+  sent.
+- Tests: `src/secrets/SecretsClient.test.ts` decodes the request path as a form is decoded and gets back each value
+  passed, and holds the store and rotate bodies to the members the backend's `storeCredentialRequest` and
+  `rotateCredentialRequest` declare. The backend's `TestSDKCallsMatchTheRoutesTheyCall` no longer allow-lists the
+  `ephemeralPublicKey` member of either call, and its allow-list ceiling drops from 30 to 28.
+
 ### Fixed — `init` checks the agent ID, organization ID and status the server answers with, and prints server text as one line
 
 - `init` saves and prints the agent ID from the exchange answer only when it is a string of 1 to 128 letters, digits,

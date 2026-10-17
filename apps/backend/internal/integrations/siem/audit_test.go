@@ -5,9 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -77,6 +79,38 @@ func TestEventFromAuditLog_SystemEntryOmitsAbsentFields(t *testing.T) {
 		_, ok := event.Details[key]
 		assert.False(t, ok, "%s is absent", key)
 	}
+}
+
+// A route that builds an entry's action or resource type from the request
+// hands the entry views of the request buffer, as it does the address and
+// user agent (see requestView). The event copies both out of the entry when
+// it is built, so the next request's parse does not change them.
+func TestEventFromAuditLog_CopiesTheActionAndResourceTypeOutOfTheRequestBuffer(t *testing.T) {
+	app := fiber.New()
+	fctx := &fasthttp.RequestCtx{}
+	fctx.Request.Header.Set("X-Action", "login")
+	fctx.Request.Header.Set("X-Resource-Type", "user")
+	c := app.AcquireCtx(fctx)
+	t.Cleanup(func() { app.ReleaseCtx(c) })
+	action, resourceType := c.Get("X-Action"), c.Get("X-Resource-Type")
+
+	event := EventFromAuditLog(&domain.AuditLog{
+		ID:             uuid.New(),
+		OrganizationID: uuid.New(),
+		Action:         domain.AuditAction(action),
+		ResourceType:   resourceType,
+		ResourceID:     uuid.New(),
+		Timestamp:      time.Now(),
+	})
+
+	// The next request's parse writes over both values in place.
+	fctx.Request.Header.Set("X-Action", "QQQQQ")
+	fctx.Request.Header.Set("X-Resource-Type", "QQQQ")
+	require.Equal(t, "QQQQQ", action, "c.Get no longer hands out a view of the request buffer; this test no longer models the hazard")
+	require.Equal(t, "QQQQ", resourceType, "c.Get no longer hands out a view of the request buffer; this test no longer models the hazard")
+
+	assert.Equal(t, "login", event.Details["action"])
+	assert.Equal(t, "user", event.Details["resourceType"])
 }
 
 func TestAuditSeverity(t *testing.T) {

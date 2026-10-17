@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,7 +26,11 @@ func (s *AuditService) Log(ctx context.Context, log *domain.AuditLog) error {
 	return s.auditRepo.Create(log)
 }
 
-// LogAction is a convenience method to log a user-initiated action
+// LogAction is a convenience method to log a user-initiated action.
+// ipAddress and userAgent are copied into the entry: a handler passes request
+// header values, which are views of the request buffer the server reuses for
+// later requests, and the entry outlives the request once SIEM forwarding
+// queues it.
 func (s *AuditService) LogAction(
 	ctx context.Context,
 	orgID, userID uuid.UUID,
@@ -41,8 +46,8 @@ func (s *AuditService) LogAction(
 		Action:         action,
 		ResourceType:   resourceType,
 		ResourceID:     resourceID,
-		IPAddress:      ipAddress,
-		UserAgent:      userAgent,
+		IPAddress:      strings.Clone(ipAddress),
+		UserAgent:      strings.Clone(userAgent),
 		Metadata:       metadata,
 	}
 
@@ -50,7 +55,8 @@ func (s *AuditService) LogAction(
 }
 
 // LogAgentAction logs an action initiated by an agent (not a user)
-// Use this for SDK-initiated actions like attestations
+// Use this for SDK-initiated actions like attestations. ipAddress and
+// userAgent are copied into the entry, as LogAction copies them.
 func (s *AuditService) LogAgentAction(
 	ctx context.Context,
 	orgID uuid.UUID,
@@ -67,8 +73,8 @@ func (s *AuditService) LogAgentAction(
 		Action:         action,
 		ResourceType:   resourceType,
 		ResourceID:     resourceID,
-		IPAddress:      ipAddress,
-		UserAgent:      userAgent,
+		IPAddress:      strings.Clone(ipAddress),
+		UserAgent:      strings.Clone(userAgent),
 		Metadata:       metadata,
 	}
 

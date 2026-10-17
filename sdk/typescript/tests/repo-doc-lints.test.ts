@@ -29,15 +29,22 @@ import { join } from 'path';
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 
 interface Lint {
+  /** The program that runs the script, as CONTRIBUTING.md names it. */
+  runner: string;
+  /** The executable spawned: the runner, or this Node binary for node. */
   command: string;
   script: string;
 }
 
-const WORDING: Lint = { command: 'python3', script: 'scripts/check-public-wording.py' };
-const KEYVAULT: Lint = { command: 'bash', script: 'scripts/test-lint-docs-keyvault-master-key.sh' };
-const REPO_LINKS: Lint = { command: 'bash', script: 'scripts/test-lint-docs-repo-links.sh' };
-const DOCS_PROSE: Lint = { command: process.execPath, script: 'scripts/check-docs-prose.mjs' };
-const DOCS_PROSE_TESTS: Lint = { command: process.execPath, script: 'scripts/test-check-docs-prose.mjs' };
+const WORDING: Lint = { runner: 'python3', command: 'python3', script: 'scripts/check-public-wording.py' };
+const KEYVAULT: Lint = { runner: 'bash', command: 'bash', script: 'scripts/test-lint-docs-keyvault-master-key.sh' };
+const REPO_LINKS: Lint = { runner: 'bash', command: 'bash', script: 'scripts/test-lint-docs-repo-links.sh' };
+const DOCS_PROSE: Lint = { runner: 'node', command: process.execPath, script: 'scripts/check-docs-prose.mjs' };
+const DOCS_PROSE_TESTS: Lint = { runner: 'node', command: process.execPath, script: 'scripts/test-check-docs-prose.mjs' };
+
+/** Every script the cases below run. */
+const LINTS = [WORDING, KEYVAULT, REPO_LINKS, DOCS_PROSE, DOCS_PROSE_TESTS];
+const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 
 function run(lint: Lint, args: string[] = [lint.script]): { status: number | null; output: string } {
   const result = spawnSync(lint.command, args, { cwd: REPO_ROOT, encoding: 'utf-8' });
@@ -79,7 +86,7 @@ describe('repository documentation lints', () => {
     expect(output).toMatch(/^(?:#|ℹ) fail 0$/m);
   }, 120_000);
 
-  it('CONTRIBUTING.md names these lints and says they need git, bash, python3 and a git checkout', () => {
+  it('CONTRIBUTING.md names every one of these scripts and says they need git, bash, python3 and a git checkout', () => {
     const guide = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf-8');
     const start = guide.indexOf('**TypeScript SDK**');
     expect(start, 'CONTRIBUTING.md has no TypeScript SDK passage under Testing Requirements').toBeGreaterThan(-1);
@@ -87,11 +94,12 @@ describe('repository documentation lints', () => {
     const passage = guide.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ');
 
     expect(passage).toContain('`tests/repo-doc-lints.test.ts`');
-    for (const lint of [WORDING, KEYVAULT, REPO_LINKS]) {
+    expect(passage).toContain(`also runs ${COUNT_WORDS[LINTS.length]} of the repository's documentation lint scripts`);
+    for (const lint of LINTS) {
       expect(passage).toContain(`\`${lint.script}\``);
-      expect(passage).toContain(`\`${lint.command}\``);
+      expect(passage).toContain(`\`${lint.runner}\``);
     }
-    expect(passage).toContain('It needs `git`, `bash` and `python3` on the `PATH`, and a git checkout of the repository');
+    expect(passage).toContain('The suite needs `git`, `bash` and `python3` on the `PATH`, and a git checkout of the repository');
 
     // The guide quotes the link lint's own words for a tree that is not a checkout.
     const stop = 'is not the top of a git work tree';

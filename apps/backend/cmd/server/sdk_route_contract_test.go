@@ -72,24 +72,19 @@ var sdkRouteContractAllowList = map[string]string{
 	a2aClient + " registerSkill POST /api/v1/a2a/skills member isVerified":       allowWholeSkill,
 	a2aClient + " registerSkill POST /api/v1/a2a/skills member outputSchema":     allowWholeSkill,
 	a2aClient + " registerSkill POST /api/v1/a2a/skills member verifiedAt":       allowWholeSkill,
-
-	secretsClient + " storeCredential POST /api/v1/secrets/namespaces/{options_namespaceId}/credentials member ephemeralPublicKey": allowEphemeralKey,
-	secretsClient + " rotateCredential POST /api/v1/secrets/namespaces/{options_namespaceId}/rotate member ephemeralPublicKey":     allowEphemeralKey,
 }
 
-const sdkRouteContractAllowListCeiling = 30
+const sdkRouteContractAllowListCeiling = 28
 
 const (
-	pyClient      = "sdk/python/aim_sdk/client.py"
-	a2aClient     = "sdk/typescript/src/a2a/A2AClient.ts"
-	secretsClient = "sdk/typescript/src/secrets/SecretsClient.ts"
+	pyClient  = "sdk/python/aim_sdk/client.py"
+	a2aClient = "sdk/typescript/src/a2a/A2AClient.ts"
 
 	allowOrganizationDomain = "the agent create struct has no organizationDomain; only the public registration handler reads one, so the intended route is unclear"
 	allowWholeAgentCard     = "the client sends whatever card fields its caller passes; the update struct reads name, description, version, endpoint and skills, and url is not plainly endpoint"
 	allowVerifyRequestShape = "the server verifies an agentId and requestHash, while the client sends the method, path, body and public key; matching them changes the protocol, not a name"
 	allowPolicyShape        = "the server evaluates a different request (event, clientAgentId, remoteAgentId, skillId); no member maps one to one"
 	allowWholeSkill         = "the client sends whatever skill fields its caller passes, including ones the server computes; narrowing the parameter type is an API change"
-	allowEphemeralKey       = "the server stores the blob without the caller's ephemeral key and makes a fresh one when it resolves; keeping the caller's is the server's decision"
 )
 
 // sdkCall is one HTTP call an SDK makes, as read from its source.
