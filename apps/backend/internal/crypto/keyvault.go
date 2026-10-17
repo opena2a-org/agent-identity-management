@@ -268,8 +268,8 @@ func newKeyVaultFromEnv(getenv func(string) string) (*KeyVault, error) {
 		// only an explicit development or test setting may accept it.
 		if !ephemeralKeyEnvironments[environment] {
 			return nil, fmt.Errorf("SECURITY ERROR: KEYVAULT_MASTER_KEY is required when ENVIRONMENT=%q; "+
-				"set KEYVAULT_MASTER_KEY (generate one with: openssl rand -base64 32), "+
-				"or set ENVIRONMENT=development to use a key that is regenerated at every start", environment)
+				"set KEYVAULT_MASTER_KEY to the base64 encoding of 32 random bytes "+
+				"(generate one with: openssl rand -base64 32) and keep it across restarts", environment)
 		}
 
 		// Generate a new master key for development only

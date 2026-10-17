@@ -135,7 +135,12 @@ func TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment(t *testing.T) {
 				require.Error(t, err)
 				assert.Nil(t, first)
 				assert.Contains(t, err.Error(), "KEYVAULT_MASTER_KEY")
-				assert.Contains(t, err.Error(), "ENVIRONMENT=development")
+				// The refusal names one remedy, the key. A value that
+				// starts the server on a generated key is not a remedy.
+				assert.NotContains(t, err.Error(), "ENVIRONMENT=development")
+				assert.NotContains(t, err.Error(), "ENVIRONMENT=test")
+				assert.Contains(t, err.Error(), "KEYVAULT_MASTER_KEY is required")
+				assert.Contains(t, err.Error(), "openssl rand -base64 32")
 				return
 			}
 			require.NoError(t, err)
