@@ -66,6 +66,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   effect. Both now set `APP_PORT=8080`, and the deployment guide shows `HOST`, commented out, with the address the API
   listens on when it is unset.
 
+### Fixed — `GET /api/v1/secrets/audit` refuses a `since`, `limit` or `offset` it cannot read (#765)
+
+- The route answers `400` and `{"error": "since must be an RFC 3339 time such as 2026-10-17T09:30:00Z"}` for a
+  `since` that is not an RFC 3339 time, and `{"error": "limit must be an integer of 0 or more"}` or
+  `{"error": "offset must be an integer of 0 or more"}` for a `limit` or `offset` that is not an integer or is below
+  0, before it reads the agent or the audit log. A `since`, `limit` or `offset` that is absent or empty reads as no
+  time filter, 50 and 0, as before.
+- Run against the handler on the previous code, `since=not-a-time`, `since=2026-10-16`, `since=2026-10-16T10:00:00`
+  and a `since` whose `+02:00` offset was sent unencoded, which the server decodes as a space, were each answered
+  `200` with the agent's entries and no time filter; `limit=abc`, `limit=1.5` and `offset=abc` were answered `200`
+  with a limit or offset of 0; `limit=-1` and `offset=-1` were answered `200` with the negative value passed to the
+  audit log repository.
+- Tests: `apps/backend/internal/interfaces/http/handlers/secrets_handler_audit_query_test.go` sends each refused
+  form through the handler and checks the status, the error line and that the audit log was not read, and sends
+  readable filters, a `since` with an encoded `+02:00` offset and one with fractional seconds among them, and checks
+  the values the repository receives.
+
 ### Fixed — audit rows keep the user agent and client address of the request that wrote them (#751)
 
 - `AuditService.LogAction` and `AuditService.LogAgentAction` copy the client address and user agent into the row.

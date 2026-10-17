@@ -459,6 +459,9 @@ func (h *SecretsHandler) recordSecretsChange(c fiber.Ctx, orgID uuid.UUID, actio
 
 // GetAuditLog handles GET /api/v1/secrets/audit
 // Auth: AuthMiddleware (JWT)
+// Filters: since, an RFC 3339 time, and limit and offset, integers of 0 or
+// more. A filter the route cannot read is refused with 400 and an error line
+// that names it; an absent or empty one reads as its default.
 func (h *SecretsHandler) GetAuditLog(c fiber.Ctx) error {
 	agentIDStr := c.Query("agentId")
 	if agentIDStr == "" {
@@ -468,6 +471,25 @@ func (h *SecretsHandler) GetAuditLog(c fiber.Ctx) error {
 	agentID, err := uuid.Parse(agentIDStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid agentId format"})
+	}
+
+	// The filters are read before the agent is, so a request the route cannot
+	// read is refused with the parameter named and nothing is looked up for it.
+	var since *time.Time
+	if sinceStr := c.Query("since"); sinceStr != "" {
+		t, err := time.Parse(time.RFC3339, sinceStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": auditSinceLine})
+		}
+		since = &t
+	}
+	limit, ok := auditCountParam(c, "limit", 50)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": auditCountLine("limit")})
+	}
+	offset, ok := auditCountParam(c, "offset", 0)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": auditCountLine("offset")})
 	}
 
 	// SECURITY: same defect as ListNamespaces — agentId from a query parameter, used with
@@ -481,23 +503,38 @@ func (h *SecretsHandler) GetAuditLog(c fiber.Ctx) error {
 		return nil
 	}
 
-	var since *time.Time
-	if sinceStr := c.Query("since"); sinceStr != "" {
-		t, err := time.Parse(time.RFC3339, sinceStr)
-		if err == nil {
-			since = &t
-		}
-	}
-
-	limit, _ := strconv.Atoi(c.Query("limit", "50"))
-	offset, _ := strconv.Atoi(c.Query("offset", "0"))
-
 	entries, err := h.secretsService.GetAuditLog(agentID, since, limit, offset)
 	if err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{"entries": entries})
+}
+
+// auditSinceLine is the answer, with 400, to a since filter of
+// GET /api/v1/secrets/audit that is not an RFC 3339 time.
+const auditSinceLine = "since must be an RFC 3339 time such as 2026-10-17T09:30:00Z"
+
+// auditCountLine is the answer, with 400, to the limit or offset filter of
+// GET /api/v1/secrets/audit named name when it is not an integer of 0 or more.
+func auditCountLine(name string) string {
+	return name + " must be an integer of 0 or more"
+}
+
+// auditCountParam reads the query parameter name of GET /api/v1/secrets/audit
+// as an integer of 0 or more. An absent or empty value reads as fallback; any
+// other value that is not an integer of 0 or more is not ok, and the route
+// answers it with auditCountLine.
+func auditCountParam(c fiber.Ctx, name string, fallback int) (int, bool) {
+	raw := c.Query(name)
+	if raw == "" {
+		return fallback, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // getUserID extracts the user ID from Fiber context (set by AuthMiddleware).
