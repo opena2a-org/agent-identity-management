@@ -1,6 +1,6 @@
 # AIM server features
 
-What the AIM server adds over the SDKs' local checks: the authorization engine, the trust score, attestation of MCP servers, privileged access management, audit log forwarding to Splunk, and the web dashboard. Available in the self-hosted and AIM Cloud deployment modes, except Splunk forwarding, which runs in self-hosted deployments only. A CyberArk connector and a Microsoft Sentinel adapter are planned.
+What the AIM server adds over the SDKs' local checks: the authorization engine, the trust score, attestation of MCP servers, privileged access management, security event forwarding to Splunk and Microsoft Sentinel, and the web dashboard. Available in the self-hosted and AIM Cloud deployment modes, except SIEM forwarding, which runs in self-hosted deployments only. A CyberArk connector is planned.
 
 ## 5-step Fine-Grained Authorization
 
@@ -42,7 +42,7 @@ Not available yet. The `cyberark` package in the source tree is not connected to
 
 ## SIEM adapters
 
-Splunk HEC. Set `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` and every audit log entry the server writes is forwarded: buffered batch delivery, retry, severity filtering. See [SIEM Forwarding](DEPLOYMENT.md#siem-forwarding). The Microsoft Sentinel adapter is not loaded: Microsoft ended support for the HTTP Data Collector API it targets on 14 September 2026. A Sentinel adapter for the Logs Ingestion API is planned.
+Splunk HEC. Set `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` and every audit log entry the server writes is forwarded: buffered batch delivery, retry, severity filtering. Microsoft Sentinel: set the six required `SIEM_SENTINEL_*` variables and the same events reach a Log Analytics table through the Azure Monitor Logs Ingestion API, with the client credentials of a Microsoft Entra application. The server does not use the HTTP Data Collector API, for which Microsoft ended support on 14 September 2026. See [SIEM Forwarding](DEPLOYMENT.md#siem-forwarding).
 
 ## Web dashboard
 

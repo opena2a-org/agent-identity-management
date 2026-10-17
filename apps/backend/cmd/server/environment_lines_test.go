@@ -169,7 +169,10 @@ func startupLine(t *testing.T, name string, cfg *config.Config) string {
 			t.Fatalf("seeding the administrator: %v", err)
 		}
 		return line
-	case "SIEM_SPLUNK_HEC_URL", "SIEM_SPLUNK_HEC_TOKEN", "SIEM_SPLUNK_INDEX", "SIEM_MIN_SEVERITY":
+	case "SIEM_SPLUNK_HEC_URL", "SIEM_SPLUNK_HEC_TOKEN", "SIEM_SPLUNK_INDEX", "SIEM_MIN_SEVERITY",
+		"SIEM_SENTINEL_ENDPOINT", "SIEM_SENTINEL_DCR_IMMUTABLE_ID", "SIEM_SENTINEL_STREAM_NAME",
+		"SIEM_SENTINEL_TENANT_ID", "SIEM_SENTINEL_CLIENT_ID", "SIEM_SENTINEL_CLIENT_SECRET",
+		"SIEM_SENTINEL_AUTHORITY_HOST":
 		db, _, err := sqlmock.New()
 		if err != nil {
 			t.Fatal(err)

@@ -1,5 +1,6 @@
 // Package siem implements event streaming adapters for enterprise SIEM platforms.
-// Supports Splunk HEC (HTTP Event Collector) and Microsoft Sentinel.
+// Supports Splunk HEC (HTTP Event Collector) and Microsoft Sentinel through
+// the Azure Monitor Logs Ingestion API.
 package siem
 
 import (
@@ -170,71 +171,7 @@ func (s *SplunkAdapter) SendBatch(ctx context.Context, events []*SIEMEvent) erro
 	return nil
 }
 
-// ============================================================================
-// Microsoft Sentinel Adapter
-// ============================================================================
-
-// The server does not load this adapter. It posts to the Azure Monitor HTTP
-// Data Collector API, for which Microsoft ended support on 14 September 2026,
-// in favour of the Logs Ingestion API, and it sends no Authorization header.
-
-// SentinelConfig holds Microsoft Sentinel configuration.
-type SentinelConfig struct {
-	WorkspaceID string `json:"workspaceId"` // Log Analytics workspace ID
-	SharedKey   string `json:"sharedKey"`   // Primary or secondary key
-	LogType     string `json:"logType"`     // Custom log type name (default: "OpenA2A_AIM")
-}
-
-type SentinelAdapter struct {
-	config SentinelConfig
-	client *http.Client
-}
-
-func NewSentinelAdapter(config SentinelConfig) *SentinelAdapter {
-	if config.LogType == "" {
-		config.LogType = "OpenA2A_AIM"
-	}
-	return &SentinelAdapter{
-		config: config,
-		client: &http.Client{Timeout: 10 * time.Second},
-	}
-}
-
-func (s *SentinelAdapter) Name() string { return "sentinel" }
-
-func (s *SentinelAdapter) Send(ctx context.Context, event *SIEMEvent) error {
-	event.Source = "opena2a-aim"
-
-	body, err := json.Marshal([]interface{}{event})
-	if err != nil {
-		return fmt.Errorf("failed to marshal Sentinel event: %w", err)
-	}
-
-	url := fmt.Sprintf("https://%s.ods.opinsights.azure.com/api/logs?api-version=2016-04-01",
-		s.config.WorkspaceID)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Log-Type", s.config.LogType)
-	// Authorization header would use HMAC-SHA256 signature of the request
-	// (simplified here -- full implementation requires date + content-length + body hash)
-
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("Sentinel request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Sentinel returned %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	return nil
-}
+// The Microsoft Sentinel adapter is in sentinel.go.
 
 // ============================================================================
 // Multi-Adapter (fan-out to multiple SIEMs)

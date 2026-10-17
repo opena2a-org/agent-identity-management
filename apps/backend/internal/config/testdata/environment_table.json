@@ -2689,6 +2689,529 @@
       "line": "error: SIEM_MIN_SEVERITY must be one of info, low, medium, high, critical"
     },
     {
+      "variable": "SIEM_SENTINEL_ENDPOINT",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_ENDPOINT is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_ENDPOINT",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_ENDPOINT is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_ENDPOINT",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SENTINEL_ENDPOINT is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_ENDPOINT",
+      "input": "valid",
+      "value": "https://aim-dce.example.com",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"https://aim-dce.example.com\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_ENDPOINT",
+      "input": "invalid",
+      "value": "http://aim-dce.example.com",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"http://aim-dce.example.com\"",
+      "line": "error: SIEM_SENTINEL_ENDPOINT must use https; http is accepted only for a loopback host"
+    },
+    {
+      "variable": "SIEM_SENTINEL_DCR_IMMUTABLE_ID",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_DCR_IMMUTABLE_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_DCR_IMMUTABLE_ID",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_DCR_IMMUTABLE_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_DCR_IMMUTABLE_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SENTINEL_DCR_IMMUTABLE_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_DCR_IMMUTABLE_ID",
+      "input": "valid",
+      "value": "dcr-fake-for-the-table",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"dcr-fake-for-the-table\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_DCR_IMMUTABLE_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_STREAM_NAME",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_STREAM_NAME is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_STREAM_NAME",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_STREAM_NAME is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_STREAM_NAME",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SENTINEL_STREAM_NAME is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_STREAM_NAME",
+      "input": "valid",
+      "value": "Custom-AIMSecurityEvents",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"Custom-AIMSecurityEvents\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_STREAM_NAME",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_TENANT_ID",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_TENANT_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_TENANT_ID",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_TENANT_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_TENANT_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SENTINEL_TENANT_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_TENANT_ID",
+      "input": "valid",
+      "value": "fake-tenant-id-for-the-table",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents"
+      },
+      "setting": "\"fake-tenant-id-for-the-table\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_TENANT_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_ID",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_CLIENT_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_ID",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_CLIENT_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SENTINEL_CLIENT_ID is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_ID",
+      "input": "valid",
+      "value": "fake-client-id-for-the-table",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"fake-client-id-for-the-table\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_ID",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_CLIENT_SECRET is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "error: SIEM_SENTINEL_CLIENT_SECRET is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "error: SIEM_SENTINEL_CLIENT_SECRET is not set; set all of SIEM_SENTINEL_ENDPOINT, SIEM_SENTINEL_DCR_IMMUTABLE_ID, SIEM_SENTINEL_STREAM_NAME, SIEM_SENTINEL_TENANT_ID, SIEM_SENTINEL_CLIENT_ID, SIEM_SENTINEL_CLIENT_SECRET to forward to Microsoft Sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "valid",
+      "value": "fake-sentinel-secret-for-the-table",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"fake-sentinel-secret-for-the-table\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "invalid",
+      "value": "two\nlines",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"two\\nlines\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "quote",
+      "value": "test-secret-with-a-quote-'-and-\"-0123456789",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"test-secret-with-a-quote-'-and-\\\"-0123456789\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_CLIENT_SECRET",
+      "input": "backslash",
+      "value": "test-secret-with-a-backslash-\\-0123456789abcdef",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"test-secret-with-a-backslash-\\\\-0123456789abcdef\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_AUTHORITY_HOST",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_AUTHORITY_HOST",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_AUTHORITY_HOST",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"   \"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_AUTHORITY_HOST",
+      "input": "valid",
+      "value": "https://login.example.com",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"https://login.example.com\"",
+      "line": "siem: forwarding audit log entries at severity info and above to sentinel"
+    },
+    {
+      "variable": "SIEM_SENTINEL_AUTHORITY_HOST",
+      "input": "invalid",
+      "value": "http://login.example.com",
+      "with": {
+        "SIEM_SENTINEL_CLIENT_ID": "fake-client-id-for-the-table",
+        "SIEM_SENTINEL_CLIENT_SECRET": "fake-sentinel-secret-for-the-table",
+        "SIEM_SENTINEL_DCR_IMMUTABLE_ID": "dcr-fake-for-the-table",
+        "SIEM_SENTINEL_ENDPOINT": "https://aim-dce.example.com",
+        "SIEM_SENTINEL_STREAM_NAME": "Custom-AIMSecurityEvents",
+        "SIEM_SENTINEL_TENANT_ID": "fake-tenant-id-for-the-table"
+      },
+      "setting": "\"http://login.example.com\"",
+      "line": "error: SIEM_SENTINEL_AUTHORITY_HOST must use https; http is accepted only for a loopback host"
+    },
+    {
       "variable": "AIM_SIGNING_KEY_CARD_ATTESTATION",
       "input": "unset",
       "value": null,
