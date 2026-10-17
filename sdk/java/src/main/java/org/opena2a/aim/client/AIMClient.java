@@ -1006,20 +1006,13 @@ public class AIMClient implements AutoCloseable {
                     String errorBody = response.body() != null ? response.body().string() : "";
                     logger.warn("Refresh token auth failed: {} - {}", response.code(), errorBody);
 
-                    // Try token recovery if token was revoked
-                    if (errorBody.toLowerCase().contains("revoked") ||
-                        errorBody.toLowerCase().contains("invalid") ||
-                        errorBody.toLowerCase().contains("expired")) {
-
-                        System.out.println("\n🔄 Token was revoked - attempting automatic recovery...");
-                        logger.info("Attempting token recovery...");
-
-                        if (attemptTokenRecovery()) {
-                            System.out.println("✅ Token recovered successfully! SDK credentials updated.");
-                            return; // Recovery successful
-                        }
-
-                        // Recovery failed - show user-friendly error
+                    // A refused token is not presented anywhere else. The
+                    // recovery route (POST /api/v1/auth/sdk/recover) refuses an
+                    // access token minted by refreshing a downloaded SDK's
+                    // token, which is the access token this client holds, so
+                    // the banner names how to replace the credential.
+                    String error = errorBody.toLowerCase();
+                    if (error.contains("revoked") || error.contains("invalid") || error.contains("expired")) {
                         printTokenExpiredError();
                     }
 
@@ -1061,7 +1054,8 @@ public class AIMClient implements AutoCloseable {
     }
 
     /**
-     * Print user-friendly error when token is expired.
+     * Print user-friendly error when token is expired. The causes include the
+     * server's maximum age for a download, which refreshing does not extend.
      */
     private void printTokenExpiredError() {
         String border = "=".repeat(72);
@@ -1074,19 +1068,22 @@ public class AIMClient implements AutoCloseable {
         System.out.println();
         System.out.println("This can happen if:");
         System.out.println("  - The token expired (90 days since last use)");
+        System.out.println("  - The SDK download reached the server's maximum age");
+        System.out.println("    (SDK_TOKEN_FAMILY_MAX_AGE, 365 days by default). Refreshing does");
+        System.out.println("    not extend it; a fresh download starts a new one.");
         System.out.println("  - The token was revoked for security reasons");
         System.out.println("  - Another SDK installation rotated the token");
         System.out.println();
         System.out.println("TO FIX:");
         System.out.println("  1. Visit: " + aimUrl);
-        System.out.println("  2. Go to Settings -> SDK Downloads");
+        System.out.println("  2. Go to Developers, then SDK & docs");
         System.out.println("  3. Download a fresh Java SDK");
         System.out.println("  4. Extract and add to your project");
         System.out.println();
         System.out.println("Your agents and data are safe! Only SDK credentials need updating.");
         System.out.println();
         System.out.println("Tip: You can also manage SDK tokens from the dashboard:");
-        System.out.println("     Settings -> SDK Tokens");
+        System.out.println("     Developers, then Credentials");
         System.out.println(border);
         System.out.println();
     }
@@ -1150,71 +1147,6 @@ public class AIMClient implements AutoCloseable {
             logger.debug("Could not decode token expiry: {}", e.getMessage());
         }
         return null;
-    }
-
-    /**
-     * Attempt token recovery when refresh token is revoked.
-     * Uses authClient to avoid infinite loops from 401 handling.
-     *
-     * The recovery route requires an access token for the refresh token's
-     * owner, so the request carries the access token this client holds. A
-     * client that holds none (no earlier refresh succeeded) sends nothing:
-     * the route would answer 401 before reading the body. Neither does a
-     * client whose access token has expired (it was idle past the token's
-     * lifetime), since the auth middleware refuses an expired bearer the same
-     * way.
-     */
-    private boolean attemptTokenRecovery() {
-        String bearer = accessToken;
-        if (bearer == null || bearer.isEmpty()) {
-            logger.info("Token recovery needs an access token for the token's owner, and this client holds none");
-            return false;
-        }
-        Instant refreshAt = tokenExpiry;
-        if (refreshAt != null) {
-            Instant expiredAt = refreshAt.plusSeconds(TOKEN_REFRESH_MARGIN_SECONDS);
-            if (!Instant.now().isBefore(expiredAt)) {
-                logger.info("Token recovery needs an unexpired access token for the token's owner, "
-                        + "and the one this client holds expired at {}", expiredAt);
-                return false;
-            }
-        }
-        try {
-            ObjectNode payload = objectMapper.createObjectNode();
-            payload.put("oldRefreshToken", refreshToken);
-
-            RequestBody body = RequestBody.create(payload.toString(), JSON);
-
-            Request request = new Request.Builder()
-                    .url(aimUrl + "/api/v1/auth/sdk/recover")
-                    .header("Authorization", "Bearer " + bearer)
-                    .post(body)
-                    .build();
-
-            // Use authClient (no authenticator) to avoid infinite loops
-            try (Response response = authClient.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    return false;
-                }
-
-                String responseBody = response.body().string();
-                JsonNode json = objectMapper.readTree(responseBody);
-
-                this.accessToken = json.has("accessToken") ? json.get("accessToken").asText() : null;
-                String newRefreshToken = json.has("refreshToken") ? json.get("refreshToken").asText() : null;
-
-                if (accessToken != null && newRefreshToken != null) {
-                    this.refreshToken = newRefreshToken;
-                    this.tokenExpiry = Instant.now().plusSeconds(840); // 14 minutes
-                    updateStoredCredentials();
-                    logger.info("Token recovered successfully");
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Token recovery failed: {}", e.getMessage());
-        }
-        return false;
     }
 
     /**
