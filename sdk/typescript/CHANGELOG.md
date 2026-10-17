@@ -89,8 +89,9 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   monitors running, `aiLayer: { prompt: true }` built no prompt interceptor, and an `intervalMs` of `'abc'` or `-5`
   polled `ps` every millisecond; the shape that turns a monitor off is `{ filesystem: { enabled: false } }`. A
   top-level key `ARPConfig` does not have is not refused: it is named in one `console.warn` and construction goes on,
-  so a config file that carries a key from another version still starts the agent. `intelligence`, `dataDir`,
-  `rules`, `declaredCapabilities`, `gtin`, `signatureTelemetry` and `proxy` are not checked.
+  so a config file that carries a key from another version still starts the agent. `dataDir`, `rules`,
+  `declaredCapabilities`, `gtin`, `signatureTelemetry`, `proxy` and the `intelligence` keys other than the three
+  `enabled` switches described in the L2 Security entry below are not checked.
 
 ### Changed — the README's `init` section opens with the source build, and the npx form follows a release condition
 
@@ -419,8 +420,13 @@ the network monitor emits `critical` and is on by default, so this is the
 default path rather than an edge case.
 
 Affected: **1.0.0 through 1.3.1**, every published version — verified by reading
-`dist/arp/index.js` out of each tarball. `arp-guard@0.3.0` is **not** affected;
-it predates the ARP module and contains none of this code.
+`dist/arp/index.js` out of each tarball. `arp-guard@0.3.0` carries none of this
+code in its own tarball and still runs it: line 17 of `dist/index.js` in
+`arp-guard-0.3.0.tgz` requires `hackmyagent/arp`, the package depends on
+`hackmyagent >=0.11.0`, and hackmyagent's `exports["./arp"]` re-exports this
+engine at the version hackmyagent pins (1.3.1 at hackmyagent 0.33.2), so a fresh
+install of `arp-guard@0.3.0` runs the affected engine until hackmyagent moves its
+pin.
 
 **What changes**
 
@@ -430,6 +436,12 @@ it predates the ARP module and contains none of this code.
   shallowly, an operator who set only `intelligence.budgetUsd` replaced the whole
   object and armed the vendor channel. **Narrowing the budget, a hardening
   action, used to switch L2 on.**
+- On 1.0.0 through 1.3.1 a non-boolean `intelligence.enabled` (a string such as
+  `"false"` or the number `0`) was read as on, both for L2 and for the
+  behavioral twin; from this release such a value is refused at construction
+  with a `TypeError` (so is a non-boolean `intelligence.runtimeTwin.enabled` or
+  `intelligence.guardAnomaly.enabled`, and so is `enabled: no` in an `arp.yaml`,
+  which js-yaml 4.3.2 reads as the string `"no"`).
 - `intelligence.adapter` has no default and must be named explicitly. There is no
   automatic provider selection any more.
 - `createAdapter('agent-proxy')` and `autoDetectAdapter()` now throw. The

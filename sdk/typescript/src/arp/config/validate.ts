@@ -3,9 +3,9 @@ import { sanitizeTerminalLine } from '../telemetry/signature/sanitize';
 
 /**
  * Shape check for the parts of an ARP config that decide what runs: the
- * `monitors`, `interceptors` and `aiLayer` blocks. The AgentRuntimeProtection
- * constructor runs it on the config it was given or loaded, before it builds
- * anything.
+ * `monitors`, `interceptors` and `aiLayer` blocks, and the switches in
+ * `intelligence`. The AgentRuntimeProtection constructor runs it on the config
+ * it was given or loaded, before it builds anything.
  *
  * Each entry of those blocks is read as `entry?.enabled`, so a shape the types
  * do not allow was read as "not set": `monitors: { filesystem: false }` left the
@@ -15,11 +15,20 @@ import { sanitizeTerminalLine } from '../telemetry/signature/sanitize';
  * arp.json reach the constructor without the types, so each of these throws a
  * TypeError naming the key path and the shape it takes.
  *
+ * `intelligence` must be an object, and `intelligence.enabled`,
+ * `intelligence.runtimeTwin.enabled` and `intelligence.guardAnomaly.enabled`
+ * must each be a boolean when set. The behavioral twin and the guard anomaly
+ * detector are switched off only by the boolean `false`, so a string such as
+ * "false" or the number 0 left them running. Such a value throws rather than
+ * being coerced: a list of strings read as off would still read the next
+ * unlisted spelling as on.
+ *
  * A top-level key ARPConfig does not have is warned about, not refused, so a
  * config file written for another version still starts the agent.
  *
- * Not checked here: `intelligence`, `dataDir`, `rules`, `declaredCapabilities`,
- * `gtin`, `signatureTelemetry` and `proxy`.
+ * Not checked here: the other `intelligence` keys, including whether
+ * `runtimeTwin` and `guardAnomaly` are objects; `dataDir`, `rules`,
+ * `declaredCapabilities`, `gtin`, `signatureTelemetry` and `proxy`.
  */
 
 /**
@@ -77,10 +86,13 @@ const TOP_LEVEL_KEYS: Record<keyof ARPConfig, true> = {
 
 const ENABLED_SHAPE = "an object with a boolean 'enabled' (for example { enabled: false })";
 
+const SWITCH_SHAPE = 'the boolean true or false (a string or number does not switch it off)';
+
 /**
  * Throw a TypeError for the first `monitors`, `interceptors` or `aiLayer` key
- * or value that is not in its documented shape, then warn once, with
- * console.warn, about any top-level key ARPConfig does not have.
+ * or value that is not in its documented shape, or the first `intelligence`
+ * switch that is not a boolean, then warn once, with console.warn, about any
+ * top-level key ARPConfig does not have.
  */
 export function validateARPConfig(config: unknown): void {
   if (!isRecord(config)) {
@@ -90,6 +102,7 @@ export function validateARPConfig(config: unknown): void {
   for (const [block, entries] of BLOCKS) {
     validateBlock(block, config[block], entries);
   }
+  validateIntelligence(config.intelligence);
 
   const unknown = Object.keys(config).filter((key) => !hasOwn(TOP_LEVEL_KEYS, key));
   if (unknown.length > 0) {
@@ -134,6 +147,26 @@ function validateBlock(block: string, value: unknown, entries: Readonly<Record<s
     if (typeof entry.enabled !== 'boolean') {
       throw new TypeError(`ARP config: ${path} must be ${ENABLED_SHAPE}; got ${describe(entry)}`);
     }
+  }
+}
+
+/**
+ * `intelligence` is an object, and each of its three switches is a boolean when
+ * set. No other `intelligence` key is read here.
+ */
+function validateIntelligence(value: unknown): void {
+  if (value === undefined) return;
+  if (!isRecord(value)) {
+    throw new TypeError(`ARP config: intelligence must be an object; got ${describe(value)}`);
+  }
+  checkSwitch('intelligence.enabled', value.enabled);
+  if (isRecord(value.runtimeTwin)) checkSwitch('intelligence.runtimeTwin.enabled', value.runtimeTwin.enabled);
+  if (isRecord(value.guardAnomaly)) checkSwitch('intelligence.guardAnomaly.enabled', value.guardAnomaly.enabled);
+}
+
+function checkSwitch(path: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new TypeError(`ARP config: ${path} must be ${SWITCH_SHAPE}; got ${describe(value)}`);
   }
 }
 
