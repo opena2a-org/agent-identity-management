@@ -27,6 +27,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   server's maximum-age refusal body is `Invalid or expired refresh token`; and for both refusal bodies the token is
   posted once, to `/api/v1/auth/refresh`, one `TOKEN_EXPIRED` event is logged and the output is the banner alone.
 
+### Changed — `aim-sdk login` accepts an `http:` address only on this machine, unless `--allow-http` is passed
+
+- `aim-sdk login` applies the rule `aim-sdk init` applies, from one shared check: an `http:` server address is
+  accepted when its host is `localhost`, `127.0.0.1` or `[::1]`, compared as written in the URL and never resolved.
+  For an `http:` address on any other host it exits 1 before the reachability probe: no request is made and nothing
+  is saved. The error names the host, never a user:password part of the address, and prints `aim-sdk login --url`
+  with the `https:` address of that host and port, the same command with `--allow-http`, and the deployment guide's
+  section on a TLS-terminating proxy.
+- The new `--allow-http` flag accepts such an address. Before the first request the command then prints one line
+  naming the address and saying that the access and refresh tokens the sign-in receives cross the network
+  unencrypted. With an `https:` address, or an `http:` address on this machine, the flag changes nothing and
+  nothing more is printed.
+- `aim-sdk login` also exits 1 before any request, with or without `--allow-http`, when `--url`, once the whitespace
+  around it is trimmed, has a backslash, whitespace or a control character, as `aim-sdk init` does.
+- The `https:` example in `aim-sdk init`'s refusal of an `http:` address keeps the port the address names; its
+  other text, its exit code and the requests it makes are unchanged.
+- `aim-sdk login --help` names the rule and `--allow-http`, and its exit code 1 also covers an address refused
+  before any request.
+- Earlier releases sent the sign-in's token exchange and received the token pair over the scheme the address named,
+  with no refusal and no warning.
+- Test: `tests/test_cli_login_cleartext_url.py`; `tests/test_cli_init_cleartext_url.py` passes unchanged.
+
 ### Fixed — `aim-sdk login` opens no browser when its output is not a terminal, and prints the page and the code before it waits
 
 - `aim-sdk login` opens a browser on the approval page only when standard output is a terminal and the new

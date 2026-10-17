@@ -28,6 +28,8 @@ aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 
 Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
 
+An http: address is accepted only on this machine; a self-hosted server on another host needs https (a TLS-terminating proxy, see the [deployment guide](https://github.com/opena2a-org/agent-identity-management/blob/main/docs/DEPLOYMENT.md)) or, on a trusted network, `--allow-http`, which sends the tokens unencrypted.
+
 Then register an agent, in a Python session, with the capability it holds:
 
 ```python
