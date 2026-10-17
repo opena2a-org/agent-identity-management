@@ -37,6 +37,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - A test fails when a non-test file in `cmd/server` uses `os.Getenv`, `os.LookupEnv`, `os.Environ`,
   `os.ExpandEnv`, `syscall.Getenv` or `syscall.Environ`, whether called or passed as a value.
 
+### Changed — the CyberArk CCP client encodes and checks its query as CyberArk publishes, authenticates with a client certificate and verifies the server; the PSM session sender is removed
+
+- `internal/integrations/cyberark` is a client for the Central Credential Provider's
+  `GET /AIMWebService/api/Accounts`. No server path calls it yet.
+- `NewConnector` returns an error. It requires an `https` `CCPURL` with no user information, query or fragment,
+  takes `CertPath` and `KeyPath` together or not at all, loads the client key pair and an optional `CACertPath` PEM
+  bundle that verifies the CCP server (empty means the system roots), and builds a TLS client with TLS 1.2 as its
+  minimum version. `Timeout` defaults to 30 seconds. An error names the setting at fault and never a file's content.
+- `CCPRequest` carries `AppID`, `Safe`, `Folder`, `Object`, `UserName`, `Address`, `Database`, `PolicyID`, `Reason`,
+  `Query`, `QueryFormat`, `ConnectionTimeout` (sent as `Connection%20Timeout`) and `FailRequestOnPasswordChange`
+  (sent as `true` only when set), each under CyberArk's name and query-escaped with a space written as `%20`, so the
+  URL holds no raw space and no `+`. Before anything is sent, `RetrieveCredential` refuses a request with no `AppID`,
+  with `AppID` alone, with a `QueryFormat` other than `Exact` or `Regexp`, or with a value holding a space, `+`, `&`,
+  `%` or `;`. The error names the parameter and not its value.
+- `CCPResponse` holds `Content`, `UserName`, `Address`, `Database` and `PasswordChangeInProcess`, read as a JSON
+  boolean or as the string `true` or `false` in any letter case; `ChangeNumber` is removed. An account whose
+  password is being changed is returned with `PasswordChangeInProcess` true. A 400, 403, 404 or 500 answer unwraps to
+  `ErrCCPBadRequest`, `ErrCCPForbidden`, `ErrCCPNotFound` or `ErrCCPServerError`; every non-200 answer is a
+  `*CCPStatusError` carrying the status and at most the first 256 bytes of the answer. A redirect is returned as its
+  status and not followed. No error carries a 200 body.
+- `StreamSessionEvent`, `PSMSessionEvent` and `Config.PSMURL` are removed.
+- Tests: `apps/backend/internal/integrations/cyberark/connector_test.go`, against a CCP stub in
+  `apps/backend/internal/integrations/cyberark/ccptest` that serves TLS and requires a client certificate signed by
+  its own CA.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
