@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/integrations/siem"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 )
 
 // siemFlushTimeout bounds the delivery of the queued SIEM events at shutdown.
@@ -44,6 +46,47 @@ func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(s
 	}
 	log.Printf("siem: forwarding audit log entries at severity %s and above to %s", minSeverity, strings.Join(names, ", "))
 	return forwarder, nil
+}
+
+// observeSecurityDecisions forwards to the SIEM the security decisions that
+// write no audit log entry: each password sign-in POST /api/v1/public/login
+// or POST /api/v1/auth/login/local refuses, as aim.auth.signin_failed, and
+// each FGA decision that does not allow the request, as aim.fga.denied. An
+// allowed decision is not forwarded. main calls it once the handlers exist,
+// when a SIEM is configured. Enqueue never blocks, so a slow or failing SIEM
+// never delays an answer.
+func observeSecurityDecisions(forwarder *siem.Forwarder, services *Services, h *Handlers) {
+	services.FGA.SetDecisionObserver(func(d application.FGADecision) {
+		if d.Allowed {
+			return
+		}
+		forwarder.Enqueue(siem.EventFromFGADenial(siem.FGADenial{
+			Time:           d.Time,
+			AgentID:        d.AgentID,
+			OrganizationID: d.OrganizationID,
+			Capability:     d.Capability,
+			Outcome:        d.Outcome,
+			DeniedBy:       d.DeniedBy,
+			DeniedReason:   d.DeniedReason,
+		}))
+	})
+
+	signInFailed := func(f handlers.SignInFailure) {
+		forwarder.Enqueue(siem.EventFromSignInFailure(siem.SignInFailure{
+			Time:           f.Time,
+			Method:         f.Method,
+			Reason:         f.Reason,
+			Route:          f.Route,
+			IPAddress:      f.IPAddress,
+			UserAgent:      f.UserAgent,
+			UserID:         f.UserID,
+			OrganizationID: f.OrganizationID,
+		}))
+	}
+	h.Auth.SetSignInFailureObserver(signInFailed)
+	h.PublicRegistration.SetSignInFailureObserver(signInFailed)
+
+	log.Printf("siem: forwarding failed sign-ins (%s) and FGA denials (%s)", siem.EventSignInFailed, siem.EventFGADenied)
 }
 
 // flushSIEMForwarding delivers the queued SIEM events within siemFlushTimeout

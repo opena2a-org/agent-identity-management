@@ -176,6 +176,33 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Added — failed sign-ins and FGA denials reach the SIEM next to the audit log entries
+
+- With SIEM forwarding configured (`SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN`), each password sign-in that
+  `POST /api/v1/public/login` or `POST /api/v1/auth/login/local` answers `401` is forwarded as an
+  `aim.auth.signin_failed` event at severity `low`. Its `details` carry `method` (`password`), `reason` (the check
+  that refused the sign-in, such as `password_mismatch` or `unknown_email`), `route`, `ipAddress`, `userAgent`, and
+  `userId` and `organizationId` only when the submitted email matched a user. The event never carries the submitted
+  email, the password or a token, and every answer of both routes is unchanged: an unknown email is still answered
+  as a wrong password is.
+- Each decision of `POST /api/v1/agents/:id/authorize` that does not allow the request is forwarded as an
+  `aim.fga.denied` event at severity `medium`, with `agentId`, `capability`, `outcome`, and `details` carrying the
+  agent's `organizationId`, `deniedBy` and `deniedReason`. An allowed decision is not forwarded. The event is queued
+  after the decision is final, so the collector never delays or changes the answer.
+- Measured at the previous commit through the route table against a migrated database: a wrong password and an
+  unknown email on either route, and a `DENY` from the authorize route, sent nothing to the collector; only the
+  successful sign-in's `aim.audit.login` entry arrived.
+- `docs/DEPLOYMENT.md` § SIEM Forwarding lists the three kinds of forwarded event with their event types, severities
+  and fields, and the reasons each sign-in route gives.
+- Tests: `apps/backend/cmd/server/siem_auth_decisions_integration_test.go` (`TestSIEMAuthDecisionsRoundTrip`, both
+  routes, against a collector that enforces the published HEC event format and answers),
+  `apps/backend/cmd/server/siem_security_decisions_test.go`,
+  `apps/backend/internal/integrations/siem/decisions_test.go`,
+  `apps/backend/internal/integrations/siem/hectest/receiver_test.go`,
+  `apps/backend/internal/application/fga_engine_decision_observer_test.go`,
+  `apps/backend/internal/application/auth_service_sign_in_refusal_test.go` and
+  `apps/backend/internal/interfaces/http/handlers/sign_in_failure_report_test.go`.
+
 ### Security — a logout with any token of an SDK token family ends the family, with or without a revocation store
 
 - `POST /api/v1/auth/logout` with a downloaded SDK's refresh token in the body ends that token's family, whichever

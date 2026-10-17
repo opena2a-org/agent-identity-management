@@ -19,6 +19,7 @@ const (
 	EventCapabilityGranted     EventType = "aim.capability.granted"
 	EventCapabilityDenied      EventType = "aim.capability.denied"
 	EventFGADenied             EventType = "aim.fga.denied"
+	EventSignInFailed          EventType = "aim.auth.signin_failed"
 	EventIntentBlocked         EventType = "aim.intent.blocked"
 	EventApprovalRequested     EventType = "aim.approval.requested"
 	EventApprovalDecided       EventType = "aim.approval.decided"
