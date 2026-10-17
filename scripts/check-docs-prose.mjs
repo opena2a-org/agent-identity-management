@@ -143,9 +143,20 @@ export function scanMarkdown(text) {
   return findings;
 }
 
+// A copy of `env` without the variables git lists as local to a repository
+// (GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE and the rest). A git hook exports
+// some of them, and a child git that inherits them reads and writes the
+// hook's repository instead of the one its working directory is in.
+export function gitEnv(env = process.env) {
+  const res = spawnSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' });
+  const local = new Set((res.stdout || '').split('\n').filter(Boolean));
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !local.has(name)));
+}
+
 function listTracked(root) {
   const res = spawnSync('git', ['ls-files', '-z', '--', '*.md', '*.mdx'], {
     cwd: root,
+    env: gitEnv(),
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
