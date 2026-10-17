@@ -282,6 +282,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   count for a static link. The failure names the link, its href and the page file it expected, for example
   `organization tab Audit log links to /dashboard/admin/audit-logs, and no page serves it and lib/redirects.ts has no row for it: expected app/dashboard/admin/audit-logs/page.tsx`.
 - The Registrations tab, shown only on the self-hosted build, is checked like the other tabs.
+- If the hosted build stops shipping the page behind a self-hosted-only tab, that tab's href is added to
+  `HOSTED_EXEMPT_HREFS` in the same test file. The list is empty. A row leaves out only a hub tab marked `ossOnly`
+  with that href, and only where `lib/deployment.ts` sets `HOSTED_DEPLOYMENT` to true; a sidebar entry or a tab
+  without the flag is still checked, even with that href. The test fails on a row that names no `ossOnly` tab, for example
+  `hosted exemption /dashboard/admin/audit-logs names no ossOnly hub tab: only a tab the hosted build hides may be exempt`.
 - Measured on a copy of `apps/web` with `app/dashboard/admin/audit-logs/page.tsx` and its test removed: the existing
   navigation tests (`lib/navigation-edge.test.ts`, `lib/persona.test.ts`, `app/dashboard/layout.drawer.test.tsx`,
   `app/dashboard/layout.role.test.tsx`) passed, 47 of 47, and the new test failed with the line above. With the page
