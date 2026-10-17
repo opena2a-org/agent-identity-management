@@ -77,6 +77,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   shows how to run `init` from a source build. Its note on the L2 default named an unpublished version; it now reads
   "Changed after 1.3.1", and a test holds every "Changed in X" or "Added in X" marker in the README to a release
   heading in this file.
+- `new AgentRuntimeProtection()` checks the shape of the `monitors`, `interceptors` and `aiLayer` blocks before it
+  builds or writes anything, for a config passed as an object, as a file path or found as `arp.yaml`, `arp.yml` or
+  `arp.json`, and throws a `TypeError` that names the key path and the shape it takes. Each entry is an object with
+  a boolean `enabled`. A key that is not a documented entry is refused by name: `monitors` takes `process`,
+  `network`, `filesystem`, `skill` and `heartbeat`; `interceptors` takes `process`, `network` and `filesystem`;
+  `aiLayer` takes `prompt`, `mcp` and `a2a`. `intervalMs` is a finite number of at least 1000; `watchPaths`,
+  `allowedPaths`, `allowedHosts`, `allowedTools` and `trustedAgents` are arrays of strings; `maxStaleMs` is a finite
+  number above 0. A config that used to be read past now throws at construction. On 1.3.1,
+  `monitors: { filesystem: false, network: false }` and `monitors: { fileSystem: { enabled: false } }` left all three
+  monitors running, `aiLayer: { prompt: true }` built no prompt interceptor, and an `intervalMs` of `'abc'` or `-5`
+  polled `ps` every millisecond; the shape that turns a monitor off is `{ filesystem: { enabled: false } }`. A
+  top-level key `ARPConfig` does not have is not refused: it is named in one `console.warn` and construction goes on,
+  so a config file that carries a key from another version still starts the agent. `intelligence`, `dataDir`,
+  `rules`, `declaredCapabilities`, `gtin`, `signatureTelemetry` and `proxy` are not checked.
 
 ### Changed — the README's `init` section opens with the source build, and the npx form follows a release condition
 

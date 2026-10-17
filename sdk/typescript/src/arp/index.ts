@@ -207,6 +207,7 @@ import { PromptInterceptor } from './interceptors/prompt';
 import { MCPProtocolInterceptor } from './interceptors/mcp-protocol';
 import { A2AProtocolInterceptor } from './interceptors/a2a-protocol';
 import { loadConfig } from './config/loader';
+import { validateARPConfig } from './config/validate';
 import { GTINForwarder } from './telemetry/forwarder';
 import { generateSensorToken } from './telemetry/gtin';
 import { SignatureEmitter } from './telemetry/signature/emitter';
@@ -270,6 +271,9 @@ export class AgentRuntimeProtection {
     } else {
       this.config = configOrPath ?? loadConfig();
     }
+    // Before anything is built or written: a monitors, interceptors or aiLayer
+    // shape the types do not allow throws here instead of being read as unset.
+    validateARPConfig(this.config);
 
     const dataDir = this.config.dataDir ?? path.join(process.cwd(), '.opena2a', 'arp');
 
