@@ -203,6 +203,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- The ARP runtime twin's logs under the home directory, `~/.opena2a/arp/events.jsonl` (one line per processed
+  event) and `~/.opena2a/arp/l1-escalations.jsonl` (one line per escalation), are capped. A file above 50 MiB at
+  the next append is renamed to `<name>.<timestamp>.<pid>.<random>` and the append starts a new file, and the five
+  newest renamed copies are kept while older ones are deleted. Run on the code before this change with an
+  `events.jsonl` of 50 MiB plus one byte, one processed event appended its line to that file and renamed nothing,
+  and with six renamed copies beside it, all six stayed. Test:
+  `src/arp/intelligence/runtime-twin.log-rotation.test.ts` (#756).
+
 - `SecretsClient.storeCredential` and `SecretsClient.rotateCredential` send the algorithm as `encryptionAlg`, the
   member `POST /api/v1/secrets/namespaces/{id}/credentials` and `POST /api/v1/secrets/namespaces/{id}/rotate` read,
   so the server is given the algorithm passed in the `encryptionAlgorithm` option (default
