@@ -86,10 +86,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `apps/backend/internal/infrastructure/secrets/awssmtest` is an in-memory server of the Secrets Manager HTTP API
   (AWS JSON 1.1; `CreateSecret`, `GetSecretValue`, `PutSecretValue`, `DeleteSecret`) for tests. The AWS backend is
   tested through the AWS SDK's Secrets Manager client pointed at it, with no AWS account and no AWS endpoint.
+- `apps/backend/internal/infrastructure/secrets/vaultkvtest` is an in-memory server of the KV secrets engine
+  version 2 HTTP API (`GET`, `PUT` and `POST` on `secret/data/<path>`, `GET` and `DELETE` on
+  `secret/metadata/<path>`, and the `X-Vault-Token` check) for tests. The Vault backend is tested through the Vault
+  client pointed at it as well, and a test that runs where a `vault` binary is on PATH sends the same requests to
+  the stub and to `vault server -dev` (Vault 1.21.1) and requires the same answers.
 - Two integration tests resolve a credential stored on each backend as the owning agent, with the namespace,
   agent, audit and nonce repositories on PostgreSQL, open it with the agent's key, and delete the namespace. The
-  Vault one fails when no `vault` binary is on PATH.
+  Vault one runs against `vaultkvtest` and the AWS one against `awssmtest`, so neither needs a `vault` binary or a
+  vendor account.
 - Tests: `apps/backend/internal/infrastructure/secrets/hashicorp_vault_server_test.go`,
+  `apps/backend/internal/infrastructure/secrets/hashicorp_vault_stub_server_test.go`,
+  `apps/backend/internal/infrastructure/secrets/vaultkvtest/vaultkvtest_test.go`,
   `apps/backend/internal/infrastructure/secrets/aws_secrets_server_test.go`,
   `apps/backend/internal/infrastructure/secrets/awssmtest/server_test.go`,
   `apps/backend/internal/application/secrets_external_backends_integration_test.go`.
