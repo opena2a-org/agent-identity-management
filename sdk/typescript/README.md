@@ -45,10 +45,15 @@ console.log(`Trust score: ${result.trustScore}`);
 
 ### Register a first agent from the terminal
 
+`init` is not in 1.3.1, the published version: the 1.3.1 package answers `init` with `Unknown command: init`. While 1.3.1 is the published version, run `init` from a source build of this repository, which reports its version as `1.3.1+source`.
+
 The onboarding screen in the dashboard generates a bootstrap token: it lasts 15 minutes and registers one agent. `init` exchanges it for an agent and saves the agent's credentials:
 
 ```bash
-AIM_BOOTSTRAP_TOKEN=<token> npx @opena2a/aim-sdk init --url https://aim.example.com
+git clone https://github.com/opena2a-org/agent-identity-management.git
+cd agent-identity-management/sdk/typescript
+npm ci && npm run build
+AIM_BOOTSTRAP_TOKEN=<token> node dist/arp/cli/aim-arp.js init --url https://aim.example.com
 ```
 
 ```
@@ -63,15 +68,12 @@ Agent "my-first-agent" is registered.
 The private key was generated on this machine and has not been sent anywhere.
 ```
 
-The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. Run `npx @opena2a/aim-sdk init --help` for every option.
+The Ed25519 key pair is generated locally and only the public key is sent. The credentials file uses the layout the Python SDK reads, so either SDK can load the agent. `--name <name>` names the agent (default `my-first-agent`); `--url` defaults to `AIM_URL`, then `https://aim.opena2a.org`. The token is read from `AIM_BOOTSTRAP_TOKEN` only; a flag that carries it is refused, because a flag value is visible in the process list and shell history. Run `node dist/arp/cli/aim-arp.js init --help` from the same directory for every option.
 
-`init` is not in 1.3.1: there `npx @opena2a/aim-sdk init` answers `Unknown command: init`. While 1.3.1 is the published version, run `init` from a source build of this repository, which reports its version as `1.3.1+source`:
+Once a release after 1.3.1 is published, the same command runs from npm without the clone and the build, and prints the same output:
 
 ```bash
-git clone https://github.com/opena2a-org/agent-identity-management.git
-cd agent-identity-management/sdk/typescript
-npm ci && npm run build
-AIM_BOOTSTRAP_TOKEN=<token> node dist/arp/cli/aim-arp.js init --url https://aim.example.com
+AIM_BOOTSTRAP_TOKEN=<token> npx @opena2a/aim-sdk init --url https://aim.example.com
 ```
 
 ## Features

@@ -78,6 +78,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   "Changed after 1.3.1", and a test holds every "Changed in X" or "Added in X" marker in the README to a release
   heading in this file.
 
+### Changed — the README's `init` section opens with the source build, and the npx form follows a release condition
+
+- "Register a first agent from the terminal" in the README opens with the statement that 1.3.1, the published
+  version, does not have `init`, and its first command block is the source build
+  (`node dist/arp/cli/aim-arp.js init`). The `npx @opena2a/aim-sdk init` block follows, under the sentence "Once a
+  release after 1.3.1 is published". The section led with the npx block, which 1.3.1 answers with
+  `Unknown command: init`, and its option paragraph pointed to `npx @opena2a/aim-sdk init --help`, which 1.3.1
+  answers the same way; that paragraph now points to `node dist/arp/cli/aim-arp.js init --help`.
+- Tests: `tests/readme-init-quickstart-published-surface.test.ts` holds that order while `init` is named only under
+  `## [Unreleased]` headings in this file, and lifts it once a release heading's section names `init`.
+
 ### Deprecated
 
 - `createHybridRequestHeaders`. AIM's request verification does not accept these headers: it verifies a signature
