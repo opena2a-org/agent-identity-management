@@ -123,13 +123,13 @@ def test_a_host_that_only_resembles_or_is_not_a_loopback_host_is_refused(recorde
 
 
 def test_the_refusal_names_the_host_without_the_address_user_part(recorder, agents_dir, capsys):
-    assert run_init("http://someone:s3cret-pass@aim.example.test", token=TOKEN) == 1
+    assert run_init("http://FAKEUSER:FAKEPASS@aim.example.test", token=TOKEN) == 1
 
     out = capsys.readouterr()
     assert_nothing_sent_or_saved(recorder, agents_dir, out)
     assert "aim.example.test" in out.out
-    assert "s3cret-pass" not in out.out
-    assert "someone" not in out.out
+    assert "FAKEPASS" not in out.out
+    assert "FAKEUSER" not in out.out
 
 
 def test_a_host_that_holds_the_token_is_shown_redacted(recorder, agents_dir, capsys):
