@@ -25,6 +25,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   variable can carry, stop the run with a message that names the part of the URL and quotes none of it.
 - Tests: `apps/backend/cmd/bootstrap/aim_backend_script_test.go`.
 
+### Fixed — the dashboard reports a bodiless 200 to an alert channel test as a server error, and the webhook dialogs fit a 375px screen (#762)
+
+- `testAlertChannel` in `apps/web/lib/api.ts` throws the server error line for a `200` whose body has no boolean
+  `delivered`, such as a proxy's empty page. On the previous code it returned `null` for a `200` with an empty body.
+- The create and detail webhook dialogs set their one grid column to `minmax(0,1fr)`, so the column keeps the
+  dialog's width instead of growing to the payload example's longest line, and the detail dialog's URL breaks
+  inside its box. Measured in headless Chromium at 375x812 with the dashboard's stylesheet, the create dialog's
+  `scrollWidth` was 548px and the detail dialog's 456px against a 373px `clientWidth` on the previous code; both
+  now fit.
+- Tests: `apps/web/lib/api.alert-channels.test.ts`, `apps/web/components/webhook/webhook-dialog-width.test.tsx`
+  (runs where a Chromium build for the installed Playwright is present).
+
 ### Fixed — audit rows keep the user agent and client address of the request that wrote them (#751)
 
 - `AuditService.LogAction` and `AuditService.LogAgentAction` copy the client address and user agent into the row.

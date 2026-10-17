@@ -86,6 +86,48 @@ describe('rotateLogIfNeeded', () => {
     }
   });
 
+  it('keeps the newest five rotated copies when a user file such as <name>.bak sits beside them', () => {
+    const file = path.join(dir, 'events.jsonl');
+    const earlier = [1, 2, 3, 4, 5].map((i) => `events.jsonl.${1700000000000 + i}.1.aaaaaaaa`);
+    for (const name of earlier) fs.writeFileSync(path.join(dir, name), 'old');
+    // Letters sort after digits, so a prefix match would count this as the newest copy.
+    fs.writeFileSync(path.join(dir, 'events.jsonl.bak'), 'mine');
+    fs.writeFileSync(file, 'x'.repeat(CAP + 1));
+
+    expect(rotateLogIfNeeded(file, CAP, 5)).toBe(true);
+
+    const copies = fs
+      .readdirSync(dir)
+      .filter((entry) => /^events\.jsonl\.\d{13}\.\d+\.[0-9a-f]{8}$/.test(entry))
+      .sort();
+    expect(copies).toHaveLength(5);
+    expect(copies.slice(0, 4)).toEqual(earlier.slice(1));
+    expect(fs.readFileSync(path.join(dir, 'events.jsonl.bak'), 'utf-8')).toBe('mine');
+  });
+
+  it('rotates the target of a symbolic link beside the target and leaves the link pointing at it', () => {
+    const targetDir = path.join(dir, 'elsewhere');
+    fs.mkdirSync(targetDir);
+    const target = path.join(targetDir, 'events.jsonl');
+    const link = path.join(dir, 'events.jsonl');
+    fs.writeFileSync(target, 'x'.repeat(CAP + 1));
+    fs.symlinkSync(target, link);
+
+    expect(rotateLogIfNeeded(link, CAP, 5)).toBe(true);
+
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(link)).toBe(target);
+    expect(fs.existsSync(target)).toBe(false);
+    const rotated = fs.readdirSync(targetDir).filter((entry) => entry !== 'events.jsonl');
+    expect(rotated).toHaveLength(1);
+    expect(fs.readFileSync(path.join(targetDir, rotated[0]), 'utf-8')).toBe('x'.repeat(CAP + 1));
+    expect(fs.readdirSync(dir).sort()).toEqual(['elsewhere', 'events.jsonl']);
+
+    // The next append through the link lands in the linked location.
+    fs.appendFileSync(link, '{"event":1}\n');
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"event":1}\n');
+  });
+
   it('rotates on each call that finds the file above the cap and never holds more than `keep` copies', () => {
     const file = path.join(dir, 'log.jsonl');
 

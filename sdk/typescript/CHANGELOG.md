@@ -159,6 +159,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   fails it names the directory and the error code (`ENOTDIR`, `EACCES`), says the token has not been used, and sends
   nothing. The README describes the command under Quick Start.
 
+### Fixed — ARP log rotation rotates the file a symbolic link points to and counts only rotated copies, and `telemetryLog('0')` is refused (#762)
+
+- `rotateLogIfNeeded` resolves a symbolic link before it measures and renames, so the file the link points to is
+  rotated beside itself and the link stays in place. Run on the previous code with `events.jsonl` a link to a
+  17-byte file and a 16-byte cap, the rotation renamed the link, the target kept its 17 bytes, and the next append
+  created a regular file at `events.jsonl`.
+- The prune after a rotation counts and deletes only names of the form `<name>.<13 digits>.<digits>.<8 hex
+  digits>`. Run on the previous code with five rotated copies and an `events.jsonl.bak` beside them, one rotation
+  left four rotated copies and the `.bak` file.
+- `telemetryLog`, exported from `src/arp/cli/telemetry.ts`, refuses a count that is not a positive integer and
+  returns 1, as `aim-arp telemetry log 0` already did. Called directly on the previous code with `'0'` on a log of
+  25 records, it printed 20 records and returned 0.
+- Tests: `src/arp/reporting/log-rotation.test.ts`, `src/arp/cli/telemetry-audit-log-corrupt.test.ts`.
+
 ### Fixed — `SecretsClient` encodes its query values, and sends the store and rotate members the server reads (#751)
 
 - `getAuditLog` and `listNamespaces` encode each query value. `getAuditLog` put `since` in the path as passed, so

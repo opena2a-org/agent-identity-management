@@ -1921,6 +1921,11 @@ class APIClient {
 
     const body = await response.json().catch(() => null);
     if (response.ok) {
+      // A success without the result (a proxy's empty page) is a malformed
+      // answer: the page cannot say whether the test was delivered.
+      if (typeof body?.delivered !== "boolean") {
+        throw serverError(response.status);
+      }
       return body as AlertChannelTestResult;
     }
     // A proxy's own 502 page has no such body, and stays a server error.

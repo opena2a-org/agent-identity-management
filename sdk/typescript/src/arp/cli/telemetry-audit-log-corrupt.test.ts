@@ -219,6 +219,20 @@ describe('telemetry log N shows the last N records, not the records among the la
     for (const id of ['T-0001', 'T-0002', 'T-0003', 'T-0004', 'T-0005']) expect(out).toContain(id);
   });
 
+  it('log 0 shows no records and names the accepted range, through the function and the bin dispatch', async () => {
+    writeLog(Array.from({ length: 25 }, (_, i) => record(i + 1, 'sent')).join('\n') + '\n');
+    const errors: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => {
+      errors.push(a.join(' '));
+    });
+
+    expect(await telemetryLog('0')).toBe(1);
+    expect(await runAimArp(['telemetry', 'log', '0'])).toBe(1);
+
+    expect(lines.join('\n')).not.toContain('T-00');
+    expect(errors.filter((e) => e.includes('log expects a positive integer count, got: 0'))).toHaveLength(2);
+  });
+
   it('readAuditLog counts the unreadable lines after the oldest record it returns', async () => {
     writeLog(`not json\n${record(1, 'sent')}\n${record(2, 'sent')}\nalso not json\n`);
     const two = await readAuditLog(2);

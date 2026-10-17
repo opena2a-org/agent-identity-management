@@ -147,6 +147,20 @@ describe("api: alert channel methods against the server's routes", () => {
     await expect(api.testAlertChannel(id)).rejects.toMatchObject({ message: SERVER_ERROR_MESSAGE, status: 500 });
   });
 
+  it("reports a 200 without the test result, such as a proxy's empty page, as the server error line", async () => {
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => new Response("", { status: 200 })));
+    await expect(api.testAlertChannel(id)).rejects.toMatchObject({ message: SERVER_ERROR_MESSAGE, status: 200 });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => new Response("<html>OK</html>", { status: 200 })),
+    );
+    await expect(api.testAlertChannel(id)).rejects.toMatchObject({ message: SERVER_ERROR_MESSAGE, status: 200 });
+
+    answer(200, {});
+    await expect(api.testAlertChannel(id)).rejects.toMatchObject({ message: SERVER_ERROR_MESSAGE, status: 200 });
+  });
+
   it("throws a 4xx refusal with the server's message and status", async () => {
     answer(404, { error: "not found" });
     await expect(api.testAlertChannel(id)).rejects.toMatchObject({ message: "not found", status: 404 });

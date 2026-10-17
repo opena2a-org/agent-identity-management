@@ -111,7 +111,13 @@ export function telemetrySubcommandHelp(sub: TelemetrySubcommand): string {
  * from the dispatch's return value, which overwrote a 1 set here.
  */
 export async function telemetryLog(countArg?: string): Promise<number> {
-  const n = parseInt(countArg ?? '', 10) || 20;
+  // `parseInt(...) || 20` turned an explicit 0 into 20 records.
+  if (countArg !== undefined && !/^[1-9]\d*$/.test(countArg)) {
+    console.error(`  log expects a positive integer count, got: ${countArg}`);
+    console.error(`  Run: ${SHIPPED_INVOCATION} --help`);
+    return 1;
+  }
+  const n = countArg === undefined ? 20 : Number(countArg);
   const { records, unparseable, readError } = await readAuditLog(n);
   console.log(`\n  Telemetry audit log: ${auditLogPath()}`);
   // A log that could not be read, or whose lines could not be parsed, is not
