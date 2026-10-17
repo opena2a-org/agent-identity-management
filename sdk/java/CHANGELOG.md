@@ -95,6 +95,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reconnecting to an existing agent (`AIMClient.secure` for an agent name AIM already holds) no longer sends
   `tagIds` in its `PUT /api/v1/agents/{id}`: the update route does not read them. Tags are applied when AIM
   creates the agent, and the javadoc of `Builder.tags` and `secure` says so (#716).
+- After the server refuses a refresh, `AIMClient` presents the refused token to `POST /api/v1/auth/refresh` only.
+  When it held an unexpired access token, it sent the refused token to `POST /api/v1/auth/sdk/recover` with that
+  access token as the bearer, after printing "Token was revoked - attempting automatic recovery...". The access
+  tokens `AIMClient` holds are minted by refreshing a downloaded SDK's token: they carry the download's token
+  family and no sign-in time, and the recovery route answers such a bearer `401` before it reads the old token.
+  That request and its line are removed, with the client's `attemptTokenRecovery` method.
+- The `SDK TOKEN EXPIRED` banner printed after a refusal lists the server's maximum age for a download: "The SDK
+  download reached the server's maximum age (SDK_TOKEN_FAMILY_MAX_AGE, 365 days by default). Refreshing does not
+  extend it; a fresh download starts a new one." The server answers that refresh `401`
+  `{"error":"Invalid or expired refresh token"}`. The banner's dashboard steps name "Developers, then SDK & docs"
+  for the download and "Developers, then Credentials" for SDK tokens, the dashboard's tabs, where it named
+  "Settings -> SDK Downloads" and "Settings -> SDK Tokens".
+- Test: `AIMClientSdkRecoverRouteTest` refuses the second refresh with `Invalid or expired refresh token` and with
+  `Token has been revoked or is invalid`, and for each checks that the client refreshes twice, sends nothing to the
+  recovery route, prints the banner once with the maximum-age cause and the two dashboard steps, and prints no
+  "Settings" and no "recovery". It reads from the backend source that the recovery handler refuses an access token
+  without a sign-in before it reads the old token, that `jwt.go` gives an SDK token's refreshed access token no
+  sign-in time, the `8760h` and `365 * 24 * time.Hour` defaults and the maximum-age refusal body, and from
+  `apps/web/lib/hub-tabs.ts` that the dashboard's Developers tabs include SDK & docs and Credentials. On the
+  previous client both refusal cases fail: each sent `POST /api/v1/auth/sdk/recover`.
 
 ### Deprecated
 
