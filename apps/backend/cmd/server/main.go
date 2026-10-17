@@ -2045,6 +2045,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	webhooks.Get("/:id", h.Webhook.GetWebhook)
 	webhooks.Put("/:id", middleware.MemberMiddleware(), h.Webhook.UpdateWebhook) // Update webhook
 	webhooks.Delete("/:id", middleware.MemberMiddleware(), h.Webhook.DeleteWebhook)
+	webhooks.Post("/:id/rotate-secret", middleware.MemberMiddleware(), h.Webhook.RotateWebhookSecret)
 	webhooks.Post("/:id/test", h.Webhook.TestWebhook) // Test webhook endpoint
 
 	// Verification routes (authentication required) - Agent action verification

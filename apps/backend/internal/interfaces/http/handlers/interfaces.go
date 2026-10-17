@@ -335,5 +335,6 @@ type WebhookServicer interface {
 	GetWebhook(ctx context.Context, id uuid.UUID) (*domain.Webhook, error)
 	DeleteWebhook(ctx context.Context, id uuid.UUID) error
 	UpdateWebhook(ctx context.Context, id uuid.UUID, req *application.CreateWebhookRequest) (*domain.Webhook, error)
+	RotateWebhookSecret(ctx context.Context, id, orgID uuid.UUID) (string, error)
 	TestWebhook(ctx context.Context, id uuid.UUID) (*application.WebhookTestResult, error)
 }

@@ -46,6 +46,9 @@ var retiredIntegrationClaims = map[string][]string{
 	},
 	"docs/API.md": {
 		"\"secret\": \"your-webhook-secret\"",
+		"a receiver cannot check that header yet",
+		"a `secret` field in the request is ignored",
+		"An event name outside the table below is accepted and never sent.",
 	},
 	"apps/backend/internal/integrations/siem/adapter.go": {
 		"which Microsoft retired on 14 September 2026",
@@ -68,7 +71,8 @@ var measuredIntegrationClaims = map[string][]string{
 		"Microsoft ended support for the Azure Monitor HTTP Data Collector API, which the source tree's Sentinel adapter targets, on 14 September 2026.",
 	},
 	"docs/API.md": {
-		"so a receiver cannot check that header yet; a `secret` field in the request is ignored.",
+		"The create answer is the only one that carries the secret",
+		"| `{\"error\":\"unsupported event: auth.failed\"}` | An event name that is not one of those in [Webhook Events](#webhook-events). |",
 	},
 	"apps/backend/internal/integrations/siem/adapter.go": {
 		"// Data Collector API, for which Microsoft ended support on 14 September 2026,",

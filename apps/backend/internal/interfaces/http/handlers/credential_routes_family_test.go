@@ -18,7 +18,8 @@ import (
 )
 
 // An API key's creation, an agent's key read (raw or inside its SDK), rotated
-// or replaced, a secret's rotation and a webhook's creation or update refuse
+// or replaced, a secret's rotation and a webhook's creation, update or secret
+// rotation refuse
 // an acting access token whose session (family) was revoked, through the same
 // guard as the three credential-minting routes (credential_mint_family_test.go):
 // the unchanged 401, one credential_mint_refused row and one SECURITY line
@@ -59,6 +60,8 @@ func sessionRoutes() []sessionRoute {
 			mint: "CreateWebhook", handler: handlerOf(webhookHandlerFor, (*WebhookHandler).CreateWebhook)},
 		{label: "webhook_update", method: "PUT", route: "/webhooks/:id", body: hookBody, liveStatus: fiber.StatusOK,
 			mint: "UpdateWebhook", handler: handlerOf(webhookHandlerFor, (*WebhookHandler).UpdateWebhook)},
+		{label: "webhook_rotate_secret", method: "POST", route: "/webhooks/:id/rotate-secret", liveStatus: fiber.StatusOK,
+			mint: "RotateWebhookSecret", handler: handlerOf(webhookHandlerFor, (*WebhookHandler).RotateWebhookSecret)},
 	}
 }
 
@@ -271,6 +274,10 @@ func webhookHandlerFor(f *mintFixture, calls *[]string) *WebhookHandler {
 		UpdateWebhookFunc: func(_ context.Context, id uuid.UUID, req *application.CreateWebhookRequest) (*domain.Webhook, error) {
 			*calls = append(*calls, "UpdateWebhook")
 			return &domain.Webhook{ID: id, OrganizationID: f.orgID, Name: req.Name, URL: req.URL}, nil
+		},
+		RotateWebhookSecretFunc: func(_ context.Context, _, _ uuid.UUID) (string, error) {
+			*calls = append(*calls, "RotateWebhookSecret")
+			return "rotated-" + uuid.NewString(), nil
 		},
 	}
 	h := NewWebhookHandlerWithInterfaces(webhooks, application.NewAuditService(f.audit))

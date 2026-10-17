@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -1636,6 +1637,15 @@ type MockWebhookServicerImpl struct {
 	DeleteWebhookFunc func(ctx context.Context, id uuid.UUID) error
 	UpdateWebhookFunc func(ctx context.Context, id uuid.UUID, req *application.CreateWebhookRequest) (*domain.Webhook, error)
 	TestWebhookFunc   func(ctx context.Context, id uuid.UUID) (*application.WebhookTestResult, error)
+
+	RotateWebhookSecretFunc func(ctx context.Context, id, orgID uuid.UUID) (string, error)
+}
+
+func (m *MockWebhookServicerImpl) RotateWebhookSecret(ctx context.Context, id, orgID uuid.UUID) (string, error) {
+	if m.RotateWebhookSecretFunc != nil {
+		return m.RotateWebhookSecretFunc(ctx, id, orgID)
+	}
+	return "", errors.New("RotateWebhookSecret not mocked")
 }
 
 func (m *MockWebhookServicerImpl) CreateWebhook(ctx context.Context, req *application.CreateWebhookRequest, orgID, userID uuid.UUID) (*domain.Webhook, error) {

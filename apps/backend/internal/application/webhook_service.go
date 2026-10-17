@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -145,6 +146,53 @@ type CreateWebhookRequest struct {
 	URL      string                `json:"url" validate:"required,url"`
 	Events   []domain.WebhookEvent `json:"events" validate:"required"`
 	IsActive *bool                 `json:"isActive,omitempty"` // Pointer to distinguish between false and not provided
+	// Secret is the secret a create stores to sign the webhook's deliveries,
+	// MinWebhookSecretLength to MaxWebhookSecretLength characters. When it is
+	// empty, CreateWebhook generates one. An update does not take it: the
+	// secret changes only through RotateWebhookSecret.
+	Secret string `json:"secret,omitempty"`
+}
+
+// MinWebhookSecretLength is the fewest characters a caller-chosen webhook
+// secret has: an HMAC key at least as long as the SHA-256 output, as RFC 2104
+// recommends. MaxWebhookSecretLength is the most the secret column stores.
+const (
+	MinWebhookSecretLength = 32
+	MaxWebhookSecretLength = 255
+)
+
+// WebhookRequestError is returned by a webhook create or update the server
+// refuses for what the request asks: an event the server does not know, or a
+// secret outside the lengths it takes. Reason is said to the caller.
+type WebhookRequestError struct {
+	Reason string
+}
+
+func (e *WebhookRequestError) Error() string { return e.Reason }
+
+// checkWebhookEvents refuses an event that is not one of
+// domain.AllWebhookEvents, naming it: a webhook subscribed to it would never
+// receive a delivery.
+func checkWebhookEvents(events []domain.WebhookEvent) error {
+	for _, event := range events {
+		if !domain.IsKnownWebhookEvent(event) {
+			return &WebhookRequestError{Reason: fmt.Sprintf("unsupported event: %s", event)}
+		}
+	}
+	return nil
+}
+
+// checkWebhookSecret refuses a caller-chosen secret shorter than
+// MinWebhookSecretLength or longer than MaxWebhookSecretLength characters.
+func checkWebhookSecret(secret string) error {
+	length := utf8.RuneCountInString(secret)
+	if length < MinWebhookSecretLength {
+		return &WebhookRequestError{Reason: fmt.Sprintf("secret must be at least %d characters", MinWebhookSecretLength)}
+	}
+	if length > MaxWebhookSecretLength {
+		return &WebhookRequestError{Reason: fmt.Sprintf("secret must be at most %d characters", MaxWebhookSecretLength)}
+	}
+	return nil
 }
 
 // ErrWebhookURLRefused is wrapped by a webhook create or update whose URL the
@@ -169,17 +217,31 @@ func checkWebhookURL(rawURL string) error {
 	return fmt.Errorf("%w: %w", ErrWebhookURLRefused, err)
 }
 
-// CreateWebhook creates a new webhook subscription
+// CreateWebhook creates a new webhook subscription. Its deliveries are signed
+// with req.Secret when the caller chose one, and with a generated secret
+// otherwise; the returned webhook holds that secret.
 func (s *WebhookService) CreateWebhook(ctx context.Context, req *CreateWebhookRequest, orgID, userID uuid.UUID) (*domain.Webhook, error) {
+	if err := checkWebhookEvents(req.Events); err != nil {
+		return nil, err
+	}
+	secret := req.Secret
+	if secret != "" {
+		if err := checkWebhookSecret(secret); err != nil {
+			return nil, err
+		}
+	}
+
 	// SECURITY: Validate URL to prevent SSRF attacks
 	if err := checkWebhookURL(req.URL); err != nil {
 		return nil, err
 	}
 
-	// Generate secret for webhook signature
-	secret, err := generateSecret()
-	if err != nil {
-		return nil, err
+	if secret == "" {
+		generated, err := generateSecret()
+		if err != nil {
+			return nil, err
+		}
+		secret = generated
 	}
 
 	webhook := &domain.Webhook{
@@ -189,7 +251,7 @@ func (s *WebhookService) CreateWebhook(ctx context.Context, req *CreateWebhookRe
 		URL:            req.URL,
 		Events:         req.Events,
 		Secret:         secret,
-		IsActive:       true,
+		IsActive:       req.IsActive == nil || *req.IsActive,
 		FailureCount:   0,
 		CreatedBy:      userID,
 		CreatedAt:      time.Now().UTC(),
@@ -218,8 +280,16 @@ func (s *WebhookService) DeleteWebhook(ctx context.Context, id uuid.UUID) error 
 	return s.webhookRepo.Delete(id)
 }
 
-// UpdateWebhook updates an existing webhook
+// UpdateWebhook updates an existing webhook. It does not change the secret,
+// and refuses a request that carries one.
 func (s *WebhookService) UpdateWebhook(ctx context.Context, id uuid.UUID, req *CreateWebhookRequest) (*domain.Webhook, error) {
+	if req.Secret != "" {
+		return nil, &WebhookRequestError{Reason: "unknown field: secret"}
+	}
+	if err := checkWebhookEvents(req.Events); err != nil {
+		return nil, err
+	}
+
 	// SECURITY: Validate URL to prevent SSRF attacks
 	if err := checkWebhookURL(req.URL); err != nil {
 		return nil, err
@@ -249,6 +319,22 @@ func (s *WebhookService) UpdateWebhook(ctx context.Context, id uuid.UUID, req *C
 	}
 
 	return webhook, nil
+}
+
+// RotateWebhookSecret replaces the secret of the organization's webhook id
+// with a newly generated one and returns it. Every attempt of a delivery is
+// signed with the secret the webhook had when the delivery was queued, so a
+// delivery queued after the rotation carries the new signature, and one queued
+// before it, retries included, keeps the old one.
+func (s *WebhookService) RotateWebhookSecret(ctx context.Context, id, orgID uuid.UUID) (string, error) {
+	secret, err := generateSecret()
+	if err != nil {
+		return "", err
+	}
+	if err := s.webhookRepo.UpdateSecret(id, orgID, secret); err != nil {
+		return "", err
+	}
+	return secret, nil
 }
 
 // WebhookTestResult contains the result of a webhook test

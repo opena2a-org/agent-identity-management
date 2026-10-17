@@ -969,13 +969,78 @@ Create a webhook.
 **Request:**
 ```json
 {
-  "name": "aim-events",
+  "name": "Production receiver",
   "url": "https://yourapp.com/webhooks/aim",
-  "events": ["agent.verified", "alert.created"]
+  "events": ["agent.verified", "alert.created"],
+  "secret": "<a secret of 32 to 255 characters>"
 }
 ```
 
-The server generates the secret it signs `X-Webhook-Signature` with and does not return it, so a receiver cannot check that header yet; a `secret` field in the request is ignored. An event name outside the table below is accepted and never sent.
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | A name for the webhook. |
+| `url` | Yes | The endpoint deliveries are sent to: a public `http` or `https` URL. |
+| `events` | Yes | Event names from [Webhook Events](#webhook-events). |
+| `isActive` | No | `false` creates the webhook inactive. Defaults to `true`. |
+| `secret` | No | The secret deliveries are signed with, 32 to 255 characters, stored as given. When it is left out, the server generates a 64-character hex secret. |
+
+**Response (201 Created):** the webhook, and its `secret` this once:
+```json
+{
+  "id": "0c6f3c1e-8f0e-4a63-9a43-2f1d8b7e5a10",
+  "organizationId": "7d9f2b4a-1c3e-4f5a-8b6c-9d0e1f2a3b4c",
+  "name": "Production receiver",
+  "url": "https://yourapp.com/webhooks/aim",
+  "events": ["agent.verified", "alert.created"],
+  "status": "",
+  "timeoutSeconds": 0,
+  "maxRetries": 0,
+  "retryDelaySeconds": 0,
+  "successCount": 0,
+  "failureCount": 0,
+  "isActive": true,
+  "createdAt": "2026-10-16T00:00:00Z",
+  "updatedAt": "2026-10-16T00:00:00Z",
+  "createdBy": "550e8400-e29b-41d4-a716-446655440000",
+  "secret": "<the secret from the request>"
+}
+```
+
+The create answer is the only one that carries the secret: `GET /api/v1/webhooks`,
+`GET /api/v1/webhooks/:id` and `PUT /api/v1/webhooks/:id` never return it. Keep it when the webhook is
+created; a secret that is lost is replaced with `POST /api/v1/webhooks/:id/rotate-secret`.
+
+A create or update the server refuses is answered `400`:
+
+| Answer | When |
+|--------|------|
+| `{"error":"unknown field: headers"}` | The body has a key the route does not take (`unknown fields: a, b` for several). Keys are matched exactly, case included. |
+| `{"error":"unsupported event: auth.failed"}` | An event name that is not one of those in [Webhook Events](#webhook-events). |
+| `{"error":"secret must be at least 32 characters"}` | `secret` is shorter than 32 characters; one longer than 255 is answered `secret must be at most 255 characters`. |
+| `{"error":"url must be a public http or https URL"}` | The URL does not parse, is not `http` or `https`, has no host, names a host that does not exist, or resolves to an address the server does not send to, such as a loopback or private one. |
+
+### PUT /api/v1/webhooks/:id
+
+Update a webhook. The body takes `name`, `url`, `events` and `isActive`, refused as on create. It does
+not take `secret`: a body carrying one is answered `400 {"error":"unknown field: secret"}`.
+
+### POST /api/v1/webhooks/:id/rotate-secret
+
+Replace a webhook's secret with a new generated 64-character hex secret. The request has no body.
+
+**Response (200 OK):** the new secret, this once:
+```json
+{
+  "id": "0c6f3c1e-8f0e-4a63-9a43-2f1d8b7e5a10",
+  "secret": "<64 hex characters>"
+}
+```
+
+There is no overlap period: every delivery queued after the rotation is signed with the new secret only,
+and the old secret signs nothing queued after it. A delivery queued before the rotation, retries included,
+keeps the signature it was queued with. The rotation is written to the audit log as an `update` of the
+`webhook`, with `rotatedSecret: true` in its metadata and without the secret. A webhook that does not
+exist is answered `404`.
 
 ### Webhook Events
 
@@ -996,7 +1061,8 @@ An active webhook subscribed to an event receives it when:
 | `api_key.revoked` | An active API key is disabled through `PATCH /api/v1/api-keys/:id/disable`. |
 
 A subscription accepts these names, and no event is sent for them: `api_key.expired`, `security.violation`,
-`compliance.violation`, `security.capability_drift`, `security.data_exfiltration`.
+`compliance.violation`, `security.capability_drift`, `security.data_exfiltration`. A create or update
+naming any other event is refused with `400 {"error":"unsupported event: <name>"}`.
 
 The data of an `agent.*` event is the agent after the change: `agentId`, `name`, `displayName`,
 `agentType`, `status` and `trustScore`. A `trust_score.*` event carries `agentId`, `agentName`,
