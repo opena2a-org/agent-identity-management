@@ -174,6 +174,9 @@ export interface IntelligenceConfig {
    *
    * Setting this to `false` explicitly also disables the local behavioral twin
    * (L1's risk source). Leaving it absent does not.
+   *
+   * Must be a boolean. Any other value, including the strings `"false"`, `"0"`,
+   * `"no"` and `"off"`, is refused at construction.
    */
   enabled?: boolean;
   /**

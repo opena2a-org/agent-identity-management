@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, type MockInstance } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { AgentRuntimeProtection, defaultConfig } from '../../../src/arp';
@@ -58,18 +58,24 @@ function cfg(extra: Record<string, unknown>): ARPConfig {
 
 /**
  * Construct, and return the error, or a description of what was built when
- * nothing was thrown, so a failure shows the monitors the config left running.
+ * nothing was thrown, so a failure shows the monitors the config left running
+ * and whether the behavioral twin and the guard anomaly detector were built.
  */
-function construct(config: ARPConfig | string): unknown {
+function construct(config: ARPConfig | string | undefined): unknown {
   try {
     const arp = new AgentRuntimeProtection(config);
-    return { constructed: true, monitors: arp.getStatus().monitors.map((m) => m.type) };
+    return {
+      constructed: true,
+      monitors: arp.getStatus().monitors.map((m) => m.type),
+      runtimeTwin: arp.getRuntimeTwin() !== null,
+      guardAnomaly: arp.getIntelligence().getGuardAnomaly() !== null,
+    };
   } catch (err) {
     return err;
   }
 }
 
-function expectRefused(config: ARPConfig | string, keyPath: string): string {
+function expectRefused(config: ARPConfig | string | undefined, keyPath: string): string {
   const outcome = construct(config);
   expect(outcome, `constructed instead: ${JSON.stringify(outcome)}`).toBeInstanceOf(TypeError);
   const message = (outcome as TypeError).message;
@@ -251,5 +257,99 @@ describe('ARP config shape: what is accepted', () => {
 
   it('accepts empty monitors, interceptors and aiLayer blocks', () => {
     expectAccepted(cfg({ monitors: { process: { enabled: false }, network: { enabled: false }, filesystem: { enabled: false } }, interceptors: {}, aiLayer: {} }));
+  });
+});
+
+/**
+ * `intelligence.enabled`, `intelligence.runtimeTwin.enabled` and
+ * `intelligence.guardAnomaly.enabled` switch the behavioral twin and the guard
+ * anomaly detector off only when they are the boolean `false`. Before this
+ * check a string such as "false" or the number 0 was read as on: the
+ * constructor built the twin, and the detector when given a baseline, exactly
+ * as it does when the key is not set.
+ *
+ * No config here names `intelligence.adapter`, so L2 has no destination, and
+ * no test calls start().
+ */
+const GUARD_BASELINE = { 'file-read': 0.4, 'network-egress': 0.3, 'process-spawn': 0.2, telemetry: 0.1 };
+
+/** Write a config file into its own directory under the scratch directory and return its path. */
+function writeConfigFile(dir: string, name: string, content: string): string {
+  mkdirSync(join(scratch, dir), { recursive: true });
+  const file = join(scratch, dir, name);
+  writeFileSync(file, content);
+  return file;
+}
+
+describe('ARP config shape: the intelligence switches', () => {
+  it.each<unknown>(['false', 'no', 0, '0', 'true', null, 1])('refuses intelligence.enabled: %o', (value) => {
+    const message = expectRefused(cfg({ intelligence: { enabled: value } }), 'intelligence.enabled');
+    expect(message).toContain('must be the boolean true or false');
+    expect(message).toContain(`got ${JSON.stringify(value)}`);
+  });
+
+  it('accepts intelligence.enabled: false without a throw or a warning, and builds no twin', () => {
+    const warn = spyWarn();
+    expect(construct(cfg({ intelligence: { enabled: false } }))).toMatchObject({ constructed: true, runtimeTwin: false });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('accepts intelligence.enabled: true (L2 is withheld at startup for want of an adapter)', () => {
+    spyWarn();
+    expect(construct(cfg({ intelligence: { enabled: true } }))).toMatchObject({ constructed: true });
+  });
+
+  it.each([
+    ['intelligence.runtimeTwin.enabled', { runtimeTwin: { enabled: 'false' } }],
+    ['intelligence.guardAnomaly.enabled', { guardAnomaly: { enabled: 'false', baseline: GUARD_BASELINE } }],
+  ])('refuses %s: "false"', (keyPath, intelligence) => {
+    const message = expectRefused(cfg({ intelligence }), keyPath);
+    expect(message).toContain('got "false"');
+  });
+
+  // Each value in its own tuple: it.each spreads a case that is an array, so a bare [] would arrive as no argument.
+  it.each<[unknown]>([['off'], [false], [null], [[]]])('refuses intelligence: %o, naming the block', (value) => {
+    const message = expectRefused(cfg({ intelligence: value }), 'intelligence must be an object');
+    expect(message).toContain(`got ${JSON.stringify(value)}`);
+  });
+
+  it('refuses the file form: a path to an arp.json holding intelligence.enabled: "false"', () => {
+    const file = writeConfigFile(
+      'enabled-json',
+      'arp.json',
+      JSON.stringify({ dataDir: join(scratch, 'enabled-json', 'data'), intelligence: { enabled: 'false' } }),
+    );
+    expectRefused(file, 'intelligence.enabled');
+  });
+
+  it('refuses the same arp.json when it is found by auto-discovery in the working directory', () => {
+    const cwd = join(scratch, 'cwd');
+    writeConfigFile(
+      'cwd',
+      'arp.json',
+      JSON.stringify({ dataDir: join(cwd, 'data'), intelligence: { enabled: 'false' } }),
+    );
+    vi.spyOn(process, 'cwd').mockReturnValue(cwd);
+    expectRefused(undefined, 'intelligence.enabled');
+  });
+
+  it('refuses an arp.yaml line enabled: no, which js-yaml reads as the string "no"', () => {
+    const file = writeConfigFile(
+      'enabled-yaml',
+      'arp.yaml',
+      `dataDir: ${JSON.stringify(join(scratch, 'enabled-yaml', 'data'))}\nintelligence:\n  enabled: no\n`,
+    );
+    const message = expectRefused(file, 'intelligence.enabled');
+    expect(message).toContain('got "no"');
+  });
+
+  it.each([
+    [
+      'booleans in all three keys',
+      { enabled: false, runtimeTwin: { enabled: true, fleetEnabled: false }, guardAnomaly: { enabled: false, baseline: GUARD_BASELINE } },
+    ],
+    ['an unset intelligence.enabled and an undefined runtimeTwin.enabled', { runtimeTwin: { enabled: undefined }, guardAnomaly: { enabled: true } }],
+  ])('accepts %s without a throw or a warning', (_name, intelligence) => {
+    expectAccepted(cfg({ intelligence }));
   });
 });
