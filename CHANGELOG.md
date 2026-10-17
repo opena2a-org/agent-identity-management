@@ -11,17 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
-### Changed — the server reads every environment variable in one config package, and a recorded table pins each
+### Changed — `cmd/server` reads the environment only through `internal/config`, and a recorded table pins each variable
 
-- `internal/config` reads all 70 variables the server process reads itself, each into a typed field of
+- `internal/config` reads all 70 variables that `cmd/server` read, or that it read already, each into a typed field of
   `config.Config`: the 32 it read already and the 38 that `cmd/server` read on its own (the secrets
   backends, the registry bridge, the ATC issuer and CRL endpoint, FGA, the email startup line, the first
   administrator, `ALLOWED_ORIGINS`, `AUTH_REVOCATION_FAIL_OPEN`, `METRICS_LISTEN_ADDR`,
   `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD`, and the `SIEM_*` and `AIM_SIGNING_KEY_*` variables,
   which the SIEM settings and the signing key ring now read through `Config`). `cmd/server` reads the
   `Config` value. Variables other packages read (token lifetimes, rate limits, email delivery,
-  telemetry, the key vault) are read where they were.
-- One rule, stated on `config.Load`: an empty value reads as unset and gives the default, and a value
+  telemetry, the key vault) are read where they were, and four of the 70 are also read by other packages
+  with their own rules: `ENVIRONMENT` (the detection service, the rate limit and security header
+  middleware, and the key vault; the detection service treats unset as not development, where
+  `config.Load` reads unset as `development`), `JWT_SECRET` (the JWT package), `FRONTEND_URL` (the
+  registration service and the AIP handler) and `REGISTRY_BRIDGE_URL` (the registry client, which trims
+  it).
+- One rule, stated on `config.Load` and applied to every value it reads: an empty value reads as unset and gives the default, and a value
   is used as written, never trimmed. `REDIS_HOST` set and empty still turns Redis off; a number or a
   duration that does not parse still gives the default; and a flag is still on only for its word:
   `true` for `REDIS_USE_TLS` and `REGISTRY_BRIDGE_ENABLED`, `true` in any case for
