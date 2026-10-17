@@ -471,3 +471,13 @@ def isolated_home(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(grant_client, "DEFAULT_SOCKET_PATH", str(broker_dir / "broker.sock"))
     monkeypatch.setattr(grant_client, "DEFAULT_TOKEN_PATH", str(broker_dir / "broker.token"))
     return home
+
+
+# With no stored credentials and CI unset, secure() starts a device sign-in
+# when standard input is a terminal (client._a_person_can_approve_a_sign_in),
+# as it is under `pytest -s` run at one. CI is set for every test so that a
+# test expecting the no-credentials error sends no request; a test of the
+# sign-in removes it.
+@pytest.fixture(autouse=True)
+def no_inline_sign_in(monkeypatch):
+    monkeypatch.setenv("CI", "1")

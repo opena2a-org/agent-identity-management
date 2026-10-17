@@ -6,6 +6,7 @@ import atexit
 import base64
 import functools
 import json
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -4745,6 +4746,36 @@ def _validate_cached_credentials(
         return True, None
 
 
+def _in_ipython_kernel() -> bool:
+    """True when the code runs in an IPython kernel (a notebook): its shell carries the kernel."""
+    get_ipython = getattr(sys.modules.get("IPython"), "get_ipython", None)
+    if not callable(get_ipython):
+        return False
+    try:
+        shell = get_ipython()
+    except Exception:
+        return False
+    return getattr(shell, "kernel", None) is not None
+
+
+def _a_person_can_approve_a_sign_in() -> bool:
+    """
+    True when secure() may start a device sign-in and wait for a person to
+    approve the code: the CI variable is unset or empty, and standard input is
+    a terminal or the code runs in an IPython kernel. Otherwise (CI set, or
+    standard input a pipe, a file or None outside an IPython kernel) secure()
+    raises the no-credentials ConfigurationError before any request.
+    """
+    if _os.environ.get("CI"):
+        return False
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            return True
+    except (AttributeError, ValueError):
+        pass
+    return _in_ipython_kernel()
+
+
 def register_agent(
     name: str,
     aim_url: Optional[str] = None,
@@ -4798,9 +4829,23 @@ def register_agent(
         store. Requires a self-hosted backend built on or after 2026-08-26
         (the published edge image qualifies). aim_url is required.
 
+    **SIGN IN ON DEMAND** (pip install, no credentials yet):
+        from aim_sdk import secure
+        agent = secure("my-agent", capabilities=["db:read"])
+        # With no SDK credentials (from `aim-sdk login` or a dashboard
+        # download) and no api_key, and a person present (the CI variable
+        # unset or empty, and standard input a terminal or an IPython kernel),
+        # the call first signs this machine in with the device grant
+        # `aim-sdk login` uses, to aim_url or https://aim.opena2a.org. It
+        # writes the page and the code to standard error, waits for the
+        # approval, stores the credentials `aim-sdk login` stores, then
+        # registers. With neither and no person present, it raises
+        # ConfigurationError before any request.
+
     Args:
         name: Agent name (unique identifier)
-        aim_url: AIM server URL (auto-detected from SDK credentials if available)
+        aim_url: AIM server URL (auto-detected from SDK credentials if available;
+            with no SDK credentials and no api_key, the server the call signs in to)
         api_key: AIM agent API key (aim_live_...) issued for an existing agent in your
             organization; only required if no SDK credentials are found. Requires aim_url.
         display_name: Human-readable display name (defaults to name)
@@ -5059,6 +5104,14 @@ def register_agent(
 
     # 2. Detect authentication mode (SDK vs Manual)
     sdk_creds = load_sdk_credentials()
+
+    if not sdk_creds and not api_key and _a_person_can_approve_a_sign_in():
+        # No SDK credentials and no api_key, and a person at a terminal or in
+        # a notebook: sign this machine in now with the device grant `aim-sdk
+        # login` uses, then register in OAuth mode with what it stored. Stored
+        # SDK credentials the server refuses never reach this branch.
+        from .cli import DEFAULT_AIM_URL, sign_in_inline
+        sdk_creds = sign_in_inline(aim_url or DEFAULT_AIM_URL, agent_name=name)
 
     # Force API key mode if sdk_token_id is explicitly set to None
     if sdk_token_id is None and api_key:
