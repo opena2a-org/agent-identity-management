@@ -2,6 +2,11 @@ package smtptest
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"net"
 	"net/smtp"
 	"strings"
@@ -50,18 +55,58 @@ func (c *client) read() (string, []string) {
 // send writes line with CRLF and returns the reply's code.
 func (c *client) send(line string) string {
 	c.t.Helper()
-	_, err := c.conn.Write([]byte(line + "\r\n"))
-	require.NoError(c.t, err)
-	code, _ := c.read()
+	code, _ := c.sendLines(line)
 	return code
 }
 
-func newServer(t *testing.T) *Server {
+// sendLines writes line with CRLF and returns the reply's code and lines.
+func (c *client) sendLines(line string) (string, []string) {
+	c.t.Helper()
+	_, err := c.conn.Write([]byte(line + "\r\n"))
+	require.NoError(c.t, err)
+	return c.read()
+}
+
+// sendReply writes line with CRLF and returns the reply as "<code> <text>",
+// the last line's text for a multiline reply.
+func (c *client) sendReply(line string) string {
+	c.t.Helper()
+	code, lines := c.sendLines(line)
+	return code + " " + lines[len(lines)-1]
+}
+
+// startTLS sends STARTTLS, requires 220, and runs the client side of the
+// handshake against roots; later commands go over TLS.
+func (c *client) startTLS(roots *x509.CertPool) {
+	c.t.Helper()
+	require.Equal(c.t, "220", c.send("STARTTLS"))
+	tlsConn := tls.Client(c.conn, &tls.Config{ServerName: "127.0.0.1", RootCAs: roots, MinVersion: tls.VersionTLS12})
+	require.NoError(c.t, tlsConn.Handshake())
+	c.conn = tlsConn
+	c.reader = bufio.NewReader(tlsConn)
+}
+
+func newServer(t *testing.T, opts ...Option) *Server {
 	t.Helper()
-	s, err := NewServer()
+	s, err := NewServer(opts...)
 	require.NoError(t, err)
 	t.Cleanup(s.Close)
 	return s
+}
+
+// plainResponse is the base64 PLAIN message "authzid NUL authcid NUL passwd"
+// (RFC 4616 §2).
+func plainResponse(authzid, authcid, passwd string) string {
+	return base64.StdEncoding.EncodeToString([]byte(authzid + "\x00" + authcid + "\x00" + passwd))
+}
+
+// testCredentials builds a username and password at run time.
+func testCredentials(t *testing.T) (string, string) {
+	t.Helper()
+	b := make([]byte, 12)
+	_, err := rand.Read(b)
+	require.NoError(t, err)
+	return "relay-user-" + hex.EncodeToString(b[:4]), hex.EncodeToString(b[4:])
 }
 
 func TestServerListensOnLoopbackOnly(t *testing.T) {
@@ -191,6 +236,148 @@ func TestServerReceivesFromNetSMTP(t *testing.T) {
 	assert.Equal(t, "from@example.com", txs[0].From)
 	assert.Equal(t, []string{"to@example.com"}, txs[0].To)
 	assert.Equal(t, msg, txs[0].Data)
+}
+
+// A server that requires STARTTLS and AUTH PLAIN answers as RFC 3207, RFC
+// 4954 and RFC 4616 say, before and after the handshake.
+func TestServerSTARTTLSAndAuthPlainReplies(t *testing.T) {
+	username, password := testCredentials(t)
+	s := newServer(t, RequireSTARTTLS(), RequireAuthPlain(username, password))
+	require.NotNil(t, s.CertPool())
+	c := dial(t, s)
+	c.read()
+
+	code, lines := c.sendLines("EHLO client.example.com")
+	assert.Equal(t, "250", code)
+	assert.Equal(t, []string{"127.0.0.1", "STARTTLS"}, lines, "STARTTLS is listed before TLS, AUTH is not")
+	assert.Equal(t, "530 5.7.0 Must issue a STARTTLS command first", c.sendReply("MAIL FROM:<a@example.com>"))
+	assert.Equal(t, "530 5.7.0 Must issue a STARTTLS command first", c.sendReply("AUTH PLAIN "+plainResponse("", username, password)))
+	assert.Equal(t, "530 5.7.0 Must issue a STARTTLS command first", c.sendReply("RSET"))
+	assert.Equal(t, "530 5.7.0 Must issue a STARTTLS command first", c.sendReply("HELO client.example.com"))
+	assert.Equal(t, "500", c.send("FROB"), "an unrecognised command is still answered 500")
+	assert.Equal(t, "250", c.send("NOOP"))
+	assert.Equal(t, "501", c.send("STARTTLS now"), "STARTTLS takes no parameters")
+	c.startTLS(s.CertPool())
+
+	assert.Equal(t, "503", c.send("MAIL FROM:<a@example.com>"), "after the handshake the EHLO is forgotten")
+	code, lines = c.sendLines("EHLO client.example.com")
+	assert.Equal(t, "250", code)
+	assert.Equal(t, []string{"127.0.0.1", "AUTH PLAIN"}, lines, "AUTH PLAIN is listed after TLS, STARTTLS is not")
+	assert.Equal(t, "503", c.send("STARTTLS"), "STARTTLS once TLS is in place is out of sequence")
+	assert.Equal(t, "530 5.7.0 Authentication required", c.sendReply("MAIL FROM:<a@example.com>"))
+	assert.Equal(t, "504", c.send("AUTH LOGIN"), "only PLAIN is offered")
+	assert.Equal(t, "501", c.send("AUTH PLAIN not-base64!"))
+	assert.Equal(t, "535 5.7.8 Authentication credentials invalid", c.sendReply("AUTH PLAIN "+plainResponse("", username, password+"x")))
+	assert.Equal(t, "535 5.7.8 Authentication credentials invalid", c.sendReply("AUTH PLAIN "+plainResponse("", username+"x", password)))
+	assert.Equal(t, "535 5.7.8 Authentication credentials invalid", c.sendReply("AUTH PLAIN "+plainResponse("someone-else", username, password)),
+		"an authorization identity other than the authentication identity is refused")
+	assert.Equal(t, "334", c.send("AUTH PLAIN"), "without an initial response the server asks for one")
+	assert.Equal(t, "501 5.0.0 Authentication cancelled", c.sendReply("*"))
+	assert.Equal(t, "334", c.send("AUTH PLAIN"))
+	assert.Equal(t, "235 2.7.0 Authentication successful", c.sendReply(plainResponse("", username, password)))
+	assert.Equal(t, "503", c.send("AUTH PLAIN "+plainResponse("", username, password)), "a second AUTH is out of sequence")
+	require.Equal(t, "250", c.send("MAIL FROM:<a@example.com>"))
+	require.Equal(t, "250", c.send("RCPT TO:<b@example.com>"))
+	require.Equal(t, "354", c.send("DATA"))
+	_, err := c.conn.Write([]byte("Subject: hi\r\n\r\nbody\r\n.\r\n"))
+	require.NoError(t, err)
+	code, _ = c.read()
+	require.Equal(t, "250", code)
+	assert.Equal(t, "221", c.send("QUIT"))
+
+	txs := s.Transactions()
+	require.Len(t, txs, 1)
+	assert.True(t, txs[0].TLS)
+	assert.Equal(t, username, txs[0].Username)
+	assert.Equal(t, []string{"b@example.com"}, txs[0].To)
+
+	var clear, overTLS []string
+	for _, cmd := range s.Commands() {
+		assert.Equal(t, 1, cmd.Session)
+		if cmd.TLS {
+			overTLS = append(overTLS, cmd.Verb)
+		} else {
+			clear = append(clear, cmd.Verb)
+		}
+	}
+	assert.Equal(t, []string{"EHLO", "MAIL", "AUTH", "RSET", "HELO", "FROB", "NOOP", "STARTTLS", "STARTTLS"}, clear)
+	assert.Equal(t, []string{"MAIL", "EHLO", "STARTTLS", "MAIL", "AUTH", "AUTH", "AUTH", "AUTH", "AUTH", "AUTH", "AUTH",
+		"AUTH", "MAIL", "RCPT", "DATA", "QUIT"}, overTLS, "the responses of an AUTH exchange are not commands")
+}
+
+// An AUTH line's credentials are never recorded.
+func TestServerDoesNotRecordAuthArguments(t *testing.T) {
+	username, password := testCredentials(t)
+	s := newServer(t, RequireSTARTTLS(), RequireAuthPlain(username, password))
+	c := dial(t, s)
+	c.read()
+	require.Equal(t, "250", c.send("EHLO client.example.com"))
+	c.startTLS(s.CertPool())
+	require.Equal(t, "250", c.send("EHLO client.example.com"))
+	require.Equal(t, "235", c.send("AUTH PLAIN "+plainResponse("", username, password)))
+	for _, cmd := range s.Commands() {
+		assert.NotContains(t, cmd.Verb, " ")
+	}
+}
+
+// A server that offers no STARTTLS lists no extension, answers STARTTLS 500,
+// and with AUTH PLAIN required refuses AUTH in clear text and MAIL before it.
+func TestServerNoSTARTTLSReplies(t *testing.T) {
+	username, password := testCredentials(t)
+	s := newServer(t, RequireSTARTTLS(), NoSTARTTLS(), RequireAuthPlain(username, password))
+	assert.Nil(t, s.CertPool(), "NoSTARTTLS undoes an earlier RequireSTARTTLS")
+	c := dial(t, s)
+	c.read()
+
+	code, lines := c.sendLines("EHLO client.example.com")
+	assert.Equal(t, "250", code)
+	assert.Equal(t, []string{"127.0.0.1"}, lines, "neither STARTTLS nor AUTH is listed")
+	assert.Equal(t, "500", c.send("STARTTLS"))
+	assert.Equal(t, "538 5.7.11 Encryption required for requested authentication mechanism",
+		c.sendReply("AUTH PLAIN "+plainResponse("", username, password)))
+	assert.Equal(t, "530 5.7.0 Authentication required", c.sendReply("MAIL FROM:<a@example.com>"))
+	assert.Equal(t, "221", c.send("QUIT"))
+	assert.Empty(t, s.Transactions())
+}
+
+// Go's own SMTP client runs STARTTLS and AUTH PLAIN against the server and
+// delivers a message over TLS.
+func TestServerReceivesFromNetSMTPOverSTARTTLS(t *testing.T) {
+	username, password := testCredentials(t)
+	s := newServer(t, RequireSTARTTLS(), RequireAuthPlain(username, password))
+	cl, err := smtp.Dial(s.Addr())
+	require.NoError(t, err)
+	defer func() { _ = cl.Close() }()
+	ok, _ := cl.Extension("STARTTLS")
+	require.True(t, ok)
+	require.NoError(t, cl.StartTLS(&tls.Config{ServerName: "127.0.0.1", RootCAs: s.CertPool(), MinVersion: tls.VersionTLS12}))
+	ok, mechanisms := cl.Extension("AUTH")
+	require.True(t, ok)
+	assert.Equal(t, "PLAIN", mechanisms)
+	require.NoError(t, cl.Auth(smtp.PlainAuth("", username, password, "127.0.0.1")))
+	require.NoError(t, cl.Mail("from@example.com"))
+	require.NoError(t, cl.Rcpt("to@example.com"))
+	w, err := cl.Data()
+	require.NoError(t, err)
+	_, err = w.Write([]byte("Subject: test\r\n\r\nbody\r\n"))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	require.NoError(t, cl.Quit())
+
+	txs := s.Transactions()
+	require.Len(t, txs, 1)
+	assert.True(t, txs[0].TLS)
+	assert.Equal(t, username, txs[0].Username)
+	assert.Equal(t, "Subject: test\r\n\r\nbody\r\n", txs[0].Data)
+}
+
+// A client that does not trust the server's certificate fails the handshake.
+func TestServerCertificateIsTrustedOnlyThroughCertPool(t *testing.T) {
+	s := newServer(t, RequireSTARTTLS())
+	cl, err := smtp.Dial(s.Addr())
+	require.NoError(t, err)
+	defer func() { _ = cl.Close() }()
+	assert.Error(t, cl.StartTLS(&tls.Config{ServerName: "127.0.0.1", MinVersion: tls.VersionTLS12}))
 }
 
 func TestServerCloseEndsOpenSessions(t *testing.T) {

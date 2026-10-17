@@ -382,6 +382,62 @@ Remove a retired key once nothing it signed is still valid: card attestations ex
 
 **Rotating `KEYVAULT_MASTER_KEY` moves every derived key.** Each key whose variable is unset gets a new key and a new `kid` at the next start, and what the old key signed stops verifying. Before rotating the master key, copy the `x` value of the active `card-attestation` and `atc-issuer` keys from `/.well-known/jwks.json` into `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` and `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED`. Provisioning both keys keeps them fixed when the master key rotates.
 
+### Email
+
+The backend sends email (the welcome, account-approved and password-reset messages, and the deliveries of `email` alert channels, see [`docs/API.md`](API.md) § Alert channels) through one provider, chosen by `EMAIL_PROVIDER`:
+
+| `EMAIL_PROVIDER` | Sends through |
+|------------------|---------------|
+| `azure` (the default when `EMAIL_PROVIDER` is unset) | Azure Communication Services Email |
+| `smtp` | An SMTP server, with STARTTLS |
+| `console` | Nothing: each message is printed to the backend's standard output. For development only. |
+
+Any other value is refused at startup.
+
+Variables every provider reads:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `EMAIL_FROM_ADDRESS` | none, required | The sender address. |
+| `EMAIL_FROM_NAME` | `Agent Identity Management` | The sender's display name. |
+| `EMAIL_TEMPLATES_DIR` | unset | A directory of templates that replace the built-in ones. A directory that does not load logs a warning, and the built-in templates are used. |
+| `EMAIL_RATE_LIMIT_PER_MINUTE` | `60` | Read, but no provider applies it. |
+
+`azure` reads:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `AZURE_EMAIL_CONNECTION_STRING` | none, required | The resource's connection string, `endpoint=https://...;accesskey=...`. |
+| `AZURE_EMAIL_POLLING_ENABLED` | `false` | Read, but not used. |
+
+`smtp` reads:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `SMTP_HOST` | none, required | The SMTP server's host name. The server's certificate is checked against this name. |
+| `SMTP_PORT` | `587` | The port to connect to. |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | unset | Sent with `AUTH PLAIN` after STARTTLS. Authentication is used only when both are set. |
+| `SMTP_TLS_ENABLED` | `true` | Use STARTTLS (see below). |
+| `SMTP_MAX_CONNECTIONS` | `10` | Read, but not used. |
+
+With `SMTP_TLS_ENABLED=true`, the backend connects to `SMTP_HOST` on `SMTP_PORT` in clear text, sends `EHLO` and then `STARTTLS`, and verifies the server's certificate against the system's trusted roots before it sends `AUTH` or any message. When the server offers no STARTTLS, or the certificate does not verify, the backend refuses to send: neither the credentials nor the message leave in clear text. Implicit TLS (SMTPS, port 465), where the connection starts with a TLS handshake, is not supported. Every message carries a `Message-ID` of the form `<32 hex characters@domain of EMAIL_FROM_ADDRESS>`.
+
+`SMTP_TLS_ENABLED=false` is meant for a relay on the same host or network. The message is then sent with Go's `net/smtp` `SendMail`, which still uses STARTTLS when the server offers it, and sends credentials only over TLS or to `localhost`, `127.0.0.1` or `::1`.
+
+At startup the backend builds the provider and checks it once:
+
+- `smtp` connects, runs STARTTLS when `SMTP_TLS_ENABLED` is true, and authenticates when a username and password are set.
+- `azure` checks that the connection string has an `https://` endpoint and an access key. It does not contact Azure, so a wrong access key shows only when a message is sent.
+- `console` always passes.
+
+When building or checking the provider fails, for example because `EMAIL_FROM_ADDRESS` is unset or the SMTP server cannot be reached, the backend logs `Email service initialization failed: <reason>` and `AIM will continue without email notifications`, and keeps running without email. On success it logs `Email service initialized (provider: <provider>, from: <address>)`. Check which one happened:
+
+```bash
+curl -s http://localhost:8080/api/v1/status
+```
+
+`services.email` is `healthy` when the email service started and `unavailable` when the server runs without email. Because `azure` is the default, a server started with no email variables runs without email and reports `unavailable`. Set `EMAIL_PROVIDER` and that provider's variables, then restart the backend to turn email on.
+
 ### SIEM Forwarding
 
 The backend forwards security events to a Splunk HTTP Event Collector (HEC) once both `SIEM_SPLUNK_HEC_URL` and `SIEM_SPLUNK_HEC_TOKEN` are set. One collector receives the events of every organization on the server. Four kinds of event are forwarded:

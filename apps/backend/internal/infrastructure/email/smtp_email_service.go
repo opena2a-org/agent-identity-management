@@ -1,7 +1,10 @@
 package email
 
 import (
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"net/smtp"
 	"strings"
@@ -31,6 +34,10 @@ type SMTPEmailService struct {
 	templateRenderer *TemplateRenderer
 	metrics          *emailMetrics
 	mu               sync.RWMutex
+
+	// rootCAs verifies the server's certificate after STARTTLS; nil means the
+	// system roots. Only the package's tests set it.
+	rootCAs *x509.CertPool
 }
 
 // NewSMTPEmailService creates a new SMTP email provider
@@ -105,6 +112,7 @@ func (s *SMTPEmailService) SendEmail(to, subject, body string, isHTML bool) erro
 		// Upgrade to TLS using STARTTLS
 		tlsConfig := &tls.Config{
 			ServerName: s.host,
+			RootCAs:    s.rootCAs,
 		}
 		if err = client.StartTLS(tlsConfig); err != nil {
 			s.recordFailure("starttls_error")
@@ -235,6 +243,7 @@ func (s *SMTPEmailService) ValidateConnection() error {
 		// Upgrade to TLS using STARTTLS
 		tlsConfig := &tls.Config{
 			ServerName: s.host,
+			RootCAs:    s.rootCAs,
 		}
 		if err = client.StartTLS(tlsConfig); err != nil {
 			return fmt.Errorf("failed to start TLS: %w", err)
@@ -268,6 +277,7 @@ func (s *SMTPEmailService) buildMessage(from, to, subject, body string, isHTML b
 	builder.WriteString(fmt.Sprintf("To: %s\r\n", to))
 	builder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
 	builder.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
+	builder.WriteString(fmt.Sprintf("Message-ID: %s\r\n", s.newMessageID()))
 	builder.WriteString("MIME-Version: 1.0\r\n")
 	builder.WriteString(fmt.Sprintf("X-SMTPAPI: %s\r\n", trackingOffSMTPAPIHeader))
 
@@ -283,6 +293,21 @@ func (s *SMTPEmailService) buildMessage(from, to, subject, body string, isHTML b
 	builder.WriteString(body)
 
 	return builder.String()
+}
+
+// newMessageID returns a fresh Message-ID value (RFC 5322 §3.6.4):
+// "<" + 16 random bytes in hex + "@" + the domain of the from address + ">".
+// A from address without a domain uses the SMTP host instead.
+func (s *SMTPEmailService) newMessageID() string {
+	var id [16]byte
+	// crypto/rand.Read does not return an error; it ends the program if the
+	// system's random source fails.
+	_, _ = rand.Read(id[:])
+	idRight := s.host
+	if at := strings.LastIndex(s.fromAddress, "@"); at >= 0 && at < len(s.fromAddress)-1 {
+		idRight = s.fromAddress[at+1:]
+	}
+	return "<" + hex.EncodeToString(id[:]) + "@" + idRight + ">"
 }
 
 // GetMetrics returns current email sending metrics

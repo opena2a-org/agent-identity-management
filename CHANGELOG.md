@@ -303,6 +303,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Changed — a message the `smtp` email provider sends carries a `Message-ID`, STARTTLS and `AUTH PLAIN` are tested against a server, and the email providers are documented
+
+- Every message the `smtp` provider sends carries one `Message-ID` header (RFC 5322 §3.6.4): `<`, 16 random bytes in
+  hex, `@`, the domain of `EMAIL_FROM_ADDRESS` (the SMTP host when the address has no domain) and `>`, fresh for each
+  message. The other headers are unchanged, `X-SMTPAPI` included.
+- Against a loopback SMTP server that requires STARTTLS and `AUTH PLAIN`, the `smtp` provider's startup check and
+  `SendEmail` send only `EHLO` and `STARTTLS` in clear text, authenticate after the TLS handshake and deliver to the
+  envelope recipient. A wrong password fails with the server's `535` and no `MAIL` is sent; a server that offers no
+  STARTTLS is refused before any `AUTH` or `MAIL`. Implicit TLS on port 465 is not supported.
+- `azure` stays the default when `EMAIL_PROVIDER` is unset, so a deployment that relies on it keeps working. A
+  provider that fails to start turns email off and the server keeps running.
+- `docs/DEPLOYMENT.md` gains § Email: the three providers (`azure`, `smtp`, `console`) and the default, each
+  provider's variables, the three of them that are read but not applied (`EMAIL_RATE_LIMIT_PER_MINUTE`,
+  `SMTP_MAX_CONNECTIONS`, `AZURE_EMAIL_POLLING_ENABLED`), STARTTLS on `SMTP_PORT` and the refusal without it, what
+  the startup check covers for each provider, and where `GET /api/v1/status` reports email (`services.email`).
+- Tests: `apps/backend/internal/infrastructure/email/smtp_starttls_test.go`
+  (`TestSMTPEmailService_STARTTLSAuthPlainRoundTrip`, `TestSMTPEmailService_MessageIDWithoutFromDomainUsesTheSMTPHost`)
+  and additions to `apps/backend/internal/infrastructure/email/smtptest/server_test.go` for the loopback SMTP server's
+  new options `RequireSTARTTLS`, `RequireAuthPlain` and `NoSTARTTLS`, written from RFC 3207, RFC 4954 and RFC 4616,
+  with a certificate generated at test time for 127.0.0.1 and a record of each command and whether it arrived over TLS.
+
 ### Added — the dashboard adds, edits, tests and deletes alert channels
 
 - A Developers tab, Alert channels (`/dashboard/alert-channels`), shown to admins, managers and members, the roles
