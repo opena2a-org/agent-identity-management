@@ -378,6 +378,7 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 		h.fgaEngine.EmitSDKVerificationSpan(
 			c.Context(),
 			agentID,
+			agent.ID,
 			agent.KeyAlgorithm,
 			trustScore,
 			in.capability,

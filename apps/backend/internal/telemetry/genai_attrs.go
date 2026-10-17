@@ -29,6 +29,14 @@ const (
 	GenAIAgentScanMethod    = "gen_ai.agent.scan.method"
 )
 
+// GenAIAgentID is the upstream OpenTelemetry key gen_ai.agent.id, "the unique
+// and stable identifier of the GenAI hosted agent resource". Unlike the eight
+// keys above, which only the proposal names, upstream defines this one; its
+// note asks for the provider-assigned stable identifier of the agent. AIM
+// assigns the agent's AIP identifier (domain.BuildAgentDID), so that is the
+// value, taken from the agent row AIM resolved and never from a request field.
+const GenAIAgentID = "gen_ai.agent.id"
+
 // Producer-label method constants (decided 2026-06-26).
 //
 // Each `*.method` attribute names HOW the paired signal is derived in AIM. They
@@ -47,7 +55,7 @@ const (
 // AgentAuthzSignals carries the authorization signals available at the FGA
 // decision point. A signal is emitted only when present, so a `*.method`
 // attribute never lands without its paired score/verdict:
-//   - Capability / PublicKeyAlgo / ScanVerdict: emitted when non-empty.
+//   - AgentID / Capability / PublicKeyAlgo / ScanVerdict: emitted when non-empty.
 //   - TrustScore / DriftScore: emitted when non-nil (a real 0.0 is still a
 //     value, so presence is modeled with a pointer, not a zero check).
 //
@@ -55,6 +63,9 @@ const (
 // missing agent row or ASC row simply omits the corresponding attributes and
 // never blocks or alters the authorization decision.
 type AgentAuthzSignals struct {
+	// AgentID is the AIP identifier of the agent AIM resolved, emitted as
+	// gen_ai.agent.id. Empty when no agent row was resolved.
+	AgentID       string
 	Capability    string
 	PublicKeyAlgo string
 	TrustScore    *float64
@@ -71,6 +82,9 @@ func SetGenAIAgentAttributes(span trace.Span, s AgentAuthzSignals) {
 		return
 	}
 	var kv []attribute.KeyValue
+	if s.AgentID != "" {
+		kv = append(kv, attribute.String(GenAIAgentID, s.AgentID))
+	}
 	if s.Capability != "" {
 		kv = append(kv, attribute.String(GenAIAgentCapability, s.Capability))
 	}

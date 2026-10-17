@@ -38,6 +38,29 @@ one.
 A `*.method` is only emitted alongside its paired score/verdict. There are no
 orphan method labels.
 
+## The agent identifier: `gen_ai.agent.id`
+
+The `fga.authorize` span also carries `gen_ai.agent.id`. Unlike the eight
+attributes above, this key is defined upstream in the OpenTelemetry GenAI
+semantic conventions (stability: development) as the unique and stable
+identifier of the agent resource, assigned by its provider.
+
+| Attribute | Type | Example | Meaning |
+|---|---|---|---|
+| `gen_ai.agent.id` | string | `did:aip:aim_00000000-0000-0000-0000-deadbeefcafe` | AIM's AIP identifier for the agent AIM resolved |
+
+- The value is AIM's identifier for the agent AIM resolved: `did:aip:aim_`
+  followed by the agent's UUID in AIM. On the authorization path it comes from
+  the agent row AIM loaded; on the SDK verification path it comes from the
+  agent whose signature AIM verified. It is never a value taken from the
+  request. When AIM resolves no agent, the span carries no `gen_ai.agent.id`.
+- AIM applies no trace-context propagator to an incoming request, so its spans
+  start their own traces and do not share a trace ID with the calling agent's
+  spans. An agent's own instrumentation joins its spans to AIM's by setting
+  `gen_ai.agent.id` on them to the same value.
+- The value changes form when AIM adopts the AIP 1.1 `did:web` agent form. The
+  `did:aip:aim_<uuid>` form stays resolvable as an alias.
+
 ## Run it
 
 ```bash
@@ -56,8 +79,8 @@ uses; run it directly against a collector with
 To look at the signals afterwards, run `KEEP_STACKS=1 ./smoke-test.sh` (it
 prints the command that removes the stack), or `docker compose up -d` and send
 one with `./gen-signal.sh`. Open Grafana (default `http://localhost:3001`) and
-inspect the `fga.authorize` trace in Tempo to see the eight attributes on the
-span.
+inspect the `fga.authorize` trace in Tempo to see the eight attributes and
+`gen_ai.agent.id` on the span.
 
 ## Notes
 

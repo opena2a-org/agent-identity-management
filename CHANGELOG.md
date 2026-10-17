@@ -164,6 +164,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `TestNewKeyVaultFromEnv_NoMasterKeyNeedsExplicitDevelopment` checks that `ENVIRONMENT=testing` refuses to
   start without the key.
 
+### Added — the `fga.authorize` spans carry `gen_ai.agent.id`, the AIP identifier of the agent AIM resolved
+
+- The `fga.authorize` span AIM emits for an authorization decision and the one it emits for an SDK verification
+  carry the OpenTelemetry key `gen_ai.agent.id`. Its value is `did:aip:aim_` followed by an agent's UUID: on the
+  authorization path, of the agent row AIM loaded for the decision; on the SDK verification path, of the agent whose
+  signature AIM verified. The value is never taken from a request field. When AIM resolves no agent row, the span
+  carries no `gen_ai.agent.id`, and the decision is the same.
+- Unchanged: the legacy `agent.id` span attribute, every metric and its attributes, and span parenting.
+- The otel-demo's `fga.authorize` span carries `gen_ai.agent.id`, and `apps/backend/deployments/otel-demo/README.md`
+  says where the value comes from, how an agent's own spans join AIM's on that value, and that the value changes form
+  when AIM adopts the AIP 1.1 `did:web` agent form.
+- Tests: `apps/backend/internal/telemetry/genai_attrs_test.go` checks that the key is set when the agent identifier
+  is present and absent when it is empty; `apps/backend/internal/application/fga_engine_genai_attrs_test.go` runs an
+  authorization decision for a resolved agent, for a missing agent row and for a nil row, and an SDK verification span
+  for a verified agent and for none, with request agent IDs that differ from the expected identifier.
+
 ### Fixed — `aim-bootstrap` prints its step lines the way the bootstrap guide shows them (#747)
 
 - `aim-bootstrap` prints each step as its number, a space and the step (`1. Checking organization...`), and each
