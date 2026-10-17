@@ -167,8 +167,8 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
  * The host of an `http:` address whose host is not this machine, or null for
  * an `https:` address or an `http:` one on a loopback host. `init` sends the
  * bootstrap token over `http:` only to a loopback host. The host is compared
- * as written in the URL and is never resolved. `url` has passed
- * `invalidServerUrlReason`.
+ * as `new URL()` reads it (`http://127.1` is `127.0.0.1`) and is never
+ * resolved. `url` has passed `invalidServerUrlReason`.
  */
 function nonLoopbackHttpHost(url: string): string | null {
   const parsed = new URL(url);

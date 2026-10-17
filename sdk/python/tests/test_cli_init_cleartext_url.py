@@ -5,7 +5,9 @@ An `http:` server address is accepted when its host is `localhost`,
 `127.0.0.1` or `::1`, decided from the URL text and never by resolving it. Any
 other `http:` address ends the command with exit 1 before the exchange
 request: nothing is sent, nothing is saved and the token is not printed.
-`https:` addresses are unchanged.
+`https:` addresses are unchanged. An address with a backslash, where requests
+ends the host and urlsplit does not, or with whitespace or a control
+character, ends the command the same way on any scheme.
 
 `requests.post` is replaced with a recorder, so no request reaches the network
 and the recorder holds every request the command made.
@@ -138,6 +140,53 @@ def test_a_host_that_holds_the_token_is_shown_redacted(recorder, agents_dir, cap
     assert [c["url"] for c in recorder] == []
     assert host_token not in out.out and host_token not in out.err
     assert f"{cli.BOOTSTRAP_TOKEN_PREFIX}[REDACTED]" in out.out
+
+
+# --- an address urlsplit and requests could read different hosts from --------
+
+@pytest.mark.parametrize("url", [
+    "http://aim.example.test\\@127.0.0.1",
+    "http://aim.example.test\\@localhost",
+    "http://aim.example.test:8080\\@[::1]",
+    "https://aim.example.test\\@127.0.0.1",
+])
+def test_an_address_with_a_backslash_is_refused_with_zero_requests(recorder, agents_dir, capsys, url):
+    # urlsplit reads the host after the "@"; requests ends it at the backslash
+    # and would send the token to aim.example.test.
+    assert run_init(url, token=TOKEN) == 1
+
+    out = capsys.readouterr()
+    assert_nothing_sent_or_saved(recorder, agents_dir, out)
+    assert "Error: --url has a backslash." in out.out
+    assert "aim.example.test" not in out.out
+    assert "Registering agent" not in out.out
+
+
+@pytest.mark.parametrize("url", [
+    "http://local\thost:8080",
+    "http://local\nhost:8080",
+    "http://local\rhost:8080",
+    "http://localhost :8080",
+    "http://local\x00host:8080",
+    "http://local\x1bhost:8080",
+    "http://local\x7fhost:8080",
+    "http://local\x85host:8080",
+    "http://local host:8080",
+])
+def test_an_address_with_whitespace_or_a_control_character_is_refused_with_zero_requests(
+        recorder, agents_dir, capsys, url):
+    assert run_init(url, token=TOKEN) == 1
+
+    out = capsys.readouterr()
+    assert_nothing_sent_or_saved(recorder, agents_dir, out)
+    assert "Error: --url has whitespace or a control character." in out.out
+    assert "Registering agent" not in out.out
+
+
+def test_whitespace_around_the_address_is_still_trimmed(recorder, agents_dir, capsys):
+    assert run_init(" http://127.0.0.1:8080\n", token=TOKEN) == 0
+
+    assert [c["url"] for c in recorder] == ["http://127.0.0.1:8080" + EXCHANGE_PATH]
 
 
 def test_the_shared_address_check_still_accepts_http_on_any_host():
