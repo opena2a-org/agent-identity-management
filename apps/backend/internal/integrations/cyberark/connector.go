@@ -34,9 +34,15 @@ const maxErrorBody = 256
 const maxAccountBody = 1 << 20
 
 // unsupportedValueChars are the characters CyberArk does not accept in a CCP
-// URL value: no spaces in the URL, no '+', '&' or '%' in a value, and no ';'
-// in a property name or value.
-const unsupportedValueChars = " +&%;"
+// URL value. CyberArk's rule against spaces is about the URL, and encode
+// writes a space in a value as %20, so a space is not among them.
+const unsupportedValueChars = "+&%"
+
+// propertySeparator separates the account properties a free Query names, as in
+// Safe=AIM-Database;Object=db. CyberArk does not accept it in a property name
+// or value, so no other parameter's value may hold it, and in a Query each one
+// must separate two properties.
+const propertySeparator = ";"
 
 // Config holds CyberArk integration configuration.
 type Config struct {
@@ -68,7 +74,9 @@ type CCPRequest struct {
 	Database string // Database
 	PolicyID string // PolicyID
 	Reason   string // Reason
-	Query    string // Query
+	// Query is a free query: account properties written name=value and
+	// separated by ';', such as Safe=AIM-Database;Object=db.
+	Query string
 	// QueryFormat is Exact or Regexp; empty omits it.
 	QueryFormat string
 	// ConnectionTimeout is sent as "Connection Timeout", in seconds; zero
@@ -331,7 +339,7 @@ func (r CCPRequest) params() []ccpParam {
 
 // encode checks the request and returns its query string. Every name and value
 // is query-escaped with a space written as %20, so the query holds no raw
-// space and no '+'.
+// space, no '+' and no raw ';'.
 func (r CCPRequest) encode() (string, error) {
 	if r.AppID == "" {
 		return "", errors.New("cyberark: CCP request has no AppID; set CCPRequest.AppID or Config.AppID")
@@ -345,7 +353,14 @@ func (r CCPRequest) encode() (string, error) {
 	}
 	for _, p := range params {
 		if strings.ContainsAny(p.value, unsupportedValueChars) {
-			return "", fmt.Errorf("cyberark: CCP parameter %s holds a character CCP does not accept in a URL value (a space, +, &, %% or ;)", p.name)
+			return "", fmt.Errorf("cyberark: CCP parameter %s holds a character CCP does not accept in a URL value (+, & or %%)", p.name)
+		}
+		if p.name == "Query" {
+			if !separatesProperties(p.value) {
+				return "", errors.New("cyberark: CCP parameter Query holds a ';' that does not separate two name=value properties; CCP does not accept one in a property name or value")
+			}
+		} else if strings.Contains(p.value, propertySeparator) {
+			return "", fmt.Errorf("cyberark: CCP parameter %s holds a ';', which CCP does not accept in a property name or value", p.name)
 		}
 	}
 	if r.QueryFormat != "" && r.QueryFormat != "Exact" && r.QueryFormat != "Regexp" {
@@ -357,6 +372,21 @@ func (r CCPRequest) encode() (string, error) {
 		pairs = append(pairs, escape(p.name)+"="+escape(p.value))
 	}
 	return strings.Join(pairs, "&"), nil
+}
+
+// separatesProperties reports whether every ';' in query separates two account
+// properties written name=value with a non-empty name. A query that holds no
+// ';' passes.
+func separatesProperties(query string) bool {
+	if !strings.Contains(query, propertySeparator) {
+		return true
+	}
+	for _, property := range strings.Split(query, propertySeparator) {
+		if name, _, ok := strings.Cut(property, "="); !ok || name == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // escape query-escapes s and writes a space as %20 rather than '+'. A '+' in s

@@ -59,6 +59,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   (unset, empty, whitespace only, a valid and an invalid value), 390 rows for 72 variables in all, and the table test
   runs each row with no container marker file, so the `HOST` default it checks is the one outside a container.
 
+### Fixed — the CyberArk CCP client sends a `Query` that names several properties, and a value that holds a space (#758)
+
+- `RetrieveCredential` sends a value that holds a space in `AppID`, `Safe`, `Folder`, `Object`, `UserName`, `Address`,
+  `Database`, `PolicyID` or `Reason`, and a `Query` that names several properties separated by `;`, such as
+  `Safe=AIM-Database;Object=db`, with or without a space in a property value. Each is query-escaped: `=` is sent as
+  `%3D`, `;` as `%3B` and a space as `%20`. Before this change `RetrieveCredential` returned an error for each of
+  these that said the parameter held a character CCP does not accept in a URL value.
+- It still refuses, before sending, a `+`, `&` or `%` in any of those values or in `Query`, and a `;` in any of them
+  but `Query`. A `;` in a `Query` is refused unless every `;`-separated part is a `name=value` property with a
+  non-empty name, so a leading, trailing or doubled `;`, or a part without `=`, is refused. The error names the
+  parameter and not its value.
+- Tests: `apps/backend/internal/integrations/cyberark/connector_test.go` (`TestCCPConnectorRoundTrip`: `a value
+  holding a space is sent with the space written as %20`, `a Query that names several properties is sent
+  query-escaped` and `values CCP does not accept are refused before sending`). The CCP stub in `ccptest` accepts a
+  `;` that separates two properties of a `Query`; it looks an account up by the `AppID`, `Safe` and `Object`
+  parameters and does not evaluate a `Query`.
+
 ### Fixed: a SIEM event copies the client address and user agent out of the request it reports
 
 - The `ipAddress` and `userAgent` of an `aim.audit.*` or `aim.auth.signin_failed` event are copied when the event is
@@ -125,8 +142,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `Query`, `QueryFormat`, `ConnectionTimeout` (sent as `Connection%20Timeout`) and `FailRequestOnPasswordChange`
   (sent as `true` only when set), each under CyberArk's name and query-escaped with a space written as `%20`, so the
   URL holds no raw space and no `+`. Before anything is sent, `RetrieveCredential` refuses a request with no `AppID`,
-  with `AppID` alone, with a `QueryFormat` other than `Exact` or `Regexp`, or with a value holding a space, `+`, `&`,
-  `%` or `;`. The error names the parameter and not its value.
+  with `AppID` alone, with a `QueryFormat` other than `Exact` or `Regexp`, with a value holding `+`, `&` or `%`, or
+  with a `;` other than one that separates two `name=value` properties of a `Query`. The error names the parameter
+  and not its value.
 - `CCPResponse` holds `Content`, `UserName`, `Address`, `Database` and `PasswordChangeInProcess`, read as a JSON
   boolean or as the string `true` or `false` in any letter case; `ChangeNumber` is removed. An account whose
   password is being changed is returned with `PasswordChangeInProcess` true. A 400, 403, 404 or 500 answer unwraps to
