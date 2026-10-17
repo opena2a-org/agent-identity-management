@@ -370,6 +370,9 @@ func main() {
 	if !services.Webhook.Stop(webhookDrainTimeout) {
 		log.Printf("Webhook deliveries still in flight after %s", webhookDrainTimeout)
 	}
+	// End the alert channel deliveries: a wait before a retry ends, an attempt
+	// in flight ends within its 10-second timeout, and queued alerts are not sent.
+	services.AlertChannel.Stop()
 	// Deliver the audit log entries still queued for the SIEM.
 	if siemForwarder != nil {
 		flushSIEMForwarding(siemForwarder)
@@ -610,6 +613,7 @@ type Repositories struct {
 	SecurityPolicy     *repository.SecurityPolicyRepository   // ✅ For configurable security policies
 	BehaviorBaseline   *repository.BehaviorBaselineRepository // ✅ For intelligent behavioral anomaly detection
 	Webhook            *repository.WebhookRepository
+	AlertChannel       *repository.AlertChannelRepository // Slack and PagerDuty destinations of an organization's alerts
 	VerificationEvent  *repository.VerificationEventRepositorySimple
 	Tag                *repository.TagRepository
 	SDKToken           domain.SDKTokenRepository
@@ -673,6 +677,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		SecurityPolicy:     repository.NewSecurityPolicyRepository(db),   // ✅ For configurable security policies
 		BehaviorBaseline:   repository.NewBehaviorBaselineRepository(db), // ✅ For intelligent behavioral anomaly detection
 		Webhook:            repository.NewWebhookRepository(db),
+		AlertChannel:       repository.NewAlertChannelRepository(db),
 		VerificationEvent:  repository.NewVerificationEventRepository(db),
 		Tag:                repository.NewTagRepository(db),
 		SDKToken:           repository.NewSDKTokenRepository(db),
@@ -729,6 +734,7 @@ type Services struct {
 	SecurityPolicy    *application.SecurityPolicyService   // ✅ For policy-based enforcement
 	BehaviorAnalysis  *application.BehaviorAnalysisService // ✅ For intelligent behavioral anomaly detection
 	Webhook           *application.WebhookService
+	AlertChannel      *application.AlertChannelService // Sends each inserted alert to the organization's Slack and PagerDuty channels
 	VerificationEvent *application.VerificationEventService
 	Registration      *application.RegistrationService // ✅ Email/password registration workflow (replaced OAuth)
 	Tag               *application.TagService
@@ -981,6 +987,11 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	agentService.SetWebhookService(webhookService)
 	apiKeyService.SetWebhookService(webhookService)
 
+	// Send every alert the alert repository inserts, whichever service wrote
+	// it, to the organization's Slack and PagerDuty channels whose severity
+	// floor admits it (alert_channels.go).
+	alertChannelService := startAlertChannels(repos, cfg.Server.FrontendURL)
+
 	// Initialize RegistrationService for email/password user registration workflow
 	registrationService := application.NewRegistrationService(
 		oauthRepo, // Still uses oauth_repository for now (will be renamed in later step)
@@ -1224,6 +1235,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		SecurityPolicy:    securityPolicyService,   // ✅ For policy-based enforcement
 		BehaviorAnalysis:  behaviorAnalysisService, // ✅ For intelligent behavioral anomaly detection
 		Webhook:           webhookService,
+		AlertChannel:      alertChannelService,
 		VerificationEvent: verificationEventService,
 		Registration:      registrationService, // ✅ Email/password registration workflow (replaced OAuth)
 		Tag:               tagService,
@@ -1262,6 +1274,7 @@ type Handlers struct {
 	SecurityPolicy     *handlers.SecurityPolicyHandler // ✅ For policy management
 	Analytics          *handlers.AnalyticsHandler
 	Webhook            *handlers.WebhookHandler
+	AlertChannel       *handlers.AlertChannelHandler // Slack and PagerDuty alert channels
 	Verification       *handlers.VerificationHandler // ✅ For POST /verifications endpoint
 	VerificationEvent  *handlers.VerificationEventHandler
 	PublicAgent        *handlers.PublicAgentHandler
@@ -1383,6 +1396,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Webhook,
 			services.Audit,
 			jwtService, // a revoked session cannot create or update a webhook
+		),
+		AlertChannel: handlers.NewAlertChannelHandler(
+			services.AlertChannel,
+			services.Audit,
+			jwtService, // a revoked session cannot create or update an alert channel
 		),
 		Verification: handlers.NewVerificationHandler(
 			services.Agent,
@@ -2047,6 +2065,19 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	webhooks.Delete("/:id", middleware.MemberMiddleware(), h.Webhook.DeleteWebhook)
 	webhooks.Post("/:id/rotate-secret", middleware.MemberMiddleware(), h.Webhook.RotateWebhookSecret)
 	webhooks.Post("/:id/test", h.Webhook.TestWebhook) // Test webhook endpoint
+
+	// Alert channels: an organization's alerts sent to Slack and PagerDuty.
+	// Any member of the organization reads them; changing one, or sending a
+	// test message out through it, needs member or above.
+	alertChannels := v1.Group("/alert-channels")
+	alertChannels.Use(middleware.AuthMiddleware(jwtService))
+	alertChannels.Use(middleware.RateLimitMiddleware())
+	alertChannels.Post("/", middleware.MemberMiddleware(), h.AlertChannel.CreateAlertChannel)
+	alertChannels.Get("/", h.AlertChannel.ListAlertChannels)
+	alertChannels.Get("/:id", h.AlertChannel.GetAlertChannel)
+	alertChannels.Put("/:id", middleware.MemberMiddleware(), h.AlertChannel.UpdateAlertChannel)
+	alertChannels.Delete("/:id", middleware.MemberMiddleware(), h.AlertChannel.DeleteAlertChannel)
+	alertChannels.Post("/:id/test", middleware.MemberMiddleware(), h.AlertChannel.TestAlertChannel)
 
 	// Verification routes (authentication required) - Agent action verification
 	verifications := v1.Group("/verifications")

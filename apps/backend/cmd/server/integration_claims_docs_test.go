@@ -21,10 +21,14 @@ import (
 // PagerDuty or Microsoft Teams states its status. When one of them is proved end
 // to end in CI, the change that proves it takes its term out of
 // unshippedIntegration and rewrites its lines in the same commit.
+//
+// PagerDuty is out of the term list: an organization's alerts reach it through
+// the Events API v2, proved by TestAlertChannelsRoundTrip
+// (alert_channels_integration_test.go, integration tag).
 
 // unshippedIntegration matches the name of an integration the server does not
 // ship.
-var unshippedIntegration = regexp.MustCompile(`(?i)cyberark|sentinel|pagerduty|microsoft teams`)
+var unshippedIntegration = regexp.MustCompile(`(?i)cyberark|sentinel|microsoft teams`)
 
 // integrationStatus matches the words that state such an integration's status.
 var integrationStatus = regexp.MustCompile(`(?i)\b(planned|under evaluation|not available|not loaded|not supported)\b`)
@@ -150,7 +154,8 @@ func TestUnshippedIntegrationsCarryAStatusInTheDocs(t *testing.T) {
 }
 
 // Slack is not in the term list: the example guides post to Slack from the
-// agent's own code, not through the server.
+// agent's own code, not through the server. PagerDuty is not in it either: the
+// server ships it.
 func TestUnshippedIntegrationFindings(t *testing.T) {
 	sample := strings.Join([]string{
 		"CCP for vaulted credential retrieval through CyberArk.",
@@ -161,6 +166,5 @@ func TestUnshippedIntegrationFindings(t *testing.T) {
 	}, "\n")
 	assert.Equal(t, []string{
 		"sample.md:1: CCP for vaulted credential retrieval through CyberArk.",
-		"sample.md:4: Send alerts to PagerDuty",
 	}, unshippedIntegrationFindings("sample.md", sample))
 }

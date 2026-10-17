@@ -303,6 +303,41 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Added — an organization's alerts reach Slack and PagerDuty in each service's format, with a severity floor per channel
+
+- New routes `POST`, `GET /api/v1/alert-channels` and `GET`, `PUT`, `DELETE /api/v1/alert-channels/:id` manage an
+  organization's alert channels, and `POST /api/v1/alert-channels/:id/test` sends one test message through a channel.
+  A channel has a `name`, a `kind` (`slack` or `pagerduty`), a `config` (`{"webhookUrl": ...}`, a
+  `https://hooks.slack.com/services/` URL, or `{"routingKey": ...}`, a 32-character integration key), a `minSeverity`
+  floor and `isActive`. Reading needs any user of the organization; creating, changing, deleting and testing need
+  member or above. A channel of another organization is answered `404`. A key the route does not take, an unknown
+  `kind` or `minSeverity`, a webhook URL of another form and a routing key that is not 32 characters are answered `400`
+  naming the field. Answers carry each `config` value as `****` and its last 4 characters; no answer, log line or audit
+  log entry carries the full value. Create, update and delete each write one audit log entry on `alert_channel` with
+  `kind` and `minSeverity` as its metadata.
+- Every alert the alert repository inserts, whichever service raised it, is put on a queue of 1,024 alerts through the
+  repository's `OnCreate` observer, and four workers send it to each active channel of its organization whose floor it
+  reaches (`info` < `warning` < `high` < `critical`). Slack is sent `{"text": ...}` with the severity and title, the
+  description, the agent and the dashboard's alerts page, with `&`, `<` and `>` in the alert's strings escaped.
+  PagerDuty is sent an Events API v2 `trigger` to `https://events.pagerduty.com/v2/enqueue` with the alert's id as
+  `dedup_key` and the severity mapped `critical`, `error`, `warning`, `info`. A `429`, a `5xx` or a network error is
+  retried up to 3 times after 1, 4 and 16 seconds; other answers are not retried. Each delivery's outcome is recorded as
+  the channel's `lastDeliveryStatus`, `lastDeliveryCode` and `lastDeliveryAt`. An alert that arrives when the queue is
+  full is sent to no channel and logged with its id; the alert row is unaffected.
+- Migration `131_alert_channels.sql` creates `alert_channels`. Its `config` column holds the webhook URL or routing key
+  as given.
+- `docs/API.md` gains § Alert channels: the routes and fields, the masking, the severity floor, both bodies with the
+  severity mapping and escaping, the retry policy and the queue bound, and that a test message to PagerDuty opens an
+  alert on the PagerDuty service. `apps/backend/cmd/server/integration_claims_docs_test.go` no longer counts PagerDuty
+  among the integrations whose documentation lines must state a status such as planned.
+- Tests: `apps/backend/cmd/server/alert_channels_integration_test.go` (`TestAlertChannelsRoundTrip`, against loopback
+  Slack and PagerDuty receivers built from each service's published format),
+  `apps/backend/internal/domain/alert_channel_test.go`,
+  `apps/backend/internal/application/alert_channel_service_test.go`,
+  `apps/backend/internal/application/alert_channel_delivery_client_integration_build_test.go`,
+  `apps/backend/internal/infrastructure/repository/alert_channel_repository_test.go` and
+  `apps/backend/internal/interfaces/http/handlers/alert_channel_handler_test.go`.
+
 ### Security — a webhook signature covers the time the attempt was sent, so a receiver can refuse a replayed delivery
 
 - Each webhook delivery attempt, every retry and every `webhook.test` delivery included, is signed when it is sent. It
