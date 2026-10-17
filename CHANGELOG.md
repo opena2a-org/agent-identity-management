@@ -303,6 +303,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Security — a webhook signature covers the time the attempt was sent, so a receiver can refuse a replayed delivery
+
+- Each webhook delivery attempt, every retry and every `webhook.test` delivery included, is signed when it is sent. It
+  carries `X-Webhook-Timestamp: <Unix seconds>` and `X-Webhook-Signature: v1=<hex>`, the HMAC-SHA256 under the
+  webhook's secret of `<timestamp>.<raw body>`. The `v1=` prefix names the scheme, so a later one can be sent beside
+  it. `X-Webhook-ID`, `X-Webhook-Event` and the body are unchanged; every attempt of one event sends the same body and
+  payload `id`.
+- The bare-hex form, the HMAC of the body alone, is no longer sent, and no compatibility mode keeps it: before the
+  change in this release that returns a webhook's secret on create, no API answer carried the secret
+  (`Webhook.Secret` is excluded from JSON), so a receiver had no secret to check that form with.
+- Measured through the server's route table against a migrated database on the commit before this change: an
+  `agent.created` delivery carried no `X-Webhook-Timestamp`, and its `X-Webhook-Signature` was 64 hex characters with
+  no scheme prefix.
+- `docs/API.md` § Webhooks gains "Verifying a delivery": the three headers, the signed string, the receiver's checks
+  (recompute and compare in constant time; refuse a timestamp more than 5 minutes from the receiver's clock; remember
+  each processed event `id` at least that long and refuse to process it twice, while accepting the retry of an event
+  it did not process), and a Python example using only `hmac` and `hashlib`.
+- Tests: `apps/backend/cmd/server/webhook_replay_guard_integration_test.go` (`TestWebhookReplayGuardRoundTrip`,
+  integration tag) checks deliveries with a receiver written from that section, and runs the section's Python example,
+  kept in `apps/backend/cmd/server/testdata/webhook_signature_example.py`, against the captured deliveries;
+  `webhook_signature_example_docs_test.go` holds the example and the fixture equal;
+  `apps/backend/internal/application/webhook_signature_test.go` checks the signed string against a value computed
+  with Python's `hmac`, and the headers of an attempt and of a test delivery.
+
 ### Changed — a webhook's signing secret reaches its owner once, can be rotated, and a subscription to an unknown event or with an unknown field is refused
 
 - `POST /api/v1/webhooks` takes an optional `secret` of 32 to 255 characters and stores it as given; a shorter one is
@@ -313,7 +337,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `POST /api/v1/webhooks/:id/rotate-secret`, behind the member check and the organization checks of the update route,
   stores a new generated secret and answers `200 {"id": ..., "secret": ...}` once. There is no overlap period:
   deliveries queued after it are signed with the new secret only, and a delivery queued before it, retries included,
-  keeps its signature. It writes an `update` audit row for the `webhook` with `rotatedSecret: true` and
+  is signed with the secret it was queued with. It writes an `update` audit row for the `webhook` with `rotatedSecret: true` and
   without the secret, and refuses a revoked session as create and update do.
 - Create and update refuse a body key they do not take with `400 {"error":"unknown field: <key>"}`
   (`unknown fields: <a>, <b>` for several; an update does not take `secret`), and an event outside the server's list

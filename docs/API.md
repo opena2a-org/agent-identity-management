@@ -1038,7 +1038,7 @@ Replace a webhook's secret with a new generated 64-character hex secret. The req
 
 There is no overlap period: every delivery queued after the rotation is signed with the new secret only,
 and the old secret signs nothing queued after it. A delivery queued before the rotation, retries included,
-keeps the signature it was queued with. The rotation is written to the audit log as an `update` of the
+is signed with the secret the webhook had when the delivery was queued. The rotation is written to the audit log as an `update` of the
 `webhook`, with `rotatedSecret: true` in its metadata and without the secret. A webhook that does not
 exist is answered `404`.
 
@@ -1111,6 +1111,69 @@ as `abandoned`.
     "trustScore": 0.755
   }
 }
+```
+
+### Verifying a delivery
+
+Each attempt is signed when it is sent, a retry and a `webhook.test` delivery included:
+
+| Header | Value |
+|--------|-------|
+| `X-Webhook-Timestamp` | The time the attempt was sent, in Unix seconds. Each retry carries a new one. |
+| `X-Webhook-Signature` | `v1=` and the hex HMAC-SHA256, under the webhook's secret, of the string `<X-Webhook-Timestamp>.<raw body>`: the timestamp, a `.`, and the request body exactly as sent. |
+| `X-Webhook-ID` | The webhook's `id`. The signature does not cover it. |
+
+`X-Webhook-Event` names the event. Every attempt of one event sends the same body, whose `id`
+([Webhook Payload](#webhook-payload)) identifies the event; the body's `timestamp` is when the event was
+raised, not when the attempt was sent. `X-Webhook-Signature` holds comma-separated `<scheme>=<hex>`
+entries: the server sends one, `v1`, and a later scheme would be added as another entry beside it.
+
+A receiver accepts a delivery only when all three checks pass:
+
+1. **Signature.** Recompute `v1=` and the hex HMAC-SHA256 of `<X-Webhook-Timestamp>.<raw body>` with
+   the webhook's secret, and compare it with each entry of `X-Webhook-Signature` in constant time
+   (`hmac.compare_digest` in Python, `crypto/subtle.ConstantTimeCompare` in Go). Use the body bytes as
+   received, before any JSON parsing. No match means the body or the timestamp was changed, or the secret
+   is not this webhook's: refuse the delivery.
+2. **Timestamp.** Refuse a timestamp more than 5 minutes before or after the receiver's clock.
+3. **Event `id`.** Remember the payload `id` of each event processed, at least until its delivery's
+   `X-Webhook-Timestamp` is more than 5 minutes behind the receiver's clock, after which check 2 refuses a
+   replay of it. Refuse to process a second delivery of an `id` already processed. A retry of an event the
+   receiver did not process, such as one it answered with a `500`, carries the same `id` and a new
+   timestamp, and is accepted.
+
+An answer in 2xx ends a delivery, so a duplicate the receiver answers with a 2xx is not retried. At the
+defaults in [Delivery and retries](#delivery-and-retries) the attempts of one event span up to 9 minutes
+(waits of 60, 120 and 240 seconds, and up to 30 seconds for each of four attempts), longer when an attempt
+waits for a free slot; a receiver that keeps each `id` longer than that also processes an event once when
+its 2xx answer did not reach the server. One event sent to two webhooks carries the same `id` to both: a
+receiver that serves several webhooks looks up the secret by `X-Webhook-ID` and remembers `X-Webhook-ID`
+and `id` together. A `webhook.test` delivery has no `id` and no event to process; checks 1 and 2 apply
+to it.
+
+Checks 1 and 2 in Python, using only `hmac` and `hashlib`:
+
+```python
+import hashlib
+import hmac
+
+TOLERANCE_SECONDS = 300
+
+
+def verify_delivery(secret, timestamp, signature, body, now):
+    """Return True when a delivery is signed with secret and was sent within
+    5 minutes of now.
+
+    timestamp and signature are the X-Webhook-Timestamp and X-Webhook-Signature
+    header values, body is the raw request body as bytes, and now is the
+    receiver's clock in Unix seconds, for example time.time().
+    """
+    signed = timestamp.encode() + b"." + body
+    expected = "v1=" + hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    entries = [entry.strip() for entry in signature.split(",")]
+    if not any(hmac.compare_digest(expected.encode(), entry.encode()) for entry in entries):
+        return False
+    return abs(now - int(timestamp)) <= TOLERANCE_SECONDS
 ```
 
 ---

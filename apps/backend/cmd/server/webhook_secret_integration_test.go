@@ -43,12 +43,14 @@ type recordedDelivery struct {
 	body   []byte
 }
 
-// signatureVerifies checks X-Webhook-Signature the way a receiver does: the
-// hex HMAC-SHA256 of the request body under the webhook's secret.
+// signatureVerifies checks X-Webhook-Signature the way a receiver does: v1=
+// and the hex HMAC-SHA256 of "<X-Webhook-Timestamp>.<request body>" under the
+// webhook's secret.
 func signatureVerifies(secret string, delivery recordedDelivery) bool {
 	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(delivery.header.Get("X-Webhook-Timestamp") + "."))
 	mac.Write(delivery.body)
-	want := hex.EncodeToString(mac.Sum(nil))
+	want := "v1=" + hex.EncodeToString(mac.Sum(nil))
 	return hmac.Equal([]byte(want), []byte(delivery.header.Get("X-Webhook-Signature")))
 }
 
