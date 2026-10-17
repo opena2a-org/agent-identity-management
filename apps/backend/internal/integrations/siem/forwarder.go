@@ -74,6 +74,30 @@ type ForwarderStats struct {
 	Filtered int64 // below MinSeverity
 }
 
+// AdapterStats counts one adapter's deliveries, in events.
+type AdapterStats struct {
+	Adapter string // the adapter's Name
+	Sent    int64  // accepted by the adapter
+	Failed  int64  // not accepted by the adapter after every attempt
+}
+
+// Health is the Forwarder's record of its own deliveries. It is read from
+// the deliveries the Forwarder made; reading it sends no request.
+type Health struct {
+	// Failing is true when the most recent delivery to an adapter was not
+	// accepted after every attempt, or when an event was dropped after the
+	// last delivery an adapter accepted. It is false before the first
+	// delivery and drop.
+	Failing bool
+	// LastDelivery is when the most recent delivery to an adapter ended,
+	// accepted or not; zero before the first.
+	LastDelivery time.Time
+	// LastDeliveryFailed is whether that delivery was not accepted.
+	LastDeliveryFailed bool
+	// LastDrop is when the most recent event was dropped; zero when none was.
+	LastDrop time.Time
+}
+
 // Forwarder delivers events to SIEM adapters in the background. Enqueue
 // never blocks its caller: it queues the event, or counts it as dropped when
 // the queue is full. One worker sends the queue in batches, and retries a
@@ -86,6 +110,7 @@ type Forwarder struct {
 	logger   *slog.Logger
 
 	queue     chan *SIEMEvent
+	flushes   chan chan struct{}
 	closing   chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
@@ -93,6 +118,19 @@ type Forwarder struct {
 	cancelRun context.CancelFunc
 
 	sent, failed, dropped, filtered atomic.Int64
+	// adapterSent and adapterFailed count per adapter, in the order of adapters.
+	adapterSent, adapterFailed []atomic.Int64
+
+	healthMu sync.Mutex
+	// adapterFailing holds, per adapter, whether its most recent delivery
+	// was not accepted.
+	adapterFailing     []bool
+	lastDelivery       time.Time
+	lastDeliveryFailed bool
+	lastDrop           time.Time
+	// droppedSinceAccepted is set by a drop and cleared by a delivery an
+	// adapter accepts.
+	droppedSinceAccepted bool
 }
 
 // NewForwarder starts a Forwarder that delivers to the adapters. Close stops it.
@@ -103,15 +141,19 @@ func NewForwarder(adapters []BatchAdapter, cfg ForwarderConfig, logger *slog.Log
 	}
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	f := &Forwarder{
-		adapters:  adapters,
-		cfg:       cfg,
-		minRank:   severityRank[cfg.MinSeverity],
-		logger:    logger,
-		queue:     make(chan *SIEMEvent, cfg.QueueSize),
-		closing:   make(chan struct{}),
-		done:      make(chan struct{}),
-		runCtx:    runCtx,
-		cancelRun: cancelRun,
+		adapters:       adapters,
+		cfg:            cfg,
+		minRank:        severityRank[cfg.MinSeverity],
+		logger:         logger,
+		queue:          make(chan *SIEMEvent, cfg.QueueSize),
+		flushes:        make(chan chan struct{}),
+		closing:        make(chan struct{}),
+		done:           make(chan struct{}),
+		runCtx:         runCtx,
+		cancelRun:      cancelRun,
+		adapterSent:    make([]atomic.Int64, len(adapters)),
+		adapterFailed:  make([]atomic.Int64, len(adapters)),
+		adapterFailing: make([]bool, len(adapters)),
 	}
 	go f.run()
 	return f
@@ -142,6 +184,10 @@ func (f *Forwarder) Enqueue(event *SIEMEvent) bool {
 
 func (f *Forwarder) drop(reason string) {
 	n := f.dropped.Add(1)
+	f.healthMu.Lock()
+	f.lastDrop = time.Now()
+	f.droppedSinceAccepted = true
+	f.healthMu.Unlock()
 	// The first drop and every thousandth after it, so a stalled endpoint is
 	// visible without a line per event.
 	if n == 1 || n%1000 == 0 {
@@ -156,6 +202,68 @@ func (f *Forwarder) Stats() ForwarderStats {
 		Failed:   f.failed.Load(),
 		Dropped:  f.dropped.Load(),
 		Filtered: f.filtered.Load(),
+	}
+}
+
+// AdapterStats returns the counts so far of each adapter, in the order the
+// adapters were given to NewForwarder.
+func (f *Forwarder) AdapterStats() []AdapterStats {
+	stats := make([]AdapterStats, len(f.adapters))
+	for i, adapter := range f.adapters {
+		stats[i] = AdapterStats{
+			Adapter: adapter.Name(),
+			Sent:    f.adapterSent[i].Load(),
+			Failed:  f.adapterFailed[i].Load(),
+		}
+	}
+	return stats
+}
+
+// Health returns the Forwarder's record of its deliveries and drops so far.
+func (f *Forwarder) Health() Health {
+	f.healthMu.Lock()
+	defer f.healthMu.Unlock()
+	failing := f.droppedSinceAccepted
+	for _, adapterFailing := range f.adapterFailing {
+		failing = failing || adapterFailing
+	}
+	return Health{
+		Failing:            failing,
+		LastDelivery:       f.lastDelivery,
+		LastDeliveryFailed: f.lastDeliveryFailed,
+		LastDrop:           f.lastDrop,
+	}
+}
+
+// recordDelivery records the end of a delivery of a batch to adapter i.
+func (f *Forwarder) recordDelivery(i int, accepted bool) {
+	f.healthMu.Lock()
+	defer f.healthMu.Unlock()
+	f.adapterFailing[i] = !accepted
+	f.lastDelivery = time.Now()
+	f.lastDeliveryFailed = !accepted
+	if accepted {
+		f.droppedSinceAccepted = false
+	}
+}
+
+// Flush delivers the events queued when it is called and returns once their
+// delivery has ended, accepted or not. When ctx ends first it returns ctx's
+// error and the delivery goes on. After Close it returns at once.
+func (f *Forwarder) Flush(ctx context.Context) error {
+	delivered := make(chan struct{})
+	select {
+	case f.flushes <- delivered:
+	case <-f.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case <-delivered:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -197,6 +305,16 @@ func (f *Forwarder) run() {
 			}
 		case <-ticker.C:
 			flush()
+		case delivered := <-f.flushes:
+			// The events queued now, and not those queued while they are sent.
+			for n := len(f.queue); n > 0; n-- {
+				batch = append(batch, <-f.queue)
+				if len(batch) >= f.cfg.BatchSize {
+					flush()
+				}
+			}
+			flush()
+			close(delivered)
 		case <-f.closing:
 			for {
 				if f.runCtx.Err() != nil {
@@ -218,15 +336,19 @@ func (f *Forwarder) run() {
 }
 
 func (f *Forwarder) deliver(batch []*SIEMEvent) {
-	for _, adapter := range f.adapters {
+	for i, adapter := range f.adapters {
 		err := f.sendWithRetry(adapter, batch)
 		if err != nil {
 			f.failed.Add(int64(len(batch)))
+			f.adapterFailed[i].Add(int64(len(batch)))
+			f.recordDelivery(i, false)
 			f.logger.Error("SIEM delivery failed",
 				"adapter", adapter.Name(), "events", len(batch), "error", err)
 			continue
 		}
 		f.sent.Add(int64(len(batch)))
+		f.adapterSent[i].Add(int64(len(batch)))
+		f.recordDelivery(i, true)
 	}
 }
 

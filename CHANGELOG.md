@@ -176,6 +176,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   database and decrypts every row before and after each sweep, and part way through the first, a state the test sets
   up by moving two rows before that sweep runs.
 
+### Added — a refused or unreachable SIEM shows in `/health/ready` and `/metrics`, and the loss bound is stated
+
+- `GET /health/ready` carries `dependencies.siem` with `required: false`. It is `notConfigured` when no SIEM is
+  configured. It is `unavailable`, with the reason `dependency check failed`, while the most recent batch delivery to
+  an adapter was not accepted after its attempts, or an event was dropped after the last accepted delivery; the
+  response then has `degraded: true` and is still answered 200, because the SIEM is optional. It is `ok` otherwise,
+  including before the first delivery, and the next accepted delivery returns it to `ok`. The entry reads the
+  forwarder's record of its own deliveries and drops, sends no request to the SIEM, and carries no `latencyMs`. The
+  readiness contract is unchanged: `dependencies` already took any named entry of this shape.
+- `/metrics` carries `aim_siem_events_sent_total` and `aim_siem_events_failed_total`, each with an `adapter` label,
+  and `aim_siem_events_dropped_total`, counted in events, on the registry the other `aim_` series are served from.
+  No `aim_siem_` series is registered when no SIEM is configured.
+- The forwarder records when its most recent delivery ended and whether it was accepted, and when it last dropped an
+  event (`Forwarder.Health`), counts each adapter on its own (`Forwarder.AdapterStats`), and delivers what is queued
+  on request (`Forwarder.Flush`).
+- `docs/DEPLOYMENT.md` § SIEM Forwarding states the loss bound: a batch refused on its third attempt, about 3 seconds
+  after the first, is not sent again, an event that finds 1,000 already queued is not queued, nothing is written to
+  disk to send later, and HEC indexer acknowledgment is not requested. It names, for each kind of forwarded event,
+  where its record survives outside the SIEM, and the three places a loss shows: the readiness entry, the three
+  counters and the `ERROR SIEM delivery failed` log line.
+- Tests: `apps/backend/cmd/server/siem_health_integration_test.go` (`TestSIEMHealthRoundTrip`),
+  `apps/backend/cmd/server/health_ready_siem_test.go`, `apps/backend/internal/integrations/siem/forwarder_test.go`
+  and `apps/backend/internal/integrations/siem/metrics_test.go`.
+
 ### Added — alerts and secrets management requests reach the SIEM
 
 - With SIEM forwarding configured, each alert the backend writes is forwarded as an `aim.alert.created` event, whichever

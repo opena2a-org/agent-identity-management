@@ -4,10 +4,14 @@ import (
 	"context"
 	"log"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/integrations/siem"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
@@ -19,7 +23,8 @@ import (
 const siemFlushTimeout = 2 * time.Second
 
 // startSIEMForwarding reads the SIEM_* variables and, when a SIEM is
-// configured, forwards every audit log entry the repository writes to it. It
+// configured, forwards every audit log entry the repository writes to it and
+// puts the forwarder's counters on /metrics (see registerSIEMSeries). It
 // returns nil when none is configured, and an error naming the variable when
 // one is configured wrongly.
 func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(string) string) (*siem.Forwarder, error) {
@@ -28,10 +33,14 @@ func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(s
 		return nil, err
 	}
 	if len(settings.Adapters) == 0 {
+		_ = registerSIEMSeries(metrics.Registerer(), nil)
 		return nil, nil
 	}
 
 	forwarder := siem.NewForwarder(settings.Adapters, settings.Forwarder, nil)
+	if err := registerSIEMSeries(metrics.Registerer(), forwarder); err != nil {
+		log.Printf("ERROR: siem: the SIEM counters are not on /metrics: %v", err)
+	}
 	auditLogs.OnCreate(func(entry *domain.AuditLog) {
 		forwarder.Enqueue(siem.EventFromAuditLog(entry))
 	})
@@ -46,6 +55,25 @@ func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(s
 	}
 	log.Printf("siem: forwarding audit log entries at severity %s and above to %s", minSeverity, strings.Join(names, ", "))
 	return forwarder, nil
+}
+
+// siemSeriesMu serialises registerSIEMSeries.
+var siemSeriesMu sync.Mutex
+
+// registerSIEMSeries puts the counters of forwarder on reg, the registry
+// /metrics serves: aim_siem_events_sent_total and
+// aim_siem_events_failed_total for each adapter, and
+// aim_siem_events_dropped_total. They replace the counters of a forwarder
+// started before it in this process, and a nil forwarder leaves no SIEM
+// series at all. main starts one forwarder at most, so only tests replace one.
+func registerSIEMSeries(reg prometheus.Registerer, forwarder *siem.Forwarder) error {
+	siemSeriesMu.Lock()
+	defer siemSeriesMu.Unlock()
+	reg.Unregister(siem.NewCollector(nil))
+	if forwarder == nil {
+		return nil
+	}
+	return reg.Register(siem.NewCollector(forwarder))
 }
 
 // observeSecurityDecisions forwards to the SIEM the security decisions that
