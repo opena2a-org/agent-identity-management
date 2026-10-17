@@ -8,17 +8,11 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
-	"fmt"
-	"net"
-	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	vault "github.com/hashicorp/vault/api"
 	_ "github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
@@ -27,15 +21,18 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets/awssmtest"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets/vaultkvtest"
 )
 
 // A credential stored in a namespace on the HashiCorp Vault or the AWS Secrets
 // Manager backend is resolved by the agent that owns the namespace and opened
 // with the agent's key, the way newResolveFixture does it with a mock backend.
 // Here the repositories, the single-use nonce store and the audit log are the
-// real ones on TEST_DATABASE_URL, and the backend talks to a real Vault dev
-// server or to awssmtest through the AWS SDK. The names carry RoundTrip so the
-// CI step that fails on a skipped integration test selects them.
+// real ones on TEST_DATABASE_URL, and the backend talks to vaultkvtest through
+// the Vault client or to awssmtest through the AWS SDK: in-memory servers of
+// the two HTTP APIs on loopback ports, so the tests need no vault binary and
+// no vendor account. The names carry RoundTrip so the CI step that fails on a
+// skipped integration test selects them.
 //
 //	TEST_DATABASE_URL=postgres://... go test -tags=integration \
 //	  -run 'TestSecretsService_.*RoundTrip' ./internal/application/
@@ -51,87 +48,6 @@ func secretsBackendRoundTripDB(t *testing.T) *sql.DB {
 	t.Cleanup(func() { _ = db.Close() })
 	require.NoError(t, db.Ping())
 	return db
-}
-
-// startVaultDevServerForRoundTrip starts `vault server -dev` on a loopback port
-// with a root token generated here, and stops it in t.Cleanup. A missing vault
-// binary fails the test: the integration job must install one.
-func startVaultDevServerForRoundTrip(t *testing.T) (addr, rootToken string) {
-	t.Helper()
-	bin, err := exec.LookPath("vault")
-	require.NoError(t, err, "the vault binary is not on PATH; this integration test runs a Vault dev server (vault server -dev)")
-
-	// The dev server also listens for cluster traffic on the port after its
-	// API port, so both must be free.
-	var port int
-	for range 20 {
-		l, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		p := l.Addr().(*net.TCPAddr).Port
-		next, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p+1))
-		_ = l.Close()
-		if err == nil {
-			_ = next.Close()
-			port = p
-			break
-		}
-	}
-	require.NotZero(t, port, "no free pair of loopback ports for the vault dev server")
-
-	listen := fmt.Sprintf("127.0.0.1:%d", port)
-	rootToken = uuid.NewString()
-	home := t.TempDir()
-	logPath := filepath.Join(home, "vault-dev.log")
-	logFile, err := os.Create(logPath)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, bin, "server", "-dev",
-		"-dev-listen-address="+listen,
-		"-dev-root-token-id="+rootToken,
-		"-dev-no-store-token")
-	cmd.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH")}
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	if err := cmd.Start(); err != nil {
-		cancel()
-		_ = logFile.Close()
-		t.Fatalf("start vault dev server: %v", err)
-	}
-	exited := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(exited)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		<-exited
-		_ = logFile.Close()
-	})
-
-	addr = "http://" + listen
-	probe := &http.Client{Timeout: 2 * time.Second}
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		resp, err := probe.Get(addr + "/v1/sys/health")
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return addr, rootToken
-			}
-		}
-		select {
-		case <-exited:
-			out, _ := os.ReadFile(logPath)
-			t.Fatalf("vault dev server exited before it was healthy; its output:\n%s", out)
-		default:
-		}
-		if time.Now().After(deadline) {
-			out, _ := os.ReadFile(logPath)
-			t.Fatalf("vault dev server at %s was not healthy within 30s; its output:\n%s", addr, out)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
 }
 
 // assertSecretsBackendRoundTrip seeds an agent with an Ed25519 key, creates a
@@ -226,15 +142,9 @@ func assertSecretsBackendRoundTrip(t *testing.T, db *sql.DB, backend secrets.Sec
 
 func TestSecretsService_HashiCorpVaultRoundTrip(t *testing.T) {
 	db := secretsBackendRoundTripDB(t)
-	addr, rootToken := startVaultDevServerForRoundTrip(t)
+	srv := vaultkvtest.NewServer(t)
 
-	cfg := vault.DefaultConfig()
-	cfg.Address = addr
-	client, err := vault.NewClient(cfg)
-	require.NoError(t, err)
-	client.SetToken(rootToken)
-
-	assertSecretsBackendRoundTrip(t, db, infrasecrets.NewHashiCorpVaultBackendFromClient(client, "secret"))
+	assertSecretsBackendRoundTrip(t, db, infrasecrets.NewHashiCorpVaultBackendFromClient(vaultkvtest.NewClient(t, srv), vaultkvtest.Mount))
 }
 
 func TestSecretsService_AWSSecretsManagerRoundTrip(t *testing.T) {
