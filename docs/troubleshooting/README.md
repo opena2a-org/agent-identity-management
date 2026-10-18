@@ -32,13 +32,14 @@ Your SDK credentials have expired due to token rotation (security policy).
    ```
 
 2. **Download fresh SDK**:
-   - Navigate to: Dashboard → SDK Download
-   - Click "Download SDK" for Python/Go/etc.
+   - Navigate to: Developers → SDK & docs (`http://localhost:3000/dashboard/sdk`)
+   - Click "Download Python SDK"
 
 3. **Copy new credentials**:
    ```bash
-   # Extract SDK
-   unzip aim-sdk-python.zip
+   # Extract the newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there)
+   cd ~/Downloads
+   unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
 
    # Copy credentials
    cp -r aim-sdk-python/.aim ~/.aim/
@@ -82,8 +83,10 @@ ls -la ~/.aim/credentials.json
 
 **Fix**:
 ```bash
-# Download SDK from portal
-# Extract and copy credentials
+# Download the SDK from the portal: Developers → SDK & docs, "Download Python SDK"
+# Extract the newest aim-sdk-python-v*.zip in ~/Downloads and copy credentials
+cd ~/Downloads
+unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
 cp -r aim-sdk-python/.aim ~/.aim/
 ```
 

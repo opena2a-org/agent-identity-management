@@ -12,9 +12,9 @@ The AIM SDK comes with your embedded credentials - zero configuration required.
 1. **Login** to AIM Dashboard (http://localhost:3000)
    - Email: `admin@opena2a.org`
    - Password: captured from `aim-bootstrap --default` stdout on first deploy (pre-B2 stacks: `AIM2025!Secure`)
-2. **Navigate** to Settings → SDK Download
+2. **Navigate** to Developers → SDK & docs (`/dashboard/sdk`)
 3. **Click** "Download Java SDK" button
-4. **Extract** the downloaded ZIP file to your project directory
+4. **Extract** the downloaded `aim-sdk-java-v<version>.zip` to your project directory; it unpacks into an `aim-sdk-java` folder
 
 ### Build the SDK and add the dependency
 
