@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `A2AClient.list_skills` requests the route the server registers for an agent's skills (#772)
+
+- `A2AClient.list_skills()` requests `GET /api/v1/a2a/agents/{agentId}/skills` with the client's own agent ID, the
+  request `get_skills()` makes when it is given no agent ID, and returns the `skills` list of the answer. It requested
+  `GET /api/v1/a2a/skills`; the server registers `POST /api/v1/a2a/skills` and no `GET` route on that path.
+- Test: `tests/test_a2a_list_skills_route.py`.
+
 ### Fixed — `SecretsClient.get_audit_log` and `list_namespaces` encode their query values, so a `since` with a positive UTC offset reaches the server as passed (#771)
 
 - `get_audit_log` and `list_namespaces` write their query with `urllib.parse.urlencode`, as `AIMClient.list_agents`
