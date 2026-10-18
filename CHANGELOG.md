@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `docs/API.md`'s `POST /api/v1/agents` request sends `agentType` and registers an agent, and its agent answers show `agentType` (#795)
+
+- The `POST /api/v1/agents` section of `docs/API.md` gave the agent's type as `"type": "ai_agent"` in its request
+  example and in its response example, and the response example of `GET /api/v1/agents/{id}` did the same. The
+  request the handler binds, `CreateAgentRequest`, has no `type` member. Posted to the server's handler and agent
+  service, the documented request was answered `400` with the error `agentType is required`.
+- The three examples now give the type as `"agentType": "ai_agent"`. The documented request is answered `201`; the
+  agent stored carries the `name`, `displayName`, `description` and `agentType` it sends, and the service grants the
+  three `capabilities` it lists. The answer to that request, and the answer of `GET /api/v1/agents/{id}` for the
+  agent it registers, carry the type as `agentType` and carry no `type` member.
+- Test: `apps/backend/internal/interfaces/http/handlers/agent_create_required_members_test.go` reads the two sections
+  of `docs/API.md`, checks the members the request example sends against the members `CreateAgentRequest` binds,
+  posts the example to the server's handler and agent service, checks that every member the documented answer shows
+  is one the handler's answer carries, and reads the stored agent back through the `GET /api/v1/agents/{id}` handler.
+  On the previous `docs/API.md` each of its four checks failed.
+
 ### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)
 
 - A server can end an answer cleanly once it sees the client cancel the request, and the client can read that end
