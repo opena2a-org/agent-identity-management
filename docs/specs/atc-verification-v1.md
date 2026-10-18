@@ -205,8 +205,11 @@ The list revokes agents, not single ATCs: each entry names an agent by its DID i
 ATC identifier from an entry. For step 8, an ATC is revoked when the list names its agent. The DID AIM gives an agent
 is `did:aip:aim_` followed by the agent's id, the `agentId` of its ATCs (Section 2).
 
-With `REGISTRY_URL` set, the AIM backend reads the list in the background (Section 5.5), and no request it answers reads
-the list it holds: its ATC verifier reads step 8 from its own store (Section 9.4).
+With `REGISTRY_URL` set, the AIM backend reads the list in the background (Section 5.5), and no request it answers
+fetches the list. `GET /metrics` and `GET /health/ready` read the list it holds: `/metrics` gives its age and its
+entries as `aim_atc_revocation_list_age_seconds` and `aim_atc_revocation_list_entries`, and `/health/ready` gives in
+`dependencies.revocationState` whether it is fit to answer from. Its ATC verifier does not read it: it reads step 8
+from its own store (Section 9.4).
 
 ### 5.1 CRL Endpoint
 
