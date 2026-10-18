@@ -335,16 +335,6 @@ def check_server_reachable(aim_url, timeout):
     return _probe_failure(aim_url, timeout) is None
 
 
-def print_banner():
-    """Print AIM SDK banner. Every line is 61 columns wide so the ║ borders align."""
-    print("""
-╔═══════════════════════════════════════════════════════════╗
-║                       AIM SDK Login                       ║
-║          Agent Identity Management for AI Agents          ║
-╚═══════════════════════════════════════════════════════════╝
-""")
-
-
 def _server_reason(response, fallback):
     """The server's human-readable reason for a non-success answer, bare (the
     caller decides the prefix), or `fallback` when the body carries none."""
@@ -448,7 +438,7 @@ def _print_server_unavailable(aim_url, outage, blank_line=True):
     """
     The last output of a login the server could not serve: the lines of
     _server_unavailable_lines. `blank_line` is False where the output so far
-    already ends with one.
+    is empty or already ends with one.
     """
     if blank_line:
         print()
@@ -638,7 +628,7 @@ def _sign_in_failure(reason, max_wait):
 
 def login(args):
     """Login to an AIM server with the OAuth 2.0 device grant (RFC 8628)."""
-    from .credentials import save_sdk_credentials, load_sdk_credentials, AIM_DIR
+    from .credentials import save_sdk_credentials, load_sdk_credentials
 
     url_problem = invalid_server_url_reason(args.url)
     if url_problem:
@@ -656,12 +646,9 @@ def login(args):
         print(f"Warning: {refusal.cleartext_address} is not this machine and the address is http:. "
               "The access and refresh tokens this sign-in receives will cross the network unencrypted, "
               "and anyone on the path can read and reuse them. --allow-http accepted that.", flush=True)
+        print()
 
     aim_url = args.url.strip().rstrip('/')
-
-    print_banner()
-    print(f"Server: {aim_url}")
-    print()
 
     # Check if already logged in
     existing_creds = load_sdk_credentials()
@@ -686,6 +673,11 @@ def login(args):
                 return 0
             print()
 
+    # The output so far is empty, or ends with the print() after the
+    # --allow-http warning or after the re-authenticate answer, so the sign-in
+    # block, and a line that ends the login before the block, print with no
+    # blank line of their own above them.
+
     # Fail fast on an unreachable server: probing before the browser opens is
     # what keeps a mistyped or dead --url from parking the user on a login
     # page that will never call back.
@@ -708,7 +700,7 @@ def login(args):
         _print_server_unavailable(aim_url, device['outage'], blank_line=False)
         return EXIT_SERVER_UNAVAILABLE
     if 'error' in device:
-        print(f"\nCould not start the device login: {device['error']}")
+        print(f"Could not start the device login: {device['error']}")
         return 1
 
     user_code = device.get('userCode', '')
@@ -716,17 +708,13 @@ def login(args):
     verification_uri_complete = device.get('verificationUriComplete') or verification_uri
     uri_problem = _verification_uri_problem(device)
     if uri_problem:
-        print(f"\nCould not start the device login: {uri_problem}")
+        print(f"Could not start the device login: {uri_problem}")
         return 1
     interval, max_wait = _device_wait(device)
 
-    print("To sign in, open this page in your browser and approve the code:")
-    print()
-    print(f"  {verification_uri}")
-    print()
-    print(f"  Code: {user_code}")
-    print()
-    print(f"Waiting for approval... (the code expires in {max_wait}s; Ctrl+C to cancel)")
+    # The block secure() prints when it signs in, from the same function.
+    for line in sign_in_block(LOGIN_SIGN_IN_LEAD, aim_url, verification_uri, user_code, max_wait):
+        print(line)
     no_browser_reason = _no_browser_reason(args)
     if no_browser_reason:
         print(f"No browser was opened ({no_browser_reason}): open the page above and approve the code. "
@@ -774,12 +762,8 @@ def login(args):
     }
 
     if save_sdk_credentials(credentials):
-        print()
-        print("Successfully authenticated.")
-        print()
-        print(f"   User: {credentials.get('userEmail', 'Unknown')}")
-        print(f"   Server: {aim_url}")
-        print(f"   Credentials saved to: {AIM_DIR}/sdk_credentials.json")
+        for line in signed_in_lines(credentials, aim_url):
+            print(line)
         print()
         print("You can now use the AIM SDK. Register an agent, then protect any")
         print("function with a capability grant:")
@@ -810,8 +794,10 @@ def login(args):
         return 1
 
 
-# The first line secure() prints when it signs this machine in; `{agent}` is
-# the name the call registers.
+# The first line of the sign-in block (sign_in_block). `aim-sdk login` prints
+# LOGIN_SIGN_IN_LEAD. secure() prints INLINE_SIGN_IN_LEAD when it signs this
+# machine in; `{agent}` is the name the call registers.
+LOGIN_SIGN_IN_LEAD = "Sign in to AIM."
 INLINE_SIGN_IN_LEAD = "{agent} needs an AIM sign-in on this machine. Sign in once to continue."
 
 
@@ -840,6 +826,27 @@ def _home_relative(path):
         return "~/" + Path(path).relative_to(Path.home()).as_posix()
     except ValueError:
         return str(path)
+
+
+def signed_in_lines(credentials, aim_url):
+    """
+    The two lines `aim-sdk login` and secure() print once a device sign-in
+    has stored `credentials`: who signed in on `aim_url`, and the credentials
+    file with the home directory written as `~`, followed by
+    `(owner read/write only)` when the file's mode is 0600.
+    """
+    from . import credentials as stored
+
+    path = stored.SDK_CREDENTIALS_FILE
+    try:
+        private = stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    except OSError:
+        private = False
+    who = credentials.get('userEmail') or credentials.get('userId') or 'Unknown'
+    return [
+        f"Signed in as {_terminal_line(who)} on {aim_url}.",
+        f"Credentials: {_home_relative(path)}" + (" (owner read/write only)" if private else ""),
+    ]
 
 
 def sign_in_inline(aim_url, agent_name, out=None):
@@ -925,14 +932,8 @@ def sign_in_inline(aim_url, agent_name, out=None):
     if not stored.save_sdk_credentials(credentials):
         raise ConfigurationError("Failed to save credentials.")
 
-    path = stored.SDK_CREDENTIALS_FILE
-    try:
-        private = stat.S_IMODE(os.stat(path).st_mode) == 0o600
-    except OSError:
-        private = False
-    who = credentials.get('userEmail') or credentials.get('userId') or 'Unknown'
-    print(f"Signed in as {_terminal_line(who)} on {aim_url}.", file=out)
-    print(f"Credentials: {_home_relative(path)}" + (" (owner read/write only)" if private else ""), file=out)
+    for line in signed_in_lines(credentials, aim_url):
+        print(line, file=out)
     out.flush()
     return credentials
 

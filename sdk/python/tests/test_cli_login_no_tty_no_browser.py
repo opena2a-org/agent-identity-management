@@ -31,7 +31,7 @@ DEVICE = {
     "expiresIn": 600,
     "interval": 5,
 }
-WAITING = "Waiting for approval..."
+WAITING = "Waiting for your approval (up to 10 min)."
 NO_BROWSER = "No browser was opened"
 
 

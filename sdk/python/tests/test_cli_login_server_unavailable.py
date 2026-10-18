@@ -161,11 +161,16 @@ def _login(aim, monkeypatch, *extra, url=None):
     return rc, buf.getvalue()
 
 
-def _assert_unavailable(aim, rc, out, url=None):
-    """Exit 75, the two closing lines after one blank line, nothing stored."""
+def _assert_unavailable(aim, rc, out, url=None, before_the_block=False):
+    """Exit 75, the two closing lines, nothing stored. After the sign-in block
+    they follow one blank line; when the login ends before the block
+    (`before_the_block`), they are the whole output."""
     assert rc == 75, out
     lines = out.splitlines()
-    assert lines[-3] == "" and lines[-4] != "", f"exactly one blank line before the closing lines:\n{out}"
+    if before_the_block:
+        assert len(lines) == 2, f"the closing lines are the whole output:\n{out}"
+    else:
+        assert lines[-3] == "" and lines[-4] != "", f"exactly one blank line before the closing lines:\n{out}"
     assert lines[-2].startswith(f"The AIM server at {url or aim.url} is unavailable: "), out
     assert lines[-1].startswith("No sign-in was completed and nothing was stored. Run the same command again "), out
     for text in NEVER_PRINTED:
@@ -279,7 +284,7 @@ def test_an_unavailable_answer_to_the_device_code_request_never_polls_or_opens_a
         aim, monkeypatch, status):
     aim.code = (status, {"error": "service_unavailable"}, {"Retry-After": "7"})
     rc, out = _login(aim, monkeypatch)
-    what, next_step = _assert_unavailable(aim, rc, out)
+    what, next_step = _assert_unavailable(aim, rc, out, before_the_block=True)
     assert aim.code_requests == 1
     assert aim.token_requests == 0
     assert aim.sleeps == []
@@ -353,7 +358,7 @@ def test_a_refused_connection_mid_poll_ends_the_login_as_unavailable(aim, monkey
 
 def test_an_unreachable_server_at_the_pre_flight_probe_is_unavailable(aim, monkeypatch, closed_port_url):
     rc, out = _login(aim, monkeypatch, url=closed_port_url)
-    what, _ = _assert_unavailable(aim, rc, out, url=closed_port_url)
+    what, _ = _assert_unavailable(aim, rc, out, url=closed_port_url, before_the_block=True)
     assert aim.hits == []
     assert aim.opened == []
     assert what.endswith("is unavailable: it gave no HTTP answer (connection refused).")
@@ -364,7 +369,7 @@ def test_a_probe_that_gets_no_answer_in_time_is_unavailable_and_not_called_a_tim
         raise cli.requests.exceptions.Timeout("HTTPConnectionPool: Read timed out. (read timeout=5)")
     monkeypatch.setattr(cli.requests, "get", unanswered)
     rc, out = _login(aim, monkeypatch)
-    what, _ = _assert_unavailable(aim, rc, out)
+    what, _ = _assert_unavailable(aim, rc, out, before_the_block=True)
     assert aim.hits == []
     assert what.endswith("is unavailable: it gave no HTTP answer in time.")
 
@@ -374,7 +379,7 @@ def test_no_answer_to_the_device_code_request_is_unavailable(aim, monkeypatch):
         raise cli.requests.exceptions.ConnectionError("[Errno 61] Connection refused")
     monkeypatch.setattr(cli.requests, "post", refused)
     rc, out = _login(aim, monkeypatch)
-    _assert_unavailable(aim, rc, out)
+    _assert_unavailable(aim, rc, out, before_the_block=True)
     assert aim.hits == ["GET /"]
     assert aim.opened == []
 
