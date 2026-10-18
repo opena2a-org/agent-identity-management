@@ -170,7 +170,7 @@ func (s *RegistrationService) CreateManualRegistrationRequest(
 			ApprovedBy:          nil, // System auto-approval (no reviewer)
 			ApprovedAt:          &now,
 			Status:              domain.UserStatusActive,
-			ForcePasswordChange: true, // SECURITY: Force password change to confirm account ownership
+			ForcePasswordChange: true,
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}
@@ -619,12 +619,15 @@ func (s *RegistrationService) ResetPassword(
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	// Update user password and clear reset token
+	// Update user password and clear reset token. The reset is a password
+	// change: every session signed in before it is refused from now on.
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	user.PasswordHash = &hashedPassword
 	user.PasswordResetToken = nil
 	user.PasswordResetExpiresAt = nil
 	user.ForcePasswordChange = false // Clear force password change if set
-	user.UpdatedAt = time.Now()
+	user.PasswordChangedAt = &now
+	user.UpdatedAt = now
 
 	if err := s.userRepo.Update(user); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)

@@ -137,6 +137,7 @@ type JWTService struct {
 	sessionMaxAge   time.Duration
 	sdkFamilyMaxAge time.Duration
 	revoker         *TokenRevoker
+	sessionState    SessionStateReader
 }
 
 // SessionMaxAge is the longest a login sign-in lasts, however often it is

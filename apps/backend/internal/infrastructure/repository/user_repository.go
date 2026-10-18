@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -72,11 +74,13 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 	// deleted_at is load-bearing: User.CanHoldSession refuses soft-deleted
 	// accounts at token refresh and recovery, and a predicate whose data path
 	// never feeds the field it checks is a decoy control.
+	// password_changed_at is load-bearing too: the refresh route and the
+	// device grant refuse a session from before the last password change.
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role,
 		       password_hash, force_password_change, last_login_at,
 		       status, created_at, updated_at, approved_by, approved_at,
-		       deleted_at
+		       deleted_at, password_changed_at
 		FROM users
 		WHERE id = $1
 	`
@@ -100,6 +104,7 @@ func (r *UserRepository) GetByID(id uuid.UUID) (*domain.User, error) {
 		&user.ApprovedBy,
 		&user.ApprovedAt,
 		&user.DeletedAt,
+		&user.PasswordChangedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -124,7 +129,8 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 	query := `
 		SELECT id, organization_id, email, name, avatar_url, role,
 		       password_hash, force_password_change, last_login_at,
-		       status, created_at, updated_at, approved_by, approved_at
+		       status, created_at, updated_at, approved_by, approved_at,
+		       password_changed_at
 		FROM users
 		WHERE email = $1
 	`
@@ -147,6 +153,7 @@ func (r *UserRepository) GetByEmail(email string) (*domain.User, error) {
 		&user.UpdatedAt,
 		&user.ApprovedBy,
 		&user.ApprovedAt,
+		&user.PasswordChangedAt,
 	)
 
 	if err == sql.ErrNoRows {
@@ -287,7 +294,10 @@ func (r *UserRepository) GetByOrganizationAndStatus(orgID uuid.UUID, status doma
 	return filteredUsers, nil
 }
 
-// Update updates a user
+// Update updates a user. password_changed_at only moves forward: GREATEST
+// ignores a NULL, so a copy of the row read without the column (or with an
+// older value) leaves the recorded change in place, and a password change
+// cannot be undone by a later write of a stale copy.
 func (r *UserRepository) Update(user *domain.User) error {
 	query := `
 		UPDATE users
@@ -295,7 +305,8 @@ func (r *UserRepository) Update(user *domain.User) error {
 		    force_password_change = $5, last_login_at = $6,
 		    status = $7, approved_by = $8, approved_at = $9,
 		    password_reset_token = $10, password_reset_expires_at = $11,
-		    updated_at = $12
+		    updated_at = $12,
+		    password_changed_at = GREATEST(password_changed_at, $14)
 		WHERE id = $13
 	`
 
@@ -315,9 +326,28 @@ func (r *UserRepository) Update(user *domain.User) error {
 		user.PasswordResetExpiresAt,
 		user.UpdatedAt,
 		user.ID,
+		user.PasswordChangedAt,
 	)
 
 	return err
+}
+
+// GetSessionState reads the part of a user record an authenticated request
+// checks on every request: when the password last changed and whether a
+// change is required. It answers domain.ErrUserNotFound when no user has the
+// ID. force_password_change is nullable in the schema; NULL reads as false,
+// as the column's default.
+func (r *UserRepository) GetSessionState(ctx context.Context, id uuid.UUID) (*domain.UserSessionState, error) {
+	query := `SELECT password_changed_at, COALESCE(force_password_change, FALSE) FROM users WHERE id = $1`
+	state := &domain.UserSessionState{}
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&state.PasswordChangedAt, &state.ForcePasswordChange)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, domain.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
 // UpdateRole updates a user's role

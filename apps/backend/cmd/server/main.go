@@ -188,6 +188,13 @@ func main() {
 	}
 	log.Println(tokenRevocationStartupLine(cfg, redisClient, cacheService, failOpen))
 
+	// The auth middleware reads the user's row behind each access token it
+	// accepts: a password change ends every session signed in before it, and
+	// while an account must change its password the middleware admits its
+	// session only to GET /api/v1/auth/me and POST /api/v1/auth/change-password.
+	// The record is the database row, so this holds with or without Redis.
+	jwtService.SetSessionStateReader(repos.User)
+
 	// Initialize email service
 	emailService, err := initEmailService(cfg.Email)
 	if err != nil {

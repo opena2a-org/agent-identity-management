@@ -370,12 +370,15 @@ func (h *PublicRegistrationHandler) generateApprovedLoginResponse(c fiber.Ctx, u
 	// Update last login timestamp (silent failure - non-critical)
 	_ = h.authService.UpdateLastLogin(c.Context(), user)
 
-	// Generate tokens
-	accessToken, refreshToken, err := h.jwtService.GenerateTokenPair(
+	// Generate tokens. The forced change answers through here with the user
+	// read after the change: the pair's sign-in time is at least the change's
+	// boundary, so the change that ended the earlier sessions keeps this one.
+	accessToken, refreshToken, err := h.jwtService.GenerateTokenPairSince(
 		user.ID.String(),
 		user.OrganizationID.String(),
 		user.Email,
 		string(user.Role),
+		user.PasswordChangedAt,
 	)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

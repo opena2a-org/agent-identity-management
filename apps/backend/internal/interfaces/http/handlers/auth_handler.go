@@ -211,9 +211,32 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
-	return c.JSON(fiber.Map{
-		"message": "Password changed successfully",
-	})
+	// The change ends every session signed in before it, this one included.
+	// The session that made it is issued a new pair, minted from the user
+	// read after the change so its sign-in time is not before the change's
+	// boundary. When the pair cannot be issued, the change still stands and
+	// the answer carries no tokens: the client signs in again.
+	response := fiber.Map{"message": "Password changed successfully"}
+	if user, err := h.authService.GetUserByID(c.Context(), userID); err == nil && h.jwtService != nil {
+		accessToken, refreshToken, err := h.jwtService.GenerateTokenPairSince(
+			user.ID.String(),
+			user.OrganizationID.String(),
+			user.Email,
+			string(user.Role),
+			user.PasswordChangedAt,
+		)
+		if err == nil {
+			recordSignIn(c, h.auditService, h.jwtService, refreshToken, fiber.Map{"method": "password_change"})
+			response["accessToken"] = accessToken
+			response["refreshToken"] = refreshToken
+		} else {
+			log.Printf("ChangePassword: the new pair for user %s was not issued: %v", userID, err)
+		}
+	} else if err != nil {
+		log.Printf("ChangePassword: user %s not read after the change, no new pair issued: %v", userID, err)
+	}
+
+	return c.JSON(response)
 }
 
 // GetCurrentOrganization returns the current user's organization

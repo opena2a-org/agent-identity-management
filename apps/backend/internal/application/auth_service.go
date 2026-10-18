@@ -332,10 +332,15 @@ func (s *AuthService) ChangePassword(
 		return fmt.Errorf("failed to hash new password: %w", err)
 	}
 
-	// Update password in database
+	// Update password in database, and record the change: every session
+	// signed in before it is refused from now on (users.password_changed_at).
+	// Microseconds are what the column stores, so the instant read back is
+	// the one written.
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	user.PasswordHash = &newHash
 	user.ForcePasswordChange = false
-	user.UpdatedAt = time.Now()
+	user.PasswordChangedAt = &now
+	user.UpdatedAt = now
 
 	if err := s.userRepo.Update(user); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
