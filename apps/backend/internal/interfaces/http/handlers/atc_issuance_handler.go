@@ -32,7 +32,16 @@ func NewATCIssuanceHandler(
 	}
 }
 
-// IssueATC handles POST /agents/:id/atc.
+// AgentRevokedCode is the machine-readable reason IssueATC refuses a revoked
+// agent with.
+const AgentRevokedCode = "agentRevoked"
+
+// agentRevokedATCMessage is the line IssueATC refuses a revoked agent with.
+const agentRevokedATCMessage = "This agent is revoked, and no Agent Trust Credential is issued for a revoked agent: register a new agent to replace it"
+
+// IssueATC handles POST /agents/:id/atc. A revoked agent, including one revoked
+// while the Registry was issuing, is answered 409 with reasonCode agentRevoked
+// and no credential.
 func (h *ATCIssuanceHandler) IssueATC(c fiber.Ctx) error {
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
 	// Reject a missing or zero organization. A Nil orgID would otherwise compare
@@ -61,6 +70,11 @@ func (h *ATCIssuanceHandler) IssueATC(c fiber.Ctx) error {
 
 	result, err := h.service.IssueForAgent(c.Context(), agentID)
 	if err != nil {
+		if errors.Is(err, application.ErrATCAgentRevoked) {
+			return c.Status(fiber.StatusConflict).JSON(withReasonCode(fiber.Map{
+				"error": agentRevokedATCMessage,
+			}, AgentRevokedCode))
+		}
 		// A missing service-account token is a server configuration problem, not a
 		// client error — surface it distinctly so operators can spot an unprovisioned
 		// REGISTRY_ATC_TOKEN (Phase C) rather than misreading it as a bad request.

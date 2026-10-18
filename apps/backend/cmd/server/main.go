@@ -1111,8 +1111,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		cfg.Server.FrontendURL,
 	)
 	// Revoking an agent asks the same Registry, with the same token, to revoke
-	// the credentials it issued for the agent.
+	// the credentials it issued for the agent. Issuance asks it again when the
+	// agent was revoked while the Registry was issuing a credential.
 	agentService.SetRegistryATCRevoker(atcClient)
+	atcIssuanceService.SetRegistryATCRevoker(atcClient)
 
 	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
 	issuerURI := cfg.Registry.ATCIssuerURI

@@ -48,16 +48,22 @@ func (s *AgentService) SetRegistryATCRevoker(revoker RegistryATCRevoker) {
 // revoke the credentials it issued for the agent, and returns at once: the
 // revocation AIM stored stands whatever the Registry answers, and a Registry
 // that is slow or unreachable does not hold the request that revoked the agent.
-// The goroutine uses a background context because it outlives that request.
 func (s *AgentService) requestRegistryATCRevocation(agentID uuid.UUID) {
-	if s.atcRevoker == nil {
+	startRegistryATCRevocation(s.atcRevoker, agentID, s.atcRevocationRetryDelays)
+}
+
+// startRegistryATCRevocation asks revoker, on its own goroutine, to revoke the
+// credentials the Registry issued for agentID, as revokeRegistryATCs does with
+// delays (defaultRegistryATCRevocationRetryDelays when nil), and returns at
+// once. A nil revoker is sent nothing. The goroutine uses a background context
+// because it outlives the request that started it.
+func startRegistryATCRevocation(revoker RegistryATCRevoker, agentID uuid.UUID, delays []time.Duration) {
+	if revoker == nil {
 		return
 	}
-	delays := s.atcRevocationRetryDelays
 	if delays == nil {
 		delays = defaultRegistryATCRevocationRetryDelays
 	}
-	revoker := s.atcRevoker
 	go func() {
 		_ = revokeRegistryATCs(revoker, agentID.String(), delays)
 	}()
