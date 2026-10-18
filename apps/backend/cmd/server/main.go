@@ -1092,14 +1092,18 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// credential signing + transparency-log recording to the Registry (the CA).
 	// Uses REGISTRY_BRIDGE_URL (shared) + REGISTRY_ATC_TOKEN (service-account bearer).
 	// FRONTEND_URL is the public origin the credential's buildAttestation names.
+	atcClient := registry.NewATCClientFromEnv()
 	atcIssuanceService := application.NewATCIssuanceService(
 		repos.Agent,
 		repos.Capability,
 		repos.Organization,
 		trustCalculator,
-		registry.NewATCClientFromEnv(),
+		atcClient,
 		cfg.Server.FrontendURL,
 	)
+	// Revoking an agent asks the same Registry, with the same token, to revoke
+	// the credentials it issued for the agent.
+	agentService.SetRegistryATCRevoker(atcClient)
 
 	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
 	issuerURI := cfg.Registry.ATCIssuerURI

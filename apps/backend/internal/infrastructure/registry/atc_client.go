@@ -4,7 +4,8 @@
 // an agent's 9-factor behavioral trust score and delegates issuance to the
 // Registry's POST /internal/atc/issue endpoint, which signs (threshold Ed25519 +
 // ML-DSA-65), records the issuance to the RFC 6962 transparency log, and returns
-// the portable credential.
+// the portable credential. When AIM revokes an agent, it asks the Registry's
+// POST /internal/atc/:agentId/revoke endpoint to revoke the agent's credentials.
 package registry
 
 import (
@@ -15,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -29,6 +31,16 @@ const (
 	// issueATCPath is the Registry's internal issuance endpoint (scope
 	// internal:threats:write on the service-account bearer token).
 	issueATCPath = "/internal/atc/issue"
+
+	// revokeATCPath is the Registry's internal revocation endpoint, as its route
+	// table registers it, behind the same scope as issueATCPath. It revokes every
+	// credential the Registry issued for the agent whose ID replaces the :agentId
+	// segment: the agentId the issuance requests named.
+	revokeATCPath = "/internal/atc/:agentId/revoke"
+
+	// maxRevocationErrorBody bounds how much of the Registry's answer to a
+	// refused revocation is read.
+	maxRevocationErrorBody = 4096
 
 	atcClientTimeout = 30 * time.Second
 	atcClientUA      = "aim-server/atc-issuer"
@@ -111,10 +123,10 @@ type AgentTrustCredential struct {
 	Raw json.RawMessage `json:"-"`
 }
 
-// ATCClient calls the Registry's ATC issuance endpoint. It is named distinctly
-// from the registry bridge Client (a separate, cloud-deployment registry client
-// in this same package) so the two do not collide when the cloud build composes
-// both into package registry.
+// ATCClient calls the Registry's ATC issuance and revocation endpoints. It is
+// named distinctly from the registry bridge Client (a separate, cloud-deployment
+// registry client in this same package) so the two do not collide when the
+// cloud build composes both into package registry.
 type ATCClient struct {
 	baseURL    string
 	token      string
@@ -161,8 +173,8 @@ func (c *ATCClient) IssueATC(ctx context.Context, req ATCIssuanceRequest) (*Agen
 		return nil, fmt.Errorf("registry: marshal issuance request: %w", err)
 	}
 
-	url := c.baseURL + issueATCPath
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	endpoint := c.baseURL + issueATCPath
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("registry: build issuance request: %w", err)
 	}
@@ -192,6 +204,70 @@ func (c *ATCClient) IssueATC(ctx context.Context, req ATCIssuanceRequest) (*Agen
 	}
 	cred.Raw = json.RawMessage(respBody)
 	return &cred, nil
+}
+
+// ATCStatusError is a non-2xx answer from the Registry to a credential
+// revocation. Body is the start of the Registry's answer.
+type ATCStatusError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *ATCStatusError) Error() string {
+	return fmt.Sprintf("registry: revocation returned status %d: %s", e.StatusCode, e.Body)
+}
+
+// Retryable reports whether the same request can succeed later: a timeout
+// (408), a rate limit (429) or a server-side failure (5xx). Any other refusal
+// (a token without the scope, a route the Registry does not serve) repeats.
+func (e *ATCStatusError) Retryable() bool {
+	return e.StatusCode == http.StatusRequestTimeout ||
+		e.StatusCode == http.StatusTooManyRequests ||
+		e.StatusCode >= 500
+}
+
+// RevokeATC asks the Registry to revoke every credential it issued for
+// agentID, recording reason with the revocation. The Registry publishes the
+// reason on its revocation list, so it must be a fixed code, never text a
+// user typed. Errors fail closed as IssueATC's do: a missing token returns
+// ErrTokenNotConfigured and an empty agentID an error, both without a request;
+// a non-2xx answer returns an *ATCStatusError.
+func (c *ATCClient) RevokeATC(ctx context.Context, agentID, reason string) error {
+	if c.token == "" {
+		return ErrTokenNotConfigured
+	}
+	if agentID == "" {
+		return errors.New("registry: revocation needs an agent ID")
+	}
+
+	body, err := json.Marshal(struct {
+		Reason string `json:"reason"`
+	}{Reason: reason})
+	if err != nil {
+		return fmt.Errorf("registry: marshal revocation request: %w", err)
+	}
+
+	endpoint := c.baseURL + strings.Replace(revokeATCPath, ":agentId", url.PathEscape(agentID), 1)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("registry: build revocation request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+c.token)
+	httpReq.Header.Set("User-Agent", atcClientUA)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("registry: revocation request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxRevocationErrorBody))
+		return &ATCStatusError{StatusCode: resp.StatusCode, Body: snippet(respBody)}
+	}
+	return nil
 }
 
 // snippet trims an error body so a large or HTML error page does not flood logs.

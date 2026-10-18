@@ -54,6 +54,8 @@ type AgentService struct {
 	transitions              *transition.Recorder          // Optional: set by SetTransitionRecorder
 	webhooks                 webhookEventDispatcher        // Optional: sends agent.* and trust_score.* events; set by SetWebhookService
 	mcpServerRepo            domain.MCPServerRepository    // Optional: resolves talks_to entries to MCP servers in AddMCPServers; injected via SetMCPServerLookup
+	atcRevoker               RegistryATCRevoker            // Optional: revokes the agent's Registry-issued credentials in RevokeAgent; set by SetRegistryATCRevoker
+	atcRevocationRetryDelays []time.Duration               // Waits between those revocation requests; nil means defaultRegistryATCRevocationRetryDelays
 }
 
 // SetWebhookService wires the webhook service that the agent.* and
@@ -2686,7 +2688,9 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 }
 
 // RevokeAgent revokes an agent. No lifecycle act returns a revoked agent to verified or
-// suspended (domain.AgentStatusTransition).
+// suspended (domain.AgentStatusTransition). Once the revocation is stored, the Registry
+// is asked to revoke the credentials it issued for the agent; RevokeAgent does not wait
+// for its answer (requestRegistryATCRevocation).
 func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	agent, err := s.agentRepo.GetByID(id)
 	if err != nil {
@@ -2703,6 +2707,10 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentRevoked); err != nil {
 		return fmt.Errorf("failed to revoke agent: %w", err)
 	}
+
+	// The Registry signs the agent's Agent Trust Credentials (ATCIssuanceService),
+	// so the revocation is sent to it as well, to be listed there as it is here.
+	s.requestRegistryATCRevocation(agent.ID)
 
 	// Recalculate trust score (revocation drops trust to 0)
 	trustScore, err := s.trustCalc.Calculate(agent)
