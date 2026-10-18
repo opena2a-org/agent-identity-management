@@ -48,6 +48,12 @@ var errATCPublicOriginNotConfigured = errors.New("atc issuance: public origin (F
 // credential AIM does not hand on (see checkIssuedATC).
 var ErrATCNotConforming = errors.New("atc issuance: the issued credential does not conform to ATX")
 
+// ErrATCAgentRevoked is returned when the agent a credential is asked for is
+// revoked, or is revoked while the Registry is issuing the credential. AIM asks
+// the Registry to revoke the credentials it issued for a revoked agent
+// (AgentService.RevokeAgent), so it does not ask it for a new one.
+var ErrATCAgentRevoked = errors.New("atc issuance: the agent is revoked")
+
 // The signature suites ATX registers (core section 14), as an ATX credential
 // names them in a signature's algorithm member.
 const (
@@ -114,6 +120,10 @@ type ATCIssuanceService struct {
 	// the public DID resolver at /api/v1/did/. The credential's buildAttestation
 	// references the agent's DID document there.
 	publicOrigin string
+
+	// revoker is asked to revoke the agent's credentials again when the agent is
+	// revoked while the Registry is issuing one; set by SetRegistryATCRevoker.
+	revoker RegistryATCRevoker
 }
 
 // NewATCIssuanceService wires the issuance trigger. grants is the capability
@@ -137,23 +147,36 @@ func NewATCIssuanceService(
 	}
 }
 
+// SetRegistryATCRevoker wires the Registry client IssueForAgent asks to revoke
+// the agent's credentials again when the agent is revoked while the Registry is
+// issuing one. When unset, IssueForAgent still hands no such credential on.
+func (s *ATCIssuanceService) SetRegistryATCRevoker(revoker RegistryATCRevoker) {
+	s.revoker = revoker
+}
+
 // IssueForAgent computes the agent's behavioral score, builds the issuance
 // request, and calls the Registry. It returns the signed credential plus the
-// unsigned provenance context, or ErrATCNotConforming when the Registry's
-// credential fails checkIssuedATC.
+// unsigned provenance context, ErrATCAgentRevoked when the agent is revoked
+// when it is first read or when it is read again after the Registry has
+// answered, or ErrATCNotConforming when the Registry's credential fails
+// checkIssuedATC.
 //
 // Side effect: CalculateTrustScore recomputes and persists the agent's current
 // trust score, so an issuance attempt updates stored trust state even if the
 // subsequent Registry call fails. This is intentional — the credential carries
 // the freshly-computed score — but it means /atc is not a side-effect-free read.
+// A revoked agent is refused before its score is computed.
 func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUID) (*ATCIssuanceResult, error) {
 	if s.publicOrigin == "" {
 		return nil, errATCPublicOriginNotConfigured
 	}
 
-	agent, err := s.agents.GetByID(agentID)
+	agent, err := s.loadAgent(agentID)
 	if err != nil {
 		return nil, fmt.Errorf("atc issuance: load agent: %w", err)
+	}
+	if agent.Status == domain.AgentStatusRevoked {
+		return nil, ErrATCAgentRevoked
 	}
 
 	// The credential asserts the agent's active grants as of this call. A grant
@@ -175,9 +198,26 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 
 	req := buildATCIssuanceRequest(agent, capabilities, score, s.resolvePublisher(agent), s.publicOrigin, time.Now().UTC())
 
-	cred, err := s.client.IssueATC(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("atc issuance: registry issue: %w", err)
+	cred, issueErr := s.client.IssueATC(ctx, req)
+
+	// The agent may be revoked while the Registry is issuing. RevokeAgent's
+	// revocation request may then reach the Registry before this issuance does,
+	// so the agent is read again once the Registry has answered. For an agent
+	// revoked by then, the credential is not handed on, and the Registry is
+	// asked again to revoke the agent's credentials, so a revocation request
+	// reaches it after this issuance. It is asked whatever the issuance
+	// answered: a request whose answer did not arrive may still have been
+	// signed.
+	current, err := s.loadAgent(agentID)
+	switch {
+	case err == nil && current.Status == domain.AgentStatusRevoked:
+		startRegistryATCRevocation(s.revoker, agentID, nil)
+		return nil, ErrATCAgentRevoked
+	case issueErr != nil:
+		return nil, fmt.Errorf("atc issuance: registry issue: %w", issueErr)
+	case err != nil:
+		// Whether the agent was revoked is not known, so no credential is handed on.
+		return nil, fmt.Errorf("atc issuance: reload agent after issuance: %w", err)
 	}
 	if err := checkIssuedATC(req, cred); err != nil {
 		return nil, err
@@ -188,6 +228,19 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 		Confidence:            score.Confidence,
 		IsolationSelfReported: true,
 	}, nil
+}
+
+// loadAgent reads the agent being credentialed. A read that returns no agent
+// fails as a failed read does.
+func (s *ATCIssuanceService) loadAgent(agentID uuid.UUID) (*domain.Agent, error) {
+	agent, err := s.agents.GetByID(agentID)
+	if err != nil {
+		return nil, err
+	}
+	if agent == nil {
+		return nil, fmt.Errorf("agent %s not found", agentID)
+	}
+	return agent, nil
 }
 
 // checkIssuedATC refuses an issued credential that AIM must not hand on. AIM

@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: no Agent Trust Credential is issued for a revoked agent
+
+- The issuance service behind `POST /api/v1/agents/:id/atc` did not read the agent's status, so issuance for a
+  revoked agent went ahead as for any other agent: its trust score was computed and the Registry was asked to sign a
+  credential for it.
+- A revoked agent is now refused before its trust score is computed or the Registry is asked. The route answers `409`
+  with `reasonCode` and `code` `agentRevoked` and the error
+  `This agent is revoked, and no Agent Trust Credential is issued for a revoked agent: register a new agent to replace it`.
+- The agent is read again once the Registry has answered. An agent revoked while the Registry was issuing gets the
+  same `409` and no credential, and AIM sends the Registry `POST /internal/atc/<agent id>/revoke` again, on the retry
+  schedule the revoke route's request follows, so the Registry receives a revocation request after the issuance. It
+  is sent when the issuance's answer did not arrive as well, as the Registry may have signed the credential. When the
+  agent cannot be read again, no credential is handed on and no revocation is sent.
+- The server hands the issuance service the Registry client it already hands the agent service.
+- Tests: `apps/backend/internal/application/atc_issuance_revoked_agent_test.go` (a revoked agent gets no credential,
+  no trust score and no Registry request; an agent revoked during issuance gets no credential and a second
+  revocation request, also when the issuance's answer did not arrive; an agent not revoked gets its credential and
+  no revocation; a failed second read hands nothing on; and, through the Registry client the server wires, a local
+  Registry receives the revocation after the issuance) and
+  `apps/backend/internal/interfaces/http/handlers/atc_issuance_handler_test.go` (the `409` body for an agent revoked
+  before the request and for one revoked while the Registry issues).
+
 ### Added: with `REGISTRY_URL` set, the server reads the revocation list an authority's discovery document names, and `ATC_CRL_ENDPOINT` has no default
 
 - `REGISTRY_URL`, unset by default, is the base URL of an authority's discovery document. When it is set, the server

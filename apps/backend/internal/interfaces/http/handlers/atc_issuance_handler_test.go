@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/registry"
 )
 
 // These tests are a no-DB route-registration smoke for POST /agents/:id/atc.
@@ -104,8 +107,13 @@ func (r *refusingIssuances) GetByID(uuid.UUID) (*domain.Agent, error) {
 // agent alone, and its issuance service is the stub issuances.
 func atcIssuer(t *testing.T, callerOrg uuid.UUID, agent *domain.Agent, issuances *refusingIssuances) func(uuid.UUID) (int, string) {
 	t.Helper()
+	return atcIssuerWithService(t, callerOrg, agent, application.NewATCIssuanceService(issuances, nil, nil, nil, nil, "https://aim.example"))
+}
+
+// atcIssuerWithService is atcIssuer with the issuance service issuanceService.
+func atcIssuerWithService(t *testing.T, callerOrg uuid.UUID, agent *domain.Agent, issuanceService *application.ATCIssuanceService) func(uuid.UUID) (int, string) {
+	t.Helper()
 	agentService := application.NewAgentService(&oneAgentRepo{agent: agent}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	issuanceService := application.NewATCIssuanceService(issuances, nil, nil, nil, nil, "https://aim.example")
 	h := NewATCIssuanceHandler(issuanceService, agentService, nil)
 	app := fiber.New()
 	app.Use(func(c fiber.Ctx) error {
@@ -171,5 +179,88 @@ func TestATCIssuanceHandler_OwnAgentReachesTheIssuanceService(t *testing.T) {
 	}
 	if issuances.asked != 1 {
 		t.Errorf("the issuance service was asked for %d credential(s), want 1", issuances.asked)
+	}
+}
+
+// agentRevokedAfterReads serves a copy of agent for its first reads reads and
+// the agent revoked on every later one.
+type agentRevokedAfterReads struct {
+	agent *domain.Agent
+	reads int
+	read  int
+}
+
+func (r *agentRevokedAfterReads) GetByID(uuid.UUID) (*domain.Agent, error) {
+	r.read++
+	agent := *r.agent
+	if r.read > r.reads {
+		agent.Status = domain.AgentStatusRevoked
+	}
+	return &agent, nil
+}
+
+type noCapabilityGrants struct{}
+
+func (noCapabilityGrants) GetActiveCapabilitiesByAgentID(uuid.UUID) ([]*domain.AgentCapability, error) {
+	return nil, nil
+}
+
+type fixedTrustScore struct{}
+
+func (fixedTrustScore) CalculateTrustScore(context.Context, uuid.UUID) (*domain.TrustScore, error) {
+	return &domain.TrustScore{Score: 0.8}, nil
+}
+
+// countingRegistry answers each issuance with a credential for the requested
+// agent and counts the issuances.
+type countingRegistry struct{ issued int }
+
+func (r *countingRegistry) IssueATC(_ context.Context, req registry.ATCIssuanceRequest) (*registry.AgentTrustCredential, error) {
+	r.issued++
+	return &registry.AgentTrustCredential{AgentID: req.AgentID, AgentDID: req.AgentDID}, nil
+}
+
+// The caller's own revoked agent is answered 409 with reasonCode agentRevoked,
+// the line that says what to do instead, and no credential: when it was revoked
+// before the request, and when it is revoked while the Registry is issuing.
+func TestATCIssuanceHandler_RevokedAgentAnswersConflict(t *testing.T) {
+	cases := []struct {
+		name string
+		// unrevokedReads is how many of the issuance service's reads of the
+		// agent find it not revoked.
+		unrevokedReads int
+		wantIssued     int
+	}{
+		{name: "revoked before the request", unrevokedReads: 0, wantIssued: 0},
+		{name: "revoked while the Registry issues", unrevokedReads: 1, wantIssued: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			agent := &domain.Agent{ID: uuid.New(), OrganizationID: uuid.New(), Name: "revoked-agent", Status: domain.AgentStatusVerified}
+			reg := &countingRegistry{}
+			issuanceService := application.NewATCIssuanceService(
+				&agentRevokedAfterReads{agent: agent, reads: tc.unrevokedReads},
+				noCapabilityGrants{}, nil, fixedTrustScore{}, reg, "https://aim.example")
+			issue := atcIssuerWithService(t, agent.OrganizationID, agent, issuanceService)
+
+			status, raw := issue(agent.ID)
+			if status != http.StatusConflict {
+				t.Fatalf("status = %d, want 409 for a revoked agent; body %s", status, raw)
+			}
+			var body map[string]interface{}
+			if err := json.Unmarshal([]byte(raw), &body); err != nil {
+				t.Fatalf("decode body %s: %v", raw, err)
+			}
+			assertReasonCode(t, body, "agentRevoked")
+			if want := "This agent is revoked, and no Agent Trust Credential is issued for a revoked agent: register a new agent to replace it"; body["error"] != want {
+				t.Errorf("error = %v, want %q", body["error"], want)
+			}
+			if _, ok := body["credential"]; ok {
+				t.Errorf("the refusal carries a credential: %s", raw)
+			}
+			if reg.issued != tc.wantIssued {
+				t.Errorf("the Registry was asked for %d credential(s), want %d", reg.issued, tc.wantIssued)
+			}
+		})
 	}
 }
