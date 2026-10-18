@@ -413,14 +413,16 @@ export default function MCPServerDetailsPage({
             Back to MCP servers
           </Button>
 
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-inset bg-brand-soft">
+          {/* The row wraps and its groups shrink, so a long name or URL breaks inside the
+              viewport instead of laying the page out wider than a phone. */}
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-inset bg-brand-soft">
                 <Server className="h-8 w-8 text-brand-text" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <h1 className="text-3xl font-bold">{server.name}</h1>
+                  <h1 className="min-w-0 break-words text-3xl font-bold">{server.name}</h1>
                   {isVerified && (
                     <span title="Verified">
                       <Shield className="h-6 w-6 text-success-text" />
@@ -433,13 +435,13 @@ export default function MCPServerDetailsPage({
                   </p>
                 )}
                 <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="flex items-center gap-1">
-                    <Globe className="h-3 w-3" />
+                  <Badge variant="outline" className="flex max-w-full items-center gap-1">
+                    <Globe className="h-3 w-3 shrink-0" />
                     <a
                       href={server.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:underline"
+                      className="break-all hover:underline"
                     >
                       {server.url}
                     </a>
@@ -462,7 +464,7 @@ export default function MCPServerDetailsPage({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {canManage && !isVerified && (
                 <Button
                   onClick={handleVerify}
@@ -914,7 +916,7 @@ export default function MCPServerDetailsPage({
                     </div>
 
                     {/* Options Grid */}
-                    <div className="grid md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
                       {/* Option 1: SDK */}
                       <div className="relative group">
                         <div className="absolute -inset-0.5 bg-bar rounded-lg opacity-20 group-hover:opacity-30 transition" />
@@ -1321,7 +1323,7 @@ export default function MCPServerDetailsPage({
                     <span className="text-sm font-medium text-ink-secondary">
                       Server ID:
                     </span>
-                    <span className="col-span-2 text-sm font-mono">
+                    <span className="col-span-2 break-all text-sm font-mono">
                       {server.id}
                     </span>
                   </div>
@@ -1330,7 +1332,7 @@ export default function MCPServerDetailsPage({
                     <span className="text-sm font-medium text-ink-secondary">
                       Name:
                     </span>
-                    <span className="col-span-2 text-sm">{server.name}</span>
+                    <span className="col-span-2 break-words text-sm">{server.name}</span>
                   </div>
                   <Separator />
                   <div className="grid grid-cols-3 items-center gap-4">
@@ -1341,7 +1343,7 @@ export default function MCPServerDetailsPage({
                       href={server.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="col-span-2 text-sm text-brand-text hover:underline"
+                      className="col-span-2 break-all text-sm text-brand-text hover:underline"
                     >
                       {server.url}
                     </a>
@@ -1353,7 +1355,7 @@ export default function MCPServerDetailsPage({
                         <span className="text-sm font-medium text-ink-secondary">
                           Description:
                         </span>
-                        <span className="col-span-2 text-sm">
+                        <span className="col-span-2 break-words text-sm">
                           {server.description}
                         </span>
                       </div>
