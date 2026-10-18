@@ -5,9 +5,13 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
 
 // revocationListStartupLine returns the line the server logs at startup for
@@ -53,11 +57,13 @@ func httpsURL(raw string) (*url.URL, bool) {
 // startRevocationList logs the revocation list's startup line and, when
 // REGISTRY_URL is set, starts the refresher that holds the signed revocation
 // list of the authority whose discovery document is served at REGISTRY_URL,
-// read from the address ATC_CRL_ENDPOINT names when it is set. It returns a
-// nil refresher when REGISTRY_URL is not set, and the error of
+// read from the address ATC_CRL_ENDPOINT names when it is set, and puts the
+// gauges of the list it holds on /metrics (see registerRevocationListSeries).
+// It returns a nil refresher when REGISTRY_URL is not set, and the error of
 // revocationListStartupLine. No request the server answers fetches the list:
-// GET /health/ready reads the refresher's State. The server passes a nil
-// httpClient, and the list client then reads with an HTTP client of its own.
+// GET /health/ready reads the refresher's State, and /metrics the list held.
+// The server passes a nil httpClient, and the list client then reads with an
+// HTTP client of its own.
 func startRevocationList(registry config.RegistryConfig, httpClient *http.Client) (*infraatc.CRLRefresher, error) {
 	line, err := revocationListStartupLine(registry)
 	if err != nil {
@@ -65,6 +71,7 @@ func startRevocationList(registry config.RegistryConfig, httpClient *http.Client
 	}
 	log.Print(line)
 	if registry.URL == "" {
+		_ = registerRevocationListSeries(metrics.Registerer(), nil)
 		return nil, nil
 	}
 	client, err := infraatc.NewCachedCRLClient(registry.URL, registry.ATCCRLEndpoint, httpClient)
@@ -72,6 +79,28 @@ func startRevocationList(registry config.RegistryConfig, httpClient *http.Client
 		return nil, err
 	}
 	refresher := infraatc.NewCRLRefresher(client)
+	if err := registerRevocationListSeries(metrics.Registerer(), refresher); err != nil {
+		log.Printf("ERROR: Revocation list: the gauges of the list held are not on /metrics: %v", err)
+	}
 	refresher.Start()
 	return refresher, nil
+}
+
+// revocationSeriesMu serialises registerRevocationListSeries.
+var revocationSeriesMu sync.Mutex
+
+// registerRevocationListSeries puts on reg, the registry /metrics serves, the
+// gauges of the list refresher holds: aim_atc_revocation_list_age_seconds and
+// aim_atc_revocation_list_entries, each with no sample while no list is held.
+// They replace the gauges of a refresher started before it in this process,
+// and a nil refresher leaves no such series at all. main starts one refresher
+// at most, so only tests replace one.
+func registerRevocationListSeries(reg prometheus.Registerer, refresher *infraatc.CRLRefresher) error {
+	revocationSeriesMu.Lock()
+	defer revocationSeriesMu.Unlock()
+	reg.Unregister(infraatc.NewCRLCollector(nil))
+	if refresher == nil {
+		return nil
+	}
+	return reg.Register(infraatc.NewCRLCollector(refresher))
 }
