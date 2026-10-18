@@ -16,6 +16,11 @@ const (
 	SDKTokenRevokeReasonFamilyMaxAge  = "family_max_age"
 )
 
+// SDKTokenRevokeReasonPasswordChanged is the revoke reason of a row that was
+// not yet revoked when its user's password was changed or reset. The change
+// refuses every token minted before it, so the row's family is over.
+const SDKTokenRevokeReasonPasswordChanged = "password_changed"
+
 // SDKTokenMetadataFamilyCreatedAt is the metadata key under which a row
 // carries its family's birth, the created_at of the row the download wrote,
 // as an RFC 3339 time. A rotation copies it to the successor row, so the

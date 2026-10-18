@@ -111,10 +111,11 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 		})
 	}
 
-	// A token family a reuse, a logout or its maximum age ended is not
-	// recovered: the chain that grew from a reused token cannot be told apart
-	// from the owner's, a logout ends the session it belongs to, and a family
-	// past SDK_TOKEN_FAMILY_MAX_AGE is over, so the holder downloads a new SDK
+	// A token family a reuse, a logout, its maximum age or a password change
+	// ended is not recovered: the chain that grew from a reused token cannot
+	// be told apart from the owner's, a logout ends the session it belongs to,
+	// a family past SDK_TOKEN_FAMILY_MAX_AGE is over, and a password change
+	// refuses every token minted before it, so the holder downloads a new SDK
 	// instead. The family is ended when any of its rows was revoked for one of
 	// those, or when the revocation store says so (an unanswered store follows
 	// the fail-open setting). The answer is the refresh route's answer to a
@@ -247,10 +248,11 @@ func (h *SDKTokenRecoveryHandler) familyEnded(c fiber.Ctx, token string, row *do
 }
 
 // endsFamily reports whether the row was revoked for a reason that ends its
-// token family: a reuse, a logout, or the family's maximum age. A row retired
-// by a rotation does not end its family by itself.
+// token family: a reuse, a logout, the family's maximum age, or a password
+// change. A row retired by a rotation does not end its family by itself.
 func endsFamily(row *domain.SDKToken) bool {
 	return row.RevokedFor(domain.SDKTokenRevokeReasonFamilyRevoked) ||
 		row.RevokedFor(sdkTokenLogoutReason) ||
-		row.RevokedFor(domain.SDKTokenRevokeReasonFamilyMaxAge)
+		row.RevokedFor(domain.SDKTokenRevokeReasonFamilyMaxAge) ||
+		row.RevokedFor(domain.SDKTokenRevokeReasonPasswordChanged)
 }

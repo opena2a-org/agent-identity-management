@@ -646,7 +646,7 @@ curl -X POST http://localhost:8080/api/v1/admin/users/COMPROMISED_USER_ID/deacti
 # Review access logs
 ```
 
-The server registers no route that revokes another user's tokens or forces their password to be reset. The user revokes their own SDK tokens with `POST /api/v1/users/me/sdk-tokens/revoke-all` and changes their password with `POST /api/v1/auth/change-password`. The change ends every session signed in before it and every SDK-download token minted before it, and answers with a new `accessToken` and `refreshToken` for the session that made it.
+The server registers no route that revokes another user's tokens or forces their password to be reset. The user revokes their own SDK tokens with `POST /api/v1/users/me/sdk-tokens/revoke-all` and changes their password with `POST /api/v1/auth/change-password`. The change ends every session signed in before it and every SDK-download token minted before it, marks the user's SDK tokens revoked with the reason `password_changed`, and answers with a new `accessToken` and `refreshToken` for the session that made it.
 
 ---
 

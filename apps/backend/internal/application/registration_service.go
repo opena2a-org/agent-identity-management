@@ -49,6 +49,15 @@ type RegistrationService struct {
 	orgRepo          domain.OrganizationRepository
 	auditService     *AuditService
 	emailService     domain.EmailService
+	sdkTokenRepo     domain.SDKTokenRepository
+}
+
+// SetSDKTokenRepository attaches the sdk_tokens rows a password reset
+// revokes: ResetPassword marks each row of the user not yet revoked as
+// revoked, with the reason domain.SDKTokenRevokeReasonPasswordChanged. With
+// none attached, a reset revokes no row.
+func (s *RegistrationService) SetSDKTokenRepository(repo domain.SDKTokenRepository) {
+	s.sdkTokenRepo = repo
 }
 
 func NewRegistrationService(
@@ -632,6 +641,7 @@ func (s *RegistrationService) ResetPassword(
 	if err := s.userRepo.Update(user); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
 	}
+	revokeSDKTokenRowsAtPasswordChange(s.sdkTokenRepo, user.ID)
 
 	// Log audit event
 	s.auditService.LogAction(
