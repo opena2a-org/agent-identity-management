@@ -117,8 +117,8 @@ func refreshFailure(outcome string, err error) error {
 	return &CRLRefreshError{Outcome: outcome, Err: err}
 }
 
-// readOutcome is the outcome of a read that ended with err before its answer
-// was read whole: timeout when its deadline passed, fetch otherwise.
+// readOutcome is the outcome of a read that get ended with err: timeout when
+// its deadline passed, fetch otherwise.
 func readOutcome(err error) string {
 	var netErr net.Error
 	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
@@ -469,7 +469,11 @@ type httpAnswer struct {
 
 // get reads at, with If-None-Match when ifNoneMatch is not empty. It reads the
 // body of a 200 answer through io.LimitReader at limit+1 bytes, so a body
-// longer than limit is known without being read whole.
+// longer than limit is known without being read whole. For a body that ends
+// once ctx is done, or once the HTTP client's timeout has passed, it returns
+// the error of deadlinePassed however the body ended: a server can end its
+// answer cleanly when it sees the request canceled, and the client can read
+// that end before it sees its own cancellation.
 func (c *CachedCRLClient) get(ctx context.Context, at *url.URL, limit int64, ifNoneMatch string) (*httpAnswer, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, at.String(), nil)
 	if err != nil {
@@ -479,6 +483,7 @@ func (c *CachedCRLClient) get(ctx context.Context, at *url.URL, limit int64, ifN
 	if ifNoneMatch != "" {
 		req.Header.Set("If-None-Match", ifNoneMatch)
 	}
+	start := time.Now()
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -492,10 +497,28 @@ func (c *CachedCRLClient) get(ctx context.Context, at *url.URL, limit int64, ifN
 	if err != nil {
 		return nil, err
 	}
+	if err := c.deadlinePassed(ctx, start); err != nil {
+		return nil, err
+	}
 	if answer.tooLong = int64(len(body)) > limit; !answer.tooLong {
 		answer.body = body
 	}
 	return answer, nil
+}
+
+// deadlinePassed returns the error of ctx when ctx is done, an error that
+// wraps context.DeadlineExceeded when the HTTP client's timeout has passed
+// since start, and nil otherwise. get takes start before it calls Do, which
+// counts the timeout from its own start, so a read that the timeout ended is
+// found past the timeout here too.
+func (c *CachedCRLClient) deadlinePassed(ctx context.Context, start time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if c.client.Timeout > 0 && time.Since(start) >= c.client.Timeout {
+		return fmt.Errorf("the HTTP client's timeout of %s has passed: %w", c.client.Timeout, context.DeadlineExceeded)
+	}
+	return nil
 }
 
 // checkCRL checks a list body: its form, then its signatures under keys, then

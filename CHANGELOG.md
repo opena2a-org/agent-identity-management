@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)
+
+- A server can end an answer cleanly once it sees the client cancel the request, and the client can read that end
+  before it sees its own cancellation. The list client then checked the body it had read as a document. On the
+  previous code, against a transport that ends a `200` answer's body with no error once the request's context is
+  done, a refresh was refused as `parse` for an empty discovery document and for a list body cut after
+  `{"entryCount":0,`: at the refresh's deadline, at the HTTP client's timeout, and when the refresh was canceled.
+- The body of a `200` answer that ends once the refresh's context is done, or once the HTTP client's timeout has
+  passed since the request began, is now refused without being checked as a document: as `timeout` when a deadline
+  passed, and as `fetch` when the refresh was canceled. A body that ends before then is checked as before, and an
+  answer with another status than `200` is read as before.
+- Tests: `apps/backend/internal/infrastructure/atc/crl_client_test.go`, through a transport that answers without a
+  connection.
+
 ### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
 
 - After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"
