@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -41,6 +42,10 @@ var (
 	// releaseNotesSecurityRow captures the heading a row of the notes' security
 	// table cites: `| Security: <summary> | <fixed in> |`.
 	releaseNotesSecurityRow = regexp.MustCompile(`^\| Security: (.+?) \|`)
+	// releaseNotesTimedRunLog captures the count in the line runMigrations logs
+	// when it applies migrations, as the notes quote it for the timed runs of
+	// `aim-server migrate`: "Successfully applied <n> pending migration(s)".
+	releaseNotesTimedRunLog = regexp.MustCompile(`Successfully applied (\d+) pending migration\(s\)`)
 )
 
 // changelogReleaseSection returns the lines of CHANGELOG.md between the
@@ -152,6 +157,27 @@ func releaseNotesMigrationRangeFindings(notes string, applied []string) []string
 	return []string{fmt.Sprintf("%s does not say: %s", platform110ReleaseNotes, want)}
 }
 
+// releaseNotesTimedRunFindings returns a finding unless the notes quote the
+// line the timed runs logged, "Successfully applied <n> pending migration(s)"
+// in any line wrapping, and one for each such line whose count is not the
+// number of migrations the upgrade applies: a time measured before a migration
+// existed is not the time of the upgrade.
+func releaseNotesTimedRunFindings(notes string, applied []string) []string {
+	matches := releaseNotesTimedRunLog.FindAllStringSubmatch(strings.Join(strings.Fields(notes), " "), -1)
+	if len(matches) == 0 {
+		return []string{fmt.Sprintf("%s quotes no line the timed runs logged: Successfully applied %d pending migration(s)",
+			platform110ReleaseNotes, len(applied))}
+	}
+	var findings []string
+	for _, m := range matches {
+		if n, err := strconv.Atoi(m[1]); err != nil || n != len(applied) {
+			findings = append(findings, fmt.Sprintf("%s says the timed runs logged `%s`; the upgrade applies %d migrations: time it again",
+				platform110ReleaseNotes, m[0], len(applied)))
+		}
+	}
+	return findings
+}
+
 func TestReleaseNotesSecurityRowFindings(t *testing.T) {
 	changelog := strings.Join([]string{
 		"# Changelog",
@@ -229,6 +255,21 @@ func TestReleaseNotesMigrationRangeFindings(t *testing.T) {
 		releaseNotesMigrationRangeFindings("applies 0 migrations", nil))
 }
 
+func TestReleaseNotesTimedRunFindings(t *testing.T) {
+	applied := []string{"098_b.up.sql", "101_d.sql"}
+
+	assert.Empty(t, releaseNotesTimedRunFindings(
+		"Each run logged `Successfully applied 2 pending\nmigration(s)`:", applied))
+	assert.Equal(t, []string{
+		"docs/releases/platform-v1.1.0.md says the timed runs logged `Successfully applied 1 pending migration(s)`; the upgrade applies 2 migrations: time it again",
+	}, releaseNotesTimedRunFindings(
+		"Upgrading from 1.0.0 applies 2 migrations. The times below are of the first, measured before `101_d.sql` existed."+
+			" Each run logged `Successfully applied 1 pending migration(s)`:", applied))
+	assert.Equal(t, []string{
+		"docs/releases/platform-v1.1.0.md quotes no line the timed runs logged: Successfully applied 2 pending migration(s)",
+	}, releaseNotesTimedRunFindings("Upgrading from 1.0.0 applies 2 migrations, timed on a laptop.", applied))
+}
+
 // TestPlatform110ReleaseNotesCiteEachSecurityHeading holds the security table
 // of the platform 1.1.0 release notes to CHANGELOG.md: one row for each typed
 // Security heading of the release, and no row for a heading it does not carry.
@@ -245,9 +286,10 @@ func TestPlatform110ReleaseNotesCiteEachSecurityHeading(t *testing.T) {
 }
 
 // TestPlatform110ReleaseNotesNameTheMigrationsTheUpgradeApplies holds the
-// migration count and range the notes give for the upgrade from 1.0.0 to the
-// migration files on the tree, until CHANGELOG.md has a [1.1.0] section; a
-// migration added after that belongs to the next release.
+// migration count and range the notes give for the upgrade from 1.0.0, and the
+// count the timed runs of that upgrade logged, to the migration files on the
+// tree, until CHANGELOG.md has a [1.1.0] section; a migration added after that
+// belongs to the next release.
 func TestPlatform110ReleaseNotesNameTheMigrationsTheUpgradeApplies(t *testing.T) {
 	requirePublicRepositoryFiles(t)
 
@@ -268,7 +310,8 @@ func TestPlatform110ReleaseNotesNameTheMigrationsTheUpgradeApplies(t *testing.T)
 		"the migration files up to %s are not the %d the 1.0.0 tag carries; a file numbered among them is applied by the upgrade too",
 		platform100LastMigration, platform100Migrations)
 
-	findings := releaseNotesMigrationRangeFindings(aim03ReadRepoFile(t, platform110ReleaseNotes), applied)
+	notes := aim03ReadRepoFile(t, platform110ReleaseNotes)
+	findings := append(releaseNotesMigrationRangeFindings(notes, applied), releaseNotesTimedRunFindings(notes, applied)...)
 	assert.Empty(t, findings, "name the migrations the upgrade applies, and time it again as the notes' Measured migration time section describes:\n%s",
 		strings.Join(findings, "\n"))
 }
