@@ -11,6 +11,44 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: `docker-compose.yml` takes the dashboard's API URL from `FRONTEND_API_URL`, and the deployment guide says to set it behind a reverse proxy
+
+- `docker-compose.yml` set `NEXT_PUBLIC_API_URL=http://localhost:${AIM_BACKEND_PORT:-8080}` on the dashboard's container,
+  with no variable to change it: rendered by `docker compose config` with `FRONTEND_API_URL=https://api.example.test`
+  and `AIM_BACKEND_PORT=8081`, it handed the dashboard `http://localhost:8081`. It now reads `FRONTEND_API_URL` as
+  `docker-compose.quickstart.yml` does, and hands the dashboard `https://api.example.test` in that case and
+  `http://localhost:8081` without it.
+- The "Enable HTTPS (Let's Encrypt)" section of `docs/DEPLOYMENT.md` named no variable for the API's public origin. It
+  now says to set `FRONTEND_API_URL` to the API's public origin, and `FRONTEND_URL` and `ALLOWED_ORIGINS` to the
+  dashboard's, asks for one certificate covering both host names, and describes the `-frontend` host name rule as the
+  fallback it is: it applies to a dashboard container with no `NEXT_PUBLIC_API_URL` in its environment, and both
+  compose files set one whether or not `FRONTEND_API_URL` is set. With a dashboard image built from this tree, a stack
+  started from either compose file and opened on a `-frontend` host name calls the URL the compose file hands it, not
+  the `-backend` host; such a deployment sets `FRONTEND_API_URL` to the `-backend` origin.
+- The Docker section of `docs/DEPLOYMENT.md` says the same for a dashboard opened from another machine or through a
+  reverse proxy, names the URL its second stack's dashboard is handed (`http://localhost:8081`), and says that the
+  `aim-dashboard` image `latest` pointed to on 2026-10-17 (revision `3ab8285e`) ignores `FRONTEND_API_URL`. It gives
+  a `curl` command that prints the policy a stack's sign-in page carries.
+- The `.env` reference in `docs/DEPLOYMENT.md` named `CORS_ALLOWED_ORIGINS`, which the backend does not read; it now
+  names `ALLOWED_ORIGINS`, which `apps/backend/internal/config/config.go` reads. `.env.example` lists `FRONTEND_URL`,
+  `ALLOWED_ORIGINS` and `FRONTEND_API_URL`, commented out, as `.env.quickstart` does. The comment on the dashboard's
+  `NEXT_PUBLIC_API_URL` entry in both compose files names `FRONTEND_API_URL`.
+- Tests: `sdk/typescript/tests/quickstart-ports-and-project-from-environment.test.ts` renders `docker-compose.yml`
+  with `FRONTEND_API_URL`, `FRONTEND_URL` and `ALLOWED_ORIGINS` set, and with the three values the HTTPS section gives,
+  and checks the dashboard's and the backend's environment; it checks that the Docker section names the three
+  variables and the URL its second stack is handed, that `.env.example` and `.env.quickstart` name the variables their
+  compose file reads, and that the guide's CORS variable is `ALLOWED_ORIGINS`. On the previous files, these 5 tests
+  fail and the file's other 18 pass.
+- Measured on an `aim-dashboard` image built from this tree with `--build-arg NEXT_PUBLIC_API_URL=http://localhost:8080`,
+  as the image workflow builds it. Started with `NEXT_PUBLIC_API_URL=http://localhost:8081`, the guide's `curl`
+  command, pointed at the container's port, printed `connect-src 'self' http://localhost:8081` (the page writes the
+  quotes as `&#x27;`), and the page set `window.__RUNTIME_CONFIG__` to `{"apiUrl":"http://localhost:8081"}`; against
+  `aim-dashboard:latest` started the same way, the command printed nothing and the page named no `localhost:8081`.
+  Started with `NEXT_PUBLIC_API_URL=http://localhost:8080` and requested with `Host: aim-frontend.example.com`, the
+  page handed the browser `http://localhost:8080`, and its `connect-src` listed no `aim-backend.example.com`; started
+  with no `NEXT_PUBLIC_API_URL`, the same request carried no runtime configuration and a `connect-src` that lists
+  `aim-backend.example.com`.
+
 ### Fixed: a dashboard built with no `NEXT_PUBLIC_API_URL` holds no `http://localhost:8080` in its browser code, and `next build` fails when such code does
 
 - `next.config.ts` set `NEXT_PUBLIC_API_URL` to `http://localhost:8080` when the build read none, and `next build`

@@ -313,8 +313,11 @@ services:
       dockerfile: infrastructure/docker/Dockerfile.frontend
     container_name: ${AIM_PROJECT:-aim}-frontend
     environment:
-      # The URL the browser reaches the API at; follows the backend's host port.
-      - NEXT_PUBLIC_API_URL=http://localhost:${AIM_BACKEND_PORT:-8080}
+      # The URL the browser reaches the API at; the dashboard hands it to the browser each
+      # time it renders a page. It follows the backend's host port unless FRONTEND_API_URL
+      # is set, which a dashboard opened from another machine or behind a reverse proxy
+      # needs (docs/DEPLOYMENT.md, Enable HTTPS).
+      - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:${AIM_BACKEND_PORT:-8080}}
       - NODE_ENV=production
     ports:
       - "${AIM_FRONTEND_PORT:-3000}:3000"

@@ -32,6 +32,12 @@ import { load } from 'js-yaml';
  * it name its services, not its containers (`docker compose up -d
  * aim-postgres` fails with "no such service").
  *
+ * Both compose files hand the dashboard the API URL in FRONTEND_API_URL, and
+ * the backend the dashboard origin in FRONTEND_URL and ALLOWED_ORIGINS, so a
+ * dashboard opened from another machine or behind a reverse proxy reaches its
+ * API; the HTTPS and Docker sections of docs/DEPLOYMENT.md and the two
+ * environment templates name these variables.
+ *
  * Interpolation follows the Compose file format: `${VAR}`, `${VAR:-default}`
  * with nested defaults, and `${VAR:?message}`; the rendering is checked
  * against the real `docker compose config` output in the compose file's
@@ -126,6 +132,9 @@ function render(env: Record<string, string>): Rendered {
 function linesNaming(text: string, variable: string): string[] {
   return text.split('\n').filter((line) => line.includes(variable));
 }
+
+/** The variables a dashboard opened from another machine or behind a reverse proxy needs set. */
+const PUBLIC_ORIGIN_VARIABLES = ['FRONTEND_API_URL', 'FRONTEND_URL', 'ALLOWED_ORIGINS'];
 
 // ---------------------------------------------------------------------------
 
@@ -262,6 +271,24 @@ describe('the quick-start takes its host ports and container-name prefix from th
     expect(stubTest, 'the stub test runs the case the deployment guide describes').toContain('run_case existing-env-not-recorded');
   });
 
+  it('the deployment guide Docker section names FRONTEND_API_URL and the API URL its second stack is handed', () => {
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const dockerSection = guide.slice(guide.indexOf('### Docker\n'), guide.indexOf('### From source'));
+    expect(dockerSection.length).toBeGreaterThan(0);
+    for (const variable of PUBLIC_ORIGIN_VARIABLES) {
+      expect(dockerSection, `the Docker section names ${variable}`).toContain(`\`${variable}\``);
+    }
+    expect(dockerSection, 'the Docker section links the HTTPS section that sets them').toContain('](#4-enable-https-lets-encrypt)');
+
+    // The second stack the section shows, rendered: its dashboard is handed its own API.
+    const command = dockerSection.split('\n').find((line) => line.endsWith('bash quickstart.sh') && line.includes('AIM_BACKEND_PORT='));
+    expect(command, 'the Docker section shows a second stack').toBeDefined();
+    const variables = Object.fromEntries([...(command ?? '').matchAll(/\b([A-Z_]+)=(\S+)/g)].map(([, name, value]) => [name, value]));
+    const apiUrl = render({ ...SECRETS, ...variables }).frontendEnv.NEXT_PUBLIC_API_URL;
+    expect(apiUrl).toBe(`http://localhost:${variables.AIM_BACKEND_PORT}`);
+    expect(dockerSection, 'the Docker section names the URL the second stack is handed').toContain(`\`${apiUrl}\``);
+  });
+
   it('the smoke contract rows for the quick-start are rows of the component smoke matrix', () => {
     const lines = readFileSync(SMOKE_CONTRACT, 'utf-8').split('\n');
     const header = lines.findIndex((line) => line.startsWith('| Component | What ships |'));
@@ -383,6 +410,21 @@ function expectedPublished(hostPort: (variable: string, fallback: string) => str
   );
 }
 
+/** `NAME=value` lines inside the fenced code blocks of `text`, in order. */
+function fencedAssignments(text: string): Array<[string, string]> {
+  const assignments: Array<[string, string]> = [];
+  let fenced = false;
+  for (const line of text.split('\n')) {
+    if (line.startsWith('```')) {
+      fenced = !fenced;
+      continue;
+    }
+    const m = fenced ? /^([A-Z][A-Z0-9_]*)=(\S+)$/.exec(line.trim()) : null;
+    if (m !== null) assignments.push([m[1], m[2]]);
+  }
+  return assignments;
+}
+
 /** Markdown files that start part of the dev stack by service name. */
 function devStackDocs(): string[] {
   const files = [join(REPO_ROOT, 'README.md'), join(REPO_ROOT, 'CONTRIBUTING.md'), DEPLOYMENT_GUIDE];
@@ -420,6 +462,63 @@ describe('the dev stack takes its host ports and container-name prefix from the 
     expect(rendered.env('grafana').GF_SERVER_ROOT_URL).toBe(`http://localhost:${configured.AIM_GRAFANA_PORT}`);
     expect(rendered.env('backend').POSTGRES_PORT).toBe('5432');
     expect(rendered.env('backend').REDIS_PORT).toBe('6379');
+  });
+
+  it('an explicit FRONTEND_URL, ALLOWED_ORIGINS or FRONTEND_API_URL still wins over the ports', () => {
+    const rendered = renderDev({
+      ...DEV_SECRETS,
+      AIM_BACKEND_PORT: '18080',
+      AIM_FRONTEND_PORT: '13000',
+      FRONTEND_URL: 'https://aim.example.com',
+      ALLOWED_ORIGINS: 'https://aim.example.com',
+      FRONTEND_API_URL: 'https://api.aim.example.com',
+    });
+    expect(rendered.env('backend').FRONTEND_URL).toBe('https://aim.example.com');
+    expect(rendered.env('backend').ALLOWED_ORIGINS).toBe('https://aim.example.com');
+    expect(rendered.env('frontend').NEXT_PUBLIC_API_URL).toBe('https://api.aim.example.com');
+  });
+
+  it('the HTTPS section of docs/DEPLOYMENT.md sets the public origins through variables docker-compose.yml reads', () => {
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const start = guide.indexOf("#### 4. Enable HTTPS (Let's Encrypt)\n");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = guide.indexOf('\n## ', start);
+    const https = guide.slice(start, end === -1 ? undefined : end);
+    const settings = Object.fromEntries(fencedAssignments(https));
+    expect(Object.keys(settings).sort()).toEqual([...PUBLIC_ORIGIN_VARIABLES].sort());
+
+    // The values the section gives, rendered: they reach the containers that read them.
+    const rendered = renderDev({ ...DEV_SECRETS, ...settings });
+    expect(rendered.env('frontend').NEXT_PUBLIC_API_URL).toBe(settings.FRONTEND_API_URL);
+    expect(rendered.env('backend').FRONTEND_URL).toBe(settings.FRONTEND_URL);
+    expect(rendered.env('backend').ALLOWED_ORIGINS).toBe(settings.ALLOWED_ORIGINS);
+
+    // The -frontend host name rule is described in the same section, as the
+    // fallback it is.
+    expect(https).toContain('`aim-frontend.example.com`');
+    expect(https).toContain('`https://aim-backend.example.com`');
+  });
+
+  it('each environment template names the public-origin variables its compose file reads', () => {
+    for (const [template, composeFile] of [
+      ['.env.example', DEV_COMPOSE_FILE],
+      ['.env.quickstart', COMPOSE_FILE],
+    ]) {
+      const text = readFileSync(join(REPO_ROOT, template), 'utf-8');
+      const compose = readFileSync(composeFile, 'utf-8');
+      for (const variable of PUBLIC_ORIGIN_VARIABLES) {
+        expect(text, `${template} names ${variable}`).toMatch(new RegExp(`^# ${variable}=https://`, 'm'));
+        expect(compose, `${composeFile.slice(REPO_ROOT.length + 1)} reads ${variable}`).toContain(`\${${variable}:-`);
+      }
+    }
+  });
+
+  it('the CORS variable docs/DEPLOYMENT.md names is the one the backend reads', () => {
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    expect([...new Set(guide.match(/\b[A-Z_]*ALLOWED_ORIGINS\b/g))]).toEqual(['ALLOWED_ORIGINS']);
+    expect(renderDev(DEV_SECRETS).env('backend')).toHaveProperty('ALLOWED_ORIGINS');
+    const config = readFileSync(join(REPO_ROOT, 'apps', 'backend', 'internal', 'config', 'config.go'), 'utf-8');
+    expect(config).toContain('getenv("ALLOWED_ORIGINS")');
   });
 
   it('shares the quick-start variables with the same defaults', () => {
