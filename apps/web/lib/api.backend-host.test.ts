@@ -1,18 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { pageApiConfig } from "./runtime-config";
 
 // The client derives its backend from the dashboard's hostname only where the page's
 // connect-src policy lists that backend (lib/backend-host.ts, lib/runtime-config.ts).
 // For any other hostname it calls the NEXT_PUBLIC_API_URL origin, which that policy
-// lists, so the page never calls a host its own policy refuses.
+// lists, and with no URL named anywhere a host the policy lists as well, so the page
+// never calls a host its own policy refuses.
 
 const API_URL = "https://api.example.com";
 
 // The origin the client sends its first request to when the dashboard is open on
-// hostname, with window.__RUNTIME_CONFIG__.apiUrl set to runtimeApiUrl when given, and
+// hostname, with window.__RUNTIME_CONFIG__.apiUrl set to runtimeApiUrl when given and
+// the build's NEXT_PUBLIC_API_URL set to builtApiUrl (null: the build read none), and
 // the URL apiBaseUrl() reports.
-async function resolvedOn(hostname: string, runtimeApiUrl?: string): Promise<{ origin: string; apiBaseUrl: string }> {
+async function resolvedOn(
+  hostname: string,
+  runtimeApiUrl?: string,
+  builtApiUrl: string | null = API_URL
+): Promise<{ origin: string; apiBaseUrl: string }> {
   vi.resetModules();
-  vi.stubEnv("NEXT_PUBLIC_API_URL", API_URL);
+  vi.stubEnv("NEXT_PUBLIC_API_URL", builtApiUrl ?? undefined);
   vi.stubGlobal("location", new URL(`https://${hostname}/dashboard`));
   vi.stubGlobal("__RUNTIME_CONFIG__", runtimeApiUrl ? { apiUrl: runtimeApiUrl } : undefined);
   const fetchMock = vi.fn(
@@ -70,5 +77,23 @@ describe("the API origin the client resolves from the dashboard's hostname", () 
       apiBaseUrl: "https://aim-backend.example.com",
     });
     expect(await resolvedOn("dashboard.example.com")).toEqual({ origin: API_URL, apiBaseUrl: API_URL });
+  });
+
+  // The page names no URL, the build read none and the hostname derives no backend.
+  it("is the API's default port on the dashboard's host when no URL is named, which the page's connect-src lists", async () => {
+    const cases: Array<[hostname: string, origin: string, connectPolicy: string]> = [
+      ["dashboard.example.com", "https://dashboard.example.com:8080", "connect-src 'self' dashboard.example.com:8080"],
+      ["localhost", "https://localhost:8080", "connect-src 'self' localhost:8080"],
+      ["127.0.0.1", "https://127.0.0.1:8080", "connect-src 'self' 127.0.0.1:8080"],
+      // No policy host source holds an IPv6 address: the dashboard's own origin.
+      ["[::1]", "https://[::1]", "connect-src 'self'"],
+    ];
+    for (const [hostname, origin, connectPolicy] of cases) {
+      expect((await resolvedOn(hostname, undefined, null)).origin, hostname).toBe(origin);
+      expect(pageApiConfig({}, `${hostname}:3000`), hostname).toEqual({ connectPolicy });
+    }
+
+    // Control: a -frontend hostname still derives its backend first.
+    expect((await resolvedOn("aim-frontend.example.com", undefined, null)).origin).toBe("https://aim-backend.example.com");
   });
 });
