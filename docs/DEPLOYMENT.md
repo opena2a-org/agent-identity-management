@@ -214,7 +214,7 @@ SDK_TOKEN_FAMILY_MAX_AGE=8760h  # Longest a downloaded SDK's credential lasts fr
 KEYVAULT_MASTER_KEY=your-base64-encoded-32-byte-key
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+ALLOWED_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
 
 ################################################################################
 # Database Configuration
@@ -722,11 +722,26 @@ docker compose logs -f
 # Install Certbot
 sudo apt install certbot
 
-# Get certificate
-sudo certbot certonly --standalone -d yourdomain.com
+# Get one certificate for the dashboard's host name and the API's
+sudo certbot certonly --standalone -d yourdomain.com -d api.yourdomain.com
 ```
 
 The repository ships no reverse-proxy configuration. Run a TLS-terminating reverse proxy (nginx, Caddy, Traefik or a cloud load balancer) in front of the dashboard on port 3000 and the API on port 8080, using the certificate from the previous command.
+
+Then set `FRONTEND_API_URL` to the API's public origin, and `FRONTEND_URL` and `ALLOWED_ORIGINS` to the dashboard's, in `.env`, and run `docker compose up -d` again:
+
+```bash
+# The API URL the dashboard hands the browser
+FRONTEND_API_URL=https://api.yourdomain.com
+# The dashboard's origin: the base of the links the API sends, such as password-reset links
+FRONTEND_URL=https://yourdomain.com
+# The origins the API accepts browser requests from (CORS), comma-separated
+ALLOWED_ORIGINS=https://yourdomain.com
+```
+
+`docker-compose.yml` sets `NEXT_PUBLIC_API_URL` on the dashboard's container from `FRONTEND_API_URL`. The dashboard reads that variable each time it renders a page, hands the URL to the browser and lists its origin in the page's `connect-src`. Without `FRONTEND_API_URL`, the dashboard is handed `http://localhost:8080` (the port follows `AIM_BACKEND_PORT`), which in a browser on another machine names that machine.
+
+The dashboard has a fallback for a container with no `NEXT_PUBLIC_API_URL` in its environment, which does not apply to a stack started from `docker-compose.yml` or `docker-compose.quickstart.yml`: both hand the dashboard a URL whether or not `FRONTEND_API_URL` is set. Opened at a host name such as `aim-frontend.example.com`, a dashboard started without the variable calls the same name with `-backend` in place of the first `-frontend` (`https://aim-backend.example.com`), on the page's scheme and with no port. [Dashboard API origin and Content-Security-Policy](guides/DEPLOYMENT_CHECKLIST.md#dashboard-api-origin-and-content-security-policy) gives the order in which the dashboard picks the API's URL.
 
 ---
 
@@ -1014,6 +1029,14 @@ AIM_DIR=aim2 AIM_PROJECT=aim2 AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 AIM_P
 ```
 
 Compose names the volumes and the network after its project (`COMPOSE_PROJECT_NAME`, or the install directory's name), so two stacks also need two projects; `AIM_DIR` gives each its own directory and project.
+
+The dashboard hands the browser the API URL in `FRONTEND_API_URL`, or `http://localhost:<AIM_BACKEND_PORT>` when it is not set, so with an image that reads that URL when it renders a page (below), the second stack's dashboard calls `http://localhost:8081`. To open the dashboard from another machine or through a reverse proxy, set `FRONTEND_API_URL` to the URL the browser reaches the API at, and `FRONTEND_URL` and `ALLOWED_ORIGINS` to the dashboard's origin, as [Enable HTTPS](#4-enable-https-lets-encrypt) shows. The fallback on a `-frontend` host name described there does not apply to a stack started from this compose file.
+
+An `aim-dashboard` image built from code that reads `NEXT_PUBLIC_API_URL` only when it is built ignores `FRONTEND_API_URL`: its browser code holds the URL it was built with. On 2026-10-17, `latest` pointed to such an image, revision `3ab8285e`, published 2026-10-02 and built for `http://localhost:8080`; started with `NEXT_PUBLIC_API_URL=http://localhost:8081`, it served a sign-in page that named no `localhost:8081`. To check the image a stack runs, read the policy its sign-in page carries with the command below: on an image that reads the URL when it renders a page, it prints a `connect-src` that lists the API's origin, and on one that does not, it prints nothing.
+
+```bash
+curl -s http://localhost:3001/auth/login | grep -o '<meta http-equiv="Content-Security-Policy"[^>]*>'
+```
 
 Production deployment (Azure, GCP, AWS): [infrastructure/DEPLOYMENT.md](../infrastructure/DEPLOYMENT.md).
 
