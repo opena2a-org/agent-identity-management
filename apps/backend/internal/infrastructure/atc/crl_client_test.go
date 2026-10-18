@@ -1,0 +1,879 @@
+package atc
+
+import (
+	"bytes"
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/pqc"
+)
+
+const (
+	testListPath     = "/api/v1/trust/revocations"
+	testOverridePath = "/mirror/revocations"
+	testListKeyID    = "did:web:registry.example#list-1"
+	revokedDID       = "did:web:agents.example:revoked-agent"
+	otherDID         = "did:web:agents.example:other-agent"
+)
+
+// crlSigner signs lists under one key.
+type crlSigner struct {
+	keyID     string
+	algorithm string
+	public    []byte
+	sign      func(message []byte) []byte
+}
+
+func newEd25519Signer(t *testing.T, keyID string) crlSigner {
+	t.Helper()
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return crlSigner{keyID: keyID, algorithm: "Ed25519", public: public, sign: func(message []byte) []byte {
+		return ed25519.Sign(private, message)
+	}}
+}
+
+func newMLDSA65Signer(t *testing.T, keyID string) crlSigner {
+	t.Helper()
+	pair, err := pqc.GenerateMLDSA65KeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return crlSigner{keyID: keyID, algorithm: "ML-DSA-65", public: pair.PublicKey, sign: func(message []byte) []byte {
+		signature, err := pqc.SignMLDSA(pqc.AlgorithmMLDSA65, pair.PrivateKey, message)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return signature
+	}}
+}
+
+// testList returns a list that revokes dids, with thisUpdate a minute before
+// at and nextUpdate four minutes after it.
+func testList(at time.Time, dids ...string) map[string]any {
+	entries := make([]any, 0, len(dids))
+	for i, did := range dids {
+		entries = append(entries, map[string]any{
+			"agentDid":             did,
+			"reason":               "compromised",
+			"revokedAt":            at.Add(-time.Hour).UTC().Format(time.RFC3339),
+			"revokedByKeyId":       "did:web:registry.example#operator-1",
+			"transparencyLogIndex": i + 1,
+		})
+	}
+	return map[string]any{
+		"revocations": entries,
+		"entryCount":  len(entries),
+		"thisUpdate":  at.Add(-time.Minute).UTC().Format(time.RFC3339),
+		"nextUpdate":  at.Add(4 * time.Minute).UTC().Format(time.RFC3339),
+	}
+}
+
+func firstEntry(doc map[string]any) map[string]any {
+	return doc["revocations"].([]any)[0].(map[string]any)
+}
+
+// signList returns the body of doc with one signature by each signer over the
+// canonical form of doc without its signatures member.
+func signList(t *testing.T, doc map[string]any, signers ...crlSigner) []byte {
+	t.Helper()
+	unsigned := map[string]any{}
+	for name, value := range doc {
+		if name != "signatures" {
+			unsigned[name] = value
+		}
+	}
+	raw, err := json.Marshal(unsigned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed := mustCanonicalJSON(t, raw)
+	signatures := []any{}
+	for _, s := range signers {
+		signatures = append(signatures, map[string]any{
+			"keyId":     s.keyID,
+			"algorithm": s.algorithm,
+			"value":     base64.StdEncoding.EncodeToString(s.sign(signed)),
+		})
+	}
+	unsigned["signatures"] = signatures
+	body, err := json.Marshal(unsigned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+// editList decodes body, applies edit, and encodes the result, so a signed
+// list can be changed after it was signed.
+func editList(t *testing.T, body []byte, edit func(doc map[string]any)) []byte {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var doc map[string]any
+	if err := dec.Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	edit(doc)
+	out, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func signatureAt(doc map[string]any, i int) map[string]any {
+	return doc["signatures"].([]any)[i].(map[string]any)
+}
+
+func discoveryFor(signers ...crlSigner) map[string]any {
+	keys := []any{}
+	for _, s := range signers {
+		keys = append(keys, map[string]any{"keyId": s.keyID, "algorithm": s.algorithm, "publicKeyHex": hex.EncodeToString(s.public)})
+	}
+	return map[string]any{"endpoints": map[string]any{"revocations": testListPath}, "publicKeys": keys}
+}
+
+// crlAuthority is a TLS stub of an authority listening on 127.0.0.1. It
+// serves a discovery document at /.well-known/atp and /.well-known/opena2a,
+// and the list at testListPath and testOverridePath. When an ETag is set, a
+// request whose If-None-Match carries it is answered 304.
+type crlAuthority struct {
+	srv *httptest.Server
+
+	mu          sync.Mutex
+	discovery   []byte
+	atpServed   bool
+	aliasServed bool
+	list        []byte
+	listStatus  int
+	etag        string
+	redirect    string
+	listPaths   []string
+	ifNoneMatch []string
+}
+
+func newCRLAuthority(t *testing.T, discovery map[string]any) *crlAuthority {
+	t.Helper()
+	a := &crlAuthority{atpServed: true, aliasServed: true, listStatus: http.StatusOK}
+	a.setDiscovery(t, discovery)
+	serveDiscovery := func(served *bool) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			a.mu.Lock()
+			ok, body := *served, a.discovery
+			a.mu.Unlock()
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(body)
+		}
+	}
+	serveList := func(w http.ResponseWriter, r *http.Request) {
+		a.mu.Lock()
+		a.listPaths = append(a.listPaths, r.URL.Path)
+		a.ifNoneMatch = append(a.ifNoneMatch, r.Header.Get("If-None-Match"))
+		status, body, etag, redirect := a.listStatus, a.list, a.etag, a.redirect
+		a.mu.Unlock()
+		if redirect != "" {
+			http.Redirect(w, r, redirect, http.StatusFound)
+			return
+		}
+		if etag != "" {
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			w.Header().Set("ETag", etag)
+		}
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/atp", serveDiscovery(&a.atpServed))
+	mux.HandleFunc("/.well-known/opena2a", serveDiscovery(&a.aliasServed))
+	mux.HandleFunc(testListPath, serveList)
+	mux.HandleFunc(testOverridePath, serveList)
+	a.srv = httptest.NewTLSServer(mux)
+	t.Cleanup(a.srv.Close)
+	return a
+}
+
+func (a *crlAuthority) setDiscovery(t *testing.T, doc map[string]any) {
+	t.Helper()
+	body, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.discovery = body
+	a.mu.Unlock()
+}
+
+func (a *crlAuthority) set(edit func(a *crlAuthority)) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	edit(a)
+}
+
+func (a *crlAuthority) setList(body []byte) { a.set(func(a *crlAuthority) { a.list = body }) }
+
+func (a *crlAuthority) requests() (paths, ifNoneMatch []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.listPaths...), append([]string(nil), a.ifNoneMatch...)
+}
+
+// newTestCRLClient returns a client of a whose clock reads *clock.
+func newTestCRLClient(t *testing.T, a *crlAuthority, override string, clock *time.Time) *CachedCRLClient {
+	t.Helper()
+	c, err := NewCachedCRLClient(a.srv.URL, override, a.srv.Client())
+	if err != nil {
+		t.Fatalf("NewCachedCRLClient: %v", err)
+	}
+	c.now = func() time.Time { return *clock }
+	return c
+}
+
+func requireRefreshOutcome(t *testing.T, err error, outcome string) {
+	t.Helper()
+	var refreshErr *CRLRefreshError
+	if !errors.As(err, &refreshErr) {
+		t.Fatalf("Refresh returned %v, want a refusal with outcome %q", err, outcome)
+	}
+	if refreshErr.Outcome != outcome {
+		t.Fatalf("Refresh refused the list with outcome %q (%v), want %q", refreshErr.Outcome, refreshErr.Err, outcome)
+	}
+}
+
+func requireAnswer(t *testing.T, c *CachedCRLClient, did string, want bool) {
+	t.Helper()
+	if revoked, err := c.IsRevoked(did); err != nil || revoked != want {
+		t.Fatalf("IsRevoked(%q) = %v, %v; want %v, nil", did, revoked, err, want)
+	}
+}
+
+func requireUnknown(t *testing.T, c *CachedCRLClient, did string) {
+	t.Helper()
+	if revoked, err := c.IsRevoked(did); !errors.Is(err, ErrCRLStateUnknown) || revoked {
+		t.Fatalf("IsRevoked(%q) = %v, %v; want false and an error wrapping ErrCRLStateUnknown", did, revoked, err)
+	}
+}
+
+// The list address is the endpoints.revocations of the discovery document at
+// /.well-known/atp, and the list is held once its signature verifies under
+// the key that document lists.
+func TestCRLClient_HoldsTheSignedListTheDiscoveryDocumentNames(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	now := time.Now()
+	a.setList(signList(t, testList(now, revokedDID), signer))
+	c := newTestCRLClient(t, a, "", &now)
+
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+	requireAnswer(t, c, otherDID, false)
+	if paths, _ := a.requests(); len(paths) != 1 || paths[0] != testListPath {
+		t.Fatalf("the list was read at %v, want once at %s", paths, testListPath)
+	}
+}
+
+// An authority that does not serve /.well-known/atp is read at its alias.
+func TestCRLClient_ReadsTheDiscoveryAliasWhenTheATPPathAnswers404(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.set(func(a *crlAuthority) { a.atpServed = false })
+	now := time.Now()
+	a.setList(signList(t, testList(now, revokedDID), signer))
+	c := newTestCRLClient(t, a, "", &now)
+
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+
+	a.set(func(a *crlAuthority) { a.aliasServed = false })
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeFetch)
+}
+
+// The endpoint override replaces the list address; the keys still come from
+// the discovery document, so a list signed by a key it does not list is
+// refused at the override as well.
+func TestCRLClient_EndpointOverrideReplacesOnlyTheListAddress(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	now := time.Now()
+	a.setList(signList(t, testList(now, revokedDID), signer))
+	c := newTestCRLClient(t, a, a.srv.URL+testOverridePath, &now)
+
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+	if paths, _ := a.requests(); len(paths) != 1 || paths[0] != testOverridePath {
+		t.Fatalf("the list was read at %v, want once at %s", paths, testOverridePath)
+	}
+
+	stranger := newEd25519Signer(t, "did:web:elsewhere.example#key-1")
+	a.setList(signList(t, testList(now, otherDID), stranger))
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeSignature)
+	requireAnswer(t, c, otherDID, false)
+}
+
+// Without a list that passed its checks there is no answer: before the first
+// refresh, after a first refresh the list address answers 500, and after one
+// where nothing listens, IsRevoked is unknown and never not revoked.
+func TestCRLClient_WithoutAListThatPassedItsChecksTheStateIsUnknown(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	now := time.Now()
+	c := newTestCRLClient(t, a, "", &now)
+	requireUnknown(t, c, otherDID)
+
+	a.set(func(a *crlAuthority) { a.listStatus = http.StatusInternalServerError })
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeFetch)
+	requireUnknown(t, c, otherDID)
+
+	a.srv.Close()
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeFetch)
+	requireUnknown(t, c, otherDID)
+}
+
+// A list is held only when a signature by a listed Ed25519 key covers it, and
+// no signature by a listed key fails.
+func TestCRLClient_RefusesAListItsSignaturesDoNotCover(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	stranger := newEd25519Signer(t, "did:web:elsewhere.example#key-1")
+	now := time.Now()
+	cases := []struct {
+		name string
+		body func() []byte
+	}{
+		{"an entry removed after signing", func() []byte {
+			body := signList(t, testList(now, revokedDID, otherDID), signer)
+			return editList(t, body, func(doc map[string]any) {
+				doc["revocations"] = doc["revocations"].([]any)[1:]
+				doc["entryCount"] = 1
+			})
+		}},
+		{"signed only by a key the discovery document does not list", func() []byte {
+			return signList(t, testList(now, revokedDID), stranger)
+		}},
+		{"no signatures member", func() []byte {
+			return editList(t, signList(t, testList(now, revokedDID), signer), func(doc map[string]any) { delete(doc, "signatures") })
+		}},
+		{"an empty signatures array", func() []byte {
+			return signList(t, testList(now, revokedDID))
+		}},
+		{"a second signature by the listed key that does not verify", func() []byte {
+			body := signList(t, testList(now, revokedDID), signer, signer)
+			return editList(t, body, func(doc map[string]any) {
+				signatureAt(doc, 1)["value"] = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
+			})
+		}},
+		{"a signature by the listed key that names another algorithm", func() []byte {
+			return editList(t, signList(t, testList(now, revokedDID), signer), func(doc map[string]any) {
+				signatureAt(doc, 0)["algorithm"] = "ML-DSA-65"
+			})
+		}},
+		{"a signature value that is not base64", func() []byte {
+			return editList(t, signList(t, testList(now, revokedDID), signer), func(doc map[string]any) {
+				signatureAt(doc, 0)["value"] = "not base64!"
+			})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(tc.body())
+			c := newTestCRLClient(t, a, "", &now)
+			requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeSignature)
+			requireUnknown(t, c, revokedDID)
+		})
+	}
+}
+
+// An ML-DSA-65 signature by a listed key is verified beside the Ed25519 one,
+// and is not enough alone.
+func TestCRLClient_VerifiesTheMLDSA65SignatureOfAListedKey(t *testing.T) {
+	ed := newEd25519Signer(t, testListKeyID)
+	pq := newMLDSA65Signer(t, "did:web:registry.example#list-pq-1")
+	now := time.Now()
+	cases := []struct {
+		name    string
+		body    func() []byte
+		outcome string
+	}{
+		{"Ed25519 and ML-DSA-65 signatures that verify", func() []byte {
+			return signList(t, testList(now, revokedDID), ed, pq)
+		}, ""},
+		{"an ML-DSA-65 signature that does not verify", func() []byte {
+			return editList(t, signList(t, testList(now, revokedDID), ed, pq), func(doc map[string]any) {
+				value, _ := base64.StdEncoding.DecodeString(signatureAt(doc, 1)["value"].(string))
+				value[0] ^= 0xff
+				signatureAt(doc, 1)["value"] = base64.StdEncoding.EncodeToString(value)
+			})
+		}, CRLOutcomeSignature},
+		{"an ML-DSA-65 signature alone", func() []byte {
+			return signList(t, testList(now, revokedDID), pq)
+		}, CRLOutcomeSignature},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newCRLAuthority(t, discoveryFor(ed, pq))
+			a.setList(tc.body())
+			c := newTestCRLClient(t, a, "", &now)
+			err := c.Refresh(context.Background())
+			if tc.outcome == "" {
+				if err != nil {
+					t.Fatalf("Refresh: %v", err)
+				}
+				requireAnswer(t, c, revokedDID, true)
+				return
+			}
+			requireRefreshOutcome(t, err, tc.outcome)
+		})
+	}
+}
+
+// A list that breaks the form of the list contract is refused as shape, even
+// when a listed key signed it.
+func TestCRLClient_RefusesAListThatBreaksTheContractsForm(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	signed := func(edit func(doc map[string]any)) func() []byte {
+		return func() []byte {
+			doc := testList(now, revokedDID)
+			edit(doc)
+			return signList(t, doc, signer)
+		}
+	}
+	cases := []struct {
+		name string
+		body func() []byte
+	}{
+		{"entryCount above the entries", signed(func(doc map[string]any) { doc["entryCount"] = 2 })},
+		{"entryCount below the entries", signed(func(doc map[string]any) { doc["entryCount"] = 0 })},
+		{"no entryCount", signed(func(doc map[string]any) { delete(doc, "entryCount") })},
+		{"an entryCount written as a string", signed(func(doc map[string]any) { doc["entryCount"] = "1" })},
+		{"no revocations member", signed(func(doc map[string]any) { delete(doc, "revocations"); doc["entryCount"] = 0 })},
+		{"revocations that is not an array", signed(func(doc map[string]any) { doc["revocations"] = map[string]any{} })},
+		{"an agentDid of 513 bytes", signed(func(doc map[string]any) { firstEntry(doc)["agentDid"] = "did:web:" + strings.Repeat("a", 505) })},
+		{"an empty agentDid", signed(func(doc map[string]any) { firstEntry(doc)["agentDid"] = "" })},
+		{"no agentDid", signed(func(doc map[string]any) { delete(firstEntry(doc), "agentDid") })},
+		{"a revokedAt written with an offset", signed(func(doc map[string]any) { firstEntry(doc)["revokedAt"] = "2026-10-17T10:00:00+00:00" })},
+		{"a revokedAt that is not a time", signed(func(doc map[string]any) { firstEntry(doc)["revokedAt"] = "yesterday" })},
+		{"no revokedAt", signed(func(doc map[string]any) { delete(firstEntry(doc), "revokedAt") })},
+		{"a reason that is not a string", signed(func(doc map[string]any) { firstEntry(doc)["reason"] = 7 })},
+		{"a revokedByKeyId of 577 bytes", signed(func(doc map[string]any) { firstEntry(doc)["revokedByKeyId"] = strings.Repeat("k", 577) })},
+		{"a transparencyLogIndex of 2^63", signed(func(doc map[string]any) { firstEntry(doc)["transparencyLogIndex"] = json.Number("9223372036854775808") })},
+		{"a negative transparencyLogIndex", signed(func(doc map[string]any) { firstEntry(doc)["transparencyLogIndex"] = -1 })},
+		{"a transparencyLogIndex with a fraction", signed(func(doc map[string]any) { firstEntry(doc)["transparencyLogIndex"] = 1.5 })},
+		{"an entry longer than 1258 bytes", signed(func(doc map[string]any) { firstEntry(doc)["note"] = strings.Repeat("n", maxCRLEntryBytes) })},
+		{"a thisUpdate that is not RFC 3339", signed(func(doc map[string]any) { doc["thisUpdate"] = "2026-10-17 10:00:00" })},
+		{"no nextUpdate", signed(func(doc map[string]any) { delete(doc, "nextUpdate") })},
+		{"signatures that is not an array", func() []byte {
+			return editList(t, signList(t, testList(now, revokedDID), signer), func(doc map[string]any) { doc["signatures"] = "signed" })
+		}},
+		{"a signature without keyId", func() []byte {
+			return editList(t, signList(t, testList(now, revokedDID), signer), func(doc map[string]any) { delete(signatureAt(doc, 0), "keyId") })
+		}},
+		{"a member named twice", func() []byte {
+			return append([]byte(`{"entryCount":1,`), signList(t, testList(now, revokedDID), signer)[1:]...)
+		}},
+		{"a string that is not UTF-8", func() []byte {
+			return bytes.Replace(signList(t, testList(now, revokedDID), signer), []byte("compromised"), []byte("compro\xffmised"), 1)
+		}},
+		{"data after the list", func() []byte {
+			return append(signList(t, testList(now, revokedDID), signer), []byte(`{}`)...)
+		}},
+		{"an array where the list belongs", func() []byte { return []byte(`[]`) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(tc.body())
+			c := newTestCRLClient(t, a, "", &now)
+			requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeShape)
+			requireUnknown(t, c, revokedDID)
+		})
+	}
+}
+
+// Values at the bounds of the list contract, and entries without the
+// optional reason, revokedByKeyId and transparencyLogIndex, are held.
+func TestCRLClient_HoldsAListAtTheContractsBounds(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	didAtTheBound := "did:web:" + strings.Repeat("a", maxCRLAgentDIDBytes-len("did:web:"))
+	cases := []struct {
+		name string
+		edit func(doc map[string]any)
+		did  string
+	}{
+		{"an agentDid of 512 bytes", func(doc map[string]any) { firstEntry(doc)["agentDid"] = didAtTheBound }, didAtTheBound},
+		{"a revokedByKeyId of 576 bytes", func(doc map[string]any) { firstEntry(doc)["revokedByKeyId"] = strings.Repeat("k", 576) }, revokedDID},
+		{"a transparencyLogIndex of 2^63-1", func(doc map[string]any) {
+			firstEntry(doc)["transparencyLogIndex"] = json.Number("9223372036854775807")
+		}, revokedDID},
+		{"a revokedAt with fractional seconds", func(doc map[string]any) { firstEntry(doc)["revokedAt"] = "2026-10-17T10:00:00.123456Z" }, revokedDID},
+		{"no reason, revokedByKeyId or transparencyLogIndex", func(doc map[string]any) {
+			for _, name := range []string{"reason", "revokedByKeyId", "transparencyLogIndex"} {
+				delete(firstEntry(doc), name)
+			}
+		}, revokedDID},
+		{"an entry of 1258 bytes", func(doc map[string]any) { padEntry(t, firstEntry(doc), maxCRLEntryBytes) }, revokedDID},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := testList(now, revokedDID)
+			tc.edit(doc)
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(signList(t, doc, signer))
+			c := newTestCRLClient(t, a, "", &now)
+			if err := c.Refresh(context.Background()); err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+			requireAnswer(t, c, tc.did, true)
+		})
+	}
+
+	doc := testList(now, revokedDID)
+	padEntry(t, firstEntry(doc), maxCRLEntryBytes+1)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.setList(signList(t, doc, signer))
+	requireRefreshOutcome(t, newTestCRLClient(t, a, "", &now).Refresh(context.Background()), CRLOutcomeShape)
+}
+
+// padEntry adds a note member to entry so that its canonical form is size
+// bytes long.
+func padEntry(t *testing.T, entry map[string]any, size int) {
+	t.Helper()
+	entry["note"] = ""
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry["note"] = strings.Repeat("n", size-len(mustCanonicalJSON(t, raw)))
+	raw, err = json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(mustCanonicalJSON(t, raw)); got != size {
+		t.Fatalf("the padded entry is %d bytes, want %d", got, size)
+	}
+}
+
+// envelopeBytes is the canonical size of the members of a list body other
+// than revocations.
+func envelopeBytes(t *testing.T, body []byte) int {
+	t.Helper()
+	var members map[string]json.RawMessage
+	if err := json.Unmarshal(body, &members); err != nil {
+		t.Fatal(err)
+	}
+	size := 0
+	for name, value := range members {
+		if name == "revocations" {
+			continue
+		}
+		raw, err := json.Marshal(map[string]json.RawMessage{name: value})
+		if err != nil {
+			t.Fatal(err)
+		}
+		size += len(mustCanonicalJSON(t, raw)) - len("{}")
+	}
+	return size
+}
+
+// The members other than revocations, signatures included, may take
+// maxCRLEnvelopeBytes and no more.
+func TestCRLClient_HoldsAListWhoseOtherMembersTakeTheEnvelopeBound(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	withEnvelope := func(size int) []byte {
+		doc := testList(now, revokedDID)
+		doc["padding"] = ""
+		doc["padding"] = strings.Repeat("p", size-envelopeBytes(t, signList(t, doc, signer)))
+		body := signList(t, doc, signer)
+		if got := envelopeBytes(t, body); got != size {
+			t.Fatalf("the members other than revocations take %d bytes, want %d", got, size)
+		}
+		return body
+	}
+	a := newCRLAuthority(t, discoveryFor(signer))
+	c := newTestCRLClient(t, a, "", &now)
+
+	a.setList(withEnvelope(maxCRLEnvelopeBytes + 1))
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeShape)
+
+	a.setList(withEnvelope(maxCRLEnvelopeBytes))
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh at the envelope bound: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+}
+
+// revocations may hold maxCRLEntries entries and no more.
+func TestCRLClient_HoldsAtMostMaxCRLEntriesEntries(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	dids := make([]string, maxCRLEntries+1)
+	for i := range dids {
+		dids[i] = fmt.Sprintf("did:web:agents.example:agent-%05d", i)
+	}
+	a := newCRLAuthority(t, discoveryFor(signer))
+	c := newTestCRLClient(t, a, "", &now)
+
+	a.setList(signList(t, testList(now, dids...), signer))
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeShape)
+
+	a.setList(signList(t, testList(now, dids[:maxCRLEntries]...), signer))
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh of %d entries: %v", maxCRLEntries, err)
+	}
+	requireAnswer(t, c, dids[maxCRLEntries-1], true)
+	requireAnswer(t, c, dids[maxCRLEntries], false)
+}
+
+// A body longer than maxCRLBodyBytes is refused as shape, and a list padded
+// with white space to exactly maxCRLBodyBytes is held.
+func TestCRLClient_RefusesABodyLongerThanTheBodyBound(t *testing.T) {
+	if maxCRLBodyBytes != 65_536+10_000*1258 {
+		t.Fatalf("maxCRLBodyBytes is %d", maxCRLBodyBytes)
+	}
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	a := newCRLAuthority(t, discoveryFor(signer))
+	c := newTestCRLClient(t, a, "", &now)
+
+	a.setList(bytes.Repeat([]byte(" "), maxCRLBodyBytes+1))
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeShape)
+
+	body := signList(t, testList(now, revokedDID), signer)
+	a.setList(append(body, bytes.Repeat([]byte(" "), maxCRLBodyBytes-len(body))...))
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh of a body of maxCRLBodyBytes: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+}
+
+// thisUpdate may be up to 60 s ahead of this server's clock, and a list is
+// read up to 60 s after its nextUpdate.
+func TestCRLClient_RefusesAListOutsideTheClockSkewBound(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now().UTC().Truncate(time.Second)
+	cases := []struct {
+		name                   string
+		thisUpdate, nextUpdate time.Duration
+		outcome                string
+	}{
+		{"thisUpdate 60 s ahead", 60 * time.Second, 5 * time.Minute, ""},
+		{"thisUpdate 61 s ahead", 61 * time.Second, 5 * time.Minute, CRLOutcomeTime},
+		{"nextUpdate 60 s ago", -5 * time.Minute, -60 * time.Second, ""},
+		{"nextUpdate 61 s ago", -5 * time.Minute, -61 * time.Second, CRLOutcomeTime},
+		{"nextUpdate equal to thisUpdate", -time.Minute, -time.Minute, CRLOutcomeTime},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := testList(now, revokedDID)
+			doc["thisUpdate"] = now.Add(tc.thisUpdate).Format(time.RFC3339)
+			doc["nextUpdate"] = now.Add(tc.nextUpdate).Format(time.RFC3339)
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(signList(t, doc, signer))
+			c := newTestCRLClient(t, a, "", &now)
+			err := c.Refresh(context.Background())
+			if tc.outcome == "" {
+				if err != nil {
+					t.Fatalf("Refresh: %v", err)
+				}
+				requireAnswer(t, c, revokedDID, true)
+				return
+			}
+			requireRefreshOutcome(t, err, tc.outcome)
+			requireUnknown(t, c, revokedDID)
+		})
+	}
+}
+
+// A list whose thisUpdate is before that of the list held is refused, and the
+// list held stays; a later list replaces it.
+func TestCRLClient_RefusesAListOlderThanTheListHeld(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now().UTC().Truncate(time.Second)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.setList(signList(t, testList(now, revokedDID), signer))
+	c := newTestCRLClient(t, a, "", &now)
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	older := testList(now, otherDID)
+	older["thisUpdate"] = now.Add(-2 * time.Minute).Format(time.RFC3339)
+	a.setList(signList(t, older, signer))
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeTime)
+	requireAnswer(t, c, revokedDID, true)
+	requireAnswer(t, c, otherDID, false)
+
+	a.setList(signList(t, testList(now.Add(time.Minute), otherDID), signer))
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh of a later list: %v", err)
+	}
+	requireAnswer(t, c, otherDID, true)
+	requireAnswer(t, c, revokedDID, false)
+}
+
+// The list held answers for five minutes after its last read, and up to 60 s
+// after its nextUpdate; past either, the state is unknown.
+func TestCRLClient_StateIsUnknownOnceTheListHeldIsStale(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	start := time.Now().UTC().Truncate(time.Second)
+	cases := []struct {
+		name       string
+		nextUpdate time.Duration
+		answers    time.Duration
+	}{
+		{"five minutes after its last read", time.Hour, crlMaxStaleAge},
+		{"60 s after its nextUpdate", 2 * time.Minute, 2*time.Minute + crlClockSkew},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := start
+			doc := testList(now, revokedDID)
+			doc["nextUpdate"] = now.Add(tc.nextUpdate).Format(time.RFC3339)
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(signList(t, doc, signer))
+			c := newTestCRLClient(t, a, "", &now)
+			if err := c.Refresh(context.Background()); err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+			now = start.Add(tc.answers)
+			requireAnswer(t, c, revokedDID, true)
+			now = start.Add(tc.answers + time.Second)
+			requireUnknown(t, c, revokedDID)
+		})
+	}
+}
+
+// A refresh sends the ETag of the list held as If-None-Match, and a 304
+// answer counts as a read of that list.
+func TestCRLClient_ANotModifiedAnswerCountsAsAReadOfTheListHeld(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	start := time.Now().UTC().Truncate(time.Second)
+	now := start
+	doc := testList(now, revokedDID)
+	doc["nextUpdate"] = now.Add(time.Hour).Format(time.RFC3339)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.setList(signList(t, doc, signer))
+	a.set(func(a *crlAuthority) { a.etag = `"list-1"` })
+	c := newTestCRLClient(t, a, "", &now)
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	now = start.Add(4 * time.Minute)
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh answered 304: %v", err)
+	}
+	if _, ifNoneMatch := a.requests(); len(ifNoneMatch) != 2 || ifNoneMatch[0] != "" || ifNoneMatch[1] != `"list-1"` {
+		t.Fatalf("If-None-Match of the list requests: %q", ifNoneMatch)
+	}
+	now = start.Add(4*time.Minute + crlMaxStaleAge)
+	requireAnswer(t, c, revokedDID, true)
+	now = start.Add(4*time.Minute + crlMaxStaleAge + time.Second)
+	requireUnknown(t, c, revokedDID)
+}
+
+// A discovery document the client cannot use refuses the refresh.
+func TestCRLClient_RefusesADiscoveryDocumentItCannotUse(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	key := discoveryFor(signer)["publicKeys"]
+	cases := []struct {
+		name      string
+		discovery map[string]any
+		outcome   string
+	}{
+		{"no endpoints.revocations", map[string]any{"publicKeys": key}, CRLOutcomeShape},
+		{"an endpoints.revocations that is not https", map[string]any{
+			"endpoints": map[string]any{"revocations": "http://127.0.0.1" + testListPath}, "publicKeys": key,
+		}, CRLOutcomeShape},
+		{"a keyId listed twice", map[string]any{
+			"endpoints":  map[string]any{"revocations": testListPath},
+			"publicKeys": append(append([]any{}, key.([]any)...), key.([]any)...),
+		}, CRLOutcomeShape},
+		{"a publicKeys that is not an array", map[string]any{
+			"endpoints": map[string]any{"revocations": testListPath}, "publicKeys": "none",
+		}, CRLOutcomeShape},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newCRLAuthority(t, tc.discovery)
+			a.setList(signList(t, testList(now, revokedDID), signer))
+			c := newTestCRLClient(t, a, "", &now)
+			requireRefreshOutcome(t, c.Refresh(context.Background()), tc.outcome)
+			if paths, _ := a.requests(); len(paths) != 0 {
+				t.Fatalf("the list was read at %v", paths)
+			}
+		})
+	}
+}
+
+// The client follows no redirect from the list address to an address that is
+// not https.
+func TestCRLClient_FollowsNoRedirectAwayFromHTTPS(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.set(func(a *crlAuthority) { a.redirect = "http://127.0.0.1:9" + testListPath })
+	c := newTestCRLClient(t, a, "", &now)
+
+	err := c.Refresh(context.Background())
+	requireRefreshOutcome(t, err, CRLOutcomeFetch)
+	if !strings.Contains(err.Error(), "refused a redirect to an address that is not https") {
+		t.Fatalf("Refresh: %v", err)
+	}
+}
+
+// Both addresses must be https URLs with a host, and the client needs the base.
+func TestNewCachedCRLClient_RefusesAnAddressThatIsNotHTTPS(t *testing.T) {
+	cases := []struct {
+		name, base, override string
+	}{
+		{"no base URL", "", ""},
+		{"an http base URL", "http://registry.example", ""},
+		{"a base URL without a host", "https://", ""},
+		{"a base URL that does not parse", "https://registry.example/%zz", ""},
+		{"an http endpoint override", "https://registry.example", "http://registry.example" + testListPath},
+		{"an endpoint override without a scheme", "https://registry.example", "registry.example" + testListPath},
+	}
+	for _, tc := range cases {
+		if _, err := NewCachedCRLClient(tc.base, tc.override, nil); err == nil {
+			t.Errorf("%s: NewCachedCRLClient(%q, %q) built a client", tc.name, tc.base, tc.override)
+		}
+	}
+	if _, err := NewCachedCRLClient("https://registry.example", "https://mirror.example"+testListPath, nil); err != nil {
+		t.Fatalf("https base and override: %v", err)
+	}
+}
