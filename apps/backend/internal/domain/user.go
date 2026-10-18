@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,6 +52,7 @@ type User struct {
 	Status                 UserStatus `json:"status"`     // pending, active, suspended, deactivated
 	PasswordHash           *string    `json:"-"`          // Never expose in JSON
 	ForcePasswordChange    bool       `json:"forcePasswordChange"`
+	PasswordChangedAt      *time.Time `json:"-"`                    // When the password last changed, nil until it first changes; sessions signed in before it are refused
 	PasswordResetToken     *string    `json:"-"`                    // SHA-256 digest of the reset token; never expose in JSON
 	PasswordResetExpiresAt *time.Time `json:"-"`                    // Never expose in JSON
 	ApprovedBy             *uuid.UUID `json:"approvedBy,omitempty"` // Admin who approved this user
@@ -60,6 +62,20 @@ type User struct {
 	CreatedAt              time.Time  `json:"createdAt"`
 	UpdatedAt              time.Time  `json:"updatedAt"`
 }
+
+// UserSessionState is the part of a user record an authenticated request reads
+// on every request to decide whether its session may act.
+type UserSessionState struct {
+	// PasswordChangedAt is the instant the password last changed, nil until
+	// it first changes.
+	PasswordChangedAt *time.Time
+	// ForcePasswordChange is set while the account must change its password
+	// before it may do anything else.
+	ForcePasswordChange bool
+}
+
+// ErrUserNotFound is returned when no user has the requested ID.
+var ErrUserNotFound = errors.New("user not found")
 
 // UserRepository defines the interface for user persistence
 type UserRepository interface {

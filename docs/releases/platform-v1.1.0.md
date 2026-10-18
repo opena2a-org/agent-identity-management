@@ -2,7 +2,9 @@
 
 Draft notes for the `platform-v1.1.0` tag of the AIM platform (backend and dashboard). They are written from
 `CHANGELOG.md`, section `[Unreleased]`, at commit `c694174a`; an entry added after that commit is not in these notes,
-except a Security heading, which the security table cites.
+except a Security heading, which the security table cites, and the entry *Security: a password change ends every
+session signed in before it, and the API enforces a required password change*, which a change that needs action also
+describes.
 Each item names the [CHANGELOG.md](../../CHANGELOG.md) heading that carries its detail, written as
 its kind, a colon and its text; the changelog itself separates the kind from the text with a dash.
 
@@ -88,6 +90,13 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   create an API key; that takes a sign-in. CHANGELOG: *Changed: a downloaded SDK's credential ends
   `SDK_TOKEN_FAMILY_MAX_AGE` after its download, and a credential-minting route needs a sign-in's access token*;
   *Security: creating an API key requires a live sign-in session*.
+- **Password changes end sessions and SDK credentials.** A password change or reset ends every session signed in
+  before it, and every SDK-download token minted before it: their tokens are answered 401, so an SDK install whose
+  user changes or resets the password needs a new download. While an account must change its password
+  (`force_password_change`), the auth middleware admits its session only to `GET /api/v1/auth/me` and
+  `POST /api/v1/auth/change-password`; every other route behind the middleware, and `POST /api/v1/auth/refresh`,
+  answers 403 with the code `passwordChangeRequired`. CHANGELOG: *Security: a password change ends every session
+  signed in before it, and the API enforces a required password change*.
 - **Sign-in through the `Authorization` header only.** Sign-in no longer sets `access_token` or `refresh_token`
   cookies, and the API no longer accepts them in place of the header. A sign-in ends 8 hours after it began by default
   (`JWT_SESSION_MAX_AGE`), however often it is refreshed. CHANGELOG: *Security: the API no longer uses cookies for
@@ -209,6 +218,7 @@ this line when it is published.
 
 | `CHANGELOG.md` heading | Fixed in |
 |------------------------|----------|
+| Security: a password change ends every session signed in before it, and the API enforces a required password change | 1.1.0 |
 | Security: an ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with `Retry-After` | 1.1.0 |
 | Security: the API server listens on 127.0.0.1 outside a container unless `HOST` is set (#757) | 1.1.0 |
 | Security: the startup refusal for a missing `KEYVAULT_MASTER_KEY` names only the key | 1.1.0 |
@@ -393,8 +403,11 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 35 migrations, `098_mcp_manifest_baselines.sql` to
-`133_registry_atc_revocations.sql`. Measured on 2026-10-17 on an Apple M4 Max laptop with PostgreSQL 18.3: a
+Upgrading from 1.0.0 applies 36 migrations, `098_mcp_manifest_baselines.sql` to
+`134_users_password_changed_at.sql`. The times below are of the 35 migrations up to
+`133_registry_atc_revocations.sql`, measured before `134_users_password_changed_at.sql` existed; that migration adds
+one column with no default to `users` and was not timed. Measured on 2026-10-17 on an Apple M4 Max laptop with
+PostgreSQL 18.3: a
 database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own transaction and
 recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. Then `aim-server migrate`, built from
 the tree of the commit that adds `133_registry_atc_revocations.sql`, was timed against it with `/usr/bin/time -p`,

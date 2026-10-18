@@ -27,6 +27,46 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   is one the handler's answer carries, and reads the stored agent back through the `GET /api/v1/agents/{id}` handler.
   On the previous `docs/API.md` each of its four checks failed.
 
+### Security — a password change ends every session signed in before it, and the API enforces a required password change
+
+- `AuthService.ChangePassword`, which `POST /api/v1/auth/change-password` and `POST /api/v1/public/change-password`
+  call, and `RegistrationService.ResetPassword`, which `POST /api/v1/public/reset-password` calls, record the instant
+  of the change in `users.password_changed_at`. Migration `134_users_password_changed_at.sql` adds the column, NULL
+  until the user's password first changes. `UserRepository.Update` writes it through `GREATEST`, so a later write of a
+  copy of the row that does not carry it leaves it in place.
+- For each request the auth middleware authenticates with an access token, it reads that column and
+  `force_password_change` from the user's row through `UserRepository.GetSessionState`, which `cmd/server` attaches to
+  the JWT service. A token whose sign-in time is before the first whole second after the change is answered 401 by the
+  auth middleware and by `POST /api/v1/auth/refresh`. The sign-in time is the token's `auth_time`, or its `iat` when it
+  carries none, as an SDK-download token and an access token minted from one do. Token times are whole seconds, so a
+  token minted in the second of the change is refused. `POST /api/v1/auth/refresh` also refuses an SDK-download token
+  whose `sdk_tokens` row dates its family's download before the first whole second after the change, whatever the
+  token's own `iat`.
+- The session that made the change is issued a new pair: the answer of `POST /api/v1/auth/change-password` carries
+  `accessToken` and `refreshToken` beside `message`, and `POST /api/v1/public/change-password` answers with a pair
+  minted the same way. The new pair's `auth_time` is not before the first whole second after the change, so the change
+  does not refuse it.
+- `DeviceAuthService.PollToken` refuses a device code approved before the first whole second after the user's last
+  password change with `ErrAccessDenied`.
+- While `force_password_change` is set, the auth middleware admits the account's session only to
+  `GET /api/v1/auth/me` and `POST /api/v1/auth/change-password`, compared as the router matches paths: without regard
+  to case, and with or without one trailing slash. Every other route it guards answers 403 with
+  `"code": "passwordChangeRequired"`, and `POST /api/v1/auth/refresh` answers the same. `POST /api/v1/auth/logout`
+  reads no session through the middleware and is unchanged.
+- `OptionalAuthMiddleware`, on the `/api/v1/public` routes, leaves a request unauthenticated when its token was signed
+  in before the last password change, when the account must change its password, or when the user's row cannot be
+  read.
+- A route behind the auth middleware answers 503 when the user's row cannot be read, and 401 when no user has the
+  token's user ID.
+- An SDK install whose user changes or resets the password needs a new download: its SDK-download token was minted
+  before the change.
+- Tests: `apps/backend/internal/interfaces/http/handlers/password_change_sessions_test.go`,
+  `apps/backend/internal/interfaces/http/middleware/auth_password_change_test.go`,
+  `apps/backend/internal/infrastructure/auth/password_change_test.go`,
+  `apps/backend/internal/infrastructure/repository/user_repository_password_change_test.go`,
+  `apps/backend/internal/application/password_change_sessions_test.go`,
+  `apps/backend/cmd/server/password_change_sessions_wiring_test.go`.
+
 ### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)
 
 - A server can end an answer cleanly once it sees the client cancel the request, and the client can read that end

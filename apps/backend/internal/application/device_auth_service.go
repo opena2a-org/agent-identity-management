@@ -190,6 +190,11 @@ func (s *DeviceAuthService) PollToken(ctx context.Context, deviceCode string) (*
 		if !user.CanHoldSession() {
 			return nil, ErrAccessDenied
 		}
+		// A password change after the approval ends it, as the change ends
+		// every session signed in before it: the approving session is one.
+		if user.PasswordChangedAt != nil && (dc.ApprovedAt == nil || dc.ApprovedAt.Before(auth.PasswordChangeBoundary(*user.PasswordChangedAt))) {
+			return nil, ErrAccessDenied
+		}
 
 		// One approval mints one pair. The code moves to consumed in the same
 		// transaction that mints, so of two polls racing on one approved code

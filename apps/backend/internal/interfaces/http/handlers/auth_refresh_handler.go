@@ -70,6 +70,12 @@ func (h *AuthRefreshHandler) refreshPrincipal(claims *auth.JWTClaims) (*domain.U
 	if !user.CanHoldSession() {
 		return nil, "Account is not active"
 	}
+	// A password change ends every session from before it: a token whose
+	// sign-in (auth_time, or its own iat for an SDK-download token) precedes
+	// the recorded change is answered like an expired one.
+	if auth.SignedInBeforePasswordChange(claims, user.PasswordChangedAt) {
+		return nil, "Invalid or expired refresh token"
+	}
 	return user, ""
 }
 
@@ -437,6 +443,22 @@ func (h *AuthRefreshHandler) RefreshToken(c fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": refusal,
 		})
+	}
+	// An SDK-download family is born at its download, and each rotation gives
+	// its new member a fresh iat. A family downloaded before the last
+	// password change is refused by its birth as well, so a rotation in
+	// flight when the password changed cannot carry the family past it.
+	if claims.Issuer == auth.IssuerSDK && sdkRow != nil && user.PasswordChangedAt != nil &&
+		sdkRow.FamilyCreatedAt().Before(auth.PasswordChangeBoundary(*user.PasswordChangedAt)) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid or expired refresh token",
+		})
+	}
+	// While the account must change its password its session is not renewed:
+	// the auth middleware admits it only to GET /auth/me and
+	// POST /auth/change-password, and the change issues a new pair.
+	if user.ForcePasswordChange {
+		return middleware.PasswordChangeRequired(c)
 	}
 
 	// Validate refresh token and generate new tokens (with rotation)
