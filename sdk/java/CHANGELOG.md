@@ -131,6 +131,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `AgentTypeServerTypesTest` reads the agent types the server accepts at registration from the `recognizedAgentTypes`
+  map in `apps/backend/internal/application/agent_service.go`, the map `isValidAgentType` looks an agent type up in.
+  It read them from the body of `isValidAgentType` up to `return validTypes`, and that function now returns
+  `recognizedAgentTypes[agentType]`: `mvn -B test -Dtest=AgentTypeServerTypesTest` ran 3 tests with 2 failures,
+  `everyAgentTypeIsAServerType` and `fromStringRecognisesEveryServerType`, each with `isValidAgentType was not found
+  in apps/backend/internal/application/agent_service.go`. It now runs the 3 tests with no failure (#797).
 - Two tests that `mvn install` runs failed on a machine whose stored SDK credential (`~/.aim/sdk_credentials.json`)
   held an empty `sdkTokenId` and named an AIM server that was not running. Run with such a credential (`aimUrl`
   `http://127.0.0.1:18471`, nothing listening there), `AIMClientIntegrationTest.loadCredentials` threw

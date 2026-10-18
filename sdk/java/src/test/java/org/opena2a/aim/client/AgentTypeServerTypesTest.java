@@ -26,18 +26,19 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Checks AgentType against the agent types the server defines, read from the
- * backend source: the types isValidAgentType accepts at registration, with
- * their values from the domain constants. An AgentType value outside that set
- * is refused at registration and, as a listAgents filter, matches no agent.
+ * backend source: the types recognizedAgentTypes maps to true, which are the
+ * types isValidAgentType accepts at registration, with their values from the
+ * domain constants. An AgentType value outside that set is refused at
+ * registration and, as a listAgents filter, matches no agent.
  */
 class AgentTypeServerTypesTest {
 
     private static final String VALIDATOR = "apps/backend/internal/application/agent_service.go";
     private static final String CONSTANTS = "apps/backend/internal/domain/agent.go";
 
-    private static final Pattern VALIDATOR_BODY =
-            Pattern.compile("func isValidAgentType\\(.*?\\{(.*?)return validTypes", Pattern.DOTALL);
-    private static final Pattern VALIDATOR_ENTRY = Pattern.compile("domain\\.(AgentType\\w+):\\s*true");
+    private static final Pattern RECOGNIZED_TYPES = Pattern.compile(
+            "var recognizedAgentTypes = map\\[domain\\.AgentType\\]bool\\{(.*?)\\n\\}", Pattern.DOTALL);
+    private static final Pattern RECOGNIZED_ENTRY = Pattern.compile("domain\\.(AgentType\\w+):\\s*true");
     private static final Pattern CONSTANT = Pattern.compile("(AgentType\\w+)\\s+AgentType\\s*=\\s*\"([^\"]*)\"");
 
     @Test
@@ -77,7 +78,7 @@ class AgentTypeServerTypesTest {
         assertSame(AgentType.UNKNOWN, AgentType.fromString(null));
     }
 
-    /** The values of the agent types isValidAgentType accepts. */
+    /** The values of the agent types recognizedAgentTypes maps to true. */
     private static Set<String> serverAgentTypes() throws IOException {
         Map<String, String> constants = new HashMap<>();
         Matcher constant = CONSTANT.matcher(read(CONSTANTS));
@@ -85,18 +86,18 @@ class AgentTypeServerTypesTest {
             constants.put(constant.group(1), constant.group(2));
         }
 
-        Matcher body = VALIDATOR_BODY.matcher(read(VALIDATOR));
-        if (!body.find()) {
-            fail("isValidAgentType was not found in " + VALIDATOR);
+        Matcher recognized = RECOGNIZED_TYPES.matcher(read(VALIDATOR));
+        if (!recognized.find()) {
+            fail("recognizedAgentTypes was not found in " + VALIDATOR);
         }
         Set<String> types = new TreeSet<>();
-        Matcher entry = VALIDATOR_ENTRY.matcher(body.group(1));
+        Matcher entry = RECOGNIZED_ENTRY.matcher(recognized.group(1));
         while (entry.find()) {
             String value = constants.get(entry.group(1));
             assertNotNull(value, entry.group(1) + " is not a string constant in " + CONSTANTS);
             types.add(value);
         }
-        assertFalse(types.isEmpty(), "no agent types found in isValidAgentType in " + VALIDATOR);
+        assertFalse(types.isEmpty(), "no agent types found in recognizedAgentTypes in " + VALIDATOR);
         return types;
     }
 
