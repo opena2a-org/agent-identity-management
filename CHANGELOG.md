@@ -26,6 +26,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Test: `apps/web/components/modals/register-agent-modal.api-key-card.test.tsx`; its layout measurement runs where a
   Chromium build for the installed Playwright is present.
 
+### Fixed — the API endpoint summary names the four dependencies `GET /health/ready` reports (#781)
+
+- `docs/guides/API_ENDPOINT_SUMMARY.md` described `GET /health/ready` as "Readiness check (database + redis)". The
+  body's `dependencies` object also reports `siem` and `revocationState`. The row now names all four: `database`, which
+  is required and decides the status (200 when its ping succeeds within 2 s, 503 otherwise), and the optional `redis`,
+  `siem` and `revocationState`, each of which sets `"degraded": true` without changing the status when it is
+  `unavailable`.
+- The section's implementation pointer named `apps/backend/cmd/server/main.go:112-144`, lines that register none of its
+  three routes. It now names `main.go`, which registers them, `apps/backend/cmd/server/health_ready.go`, which builds
+  the readiness body, and the body's contract, `apps/backend/contracts/health-ready.schema.json`.
+- A backend test (`apps/backend/cmd/server/health_docs_paths_test.go`) reads the dependencies from the readiness
+  handler's body, with no optional dependency set up and with every one set up, and fails when the row does not name
+  one of them, or does not write "`<name>` (required" for exactly the ones the body reports as required.
+
 ### Fixed: a Registry credential revocation request waiting for a retry is sent after the server starts again
 
 - The request asking the Registry to revoke a revoked agent's credentials, `POST /internal/atc/<agent id>/revoke`,
