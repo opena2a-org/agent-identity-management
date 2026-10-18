@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -1244,6 +1245,109 @@ type slowClosingConn struct {
 func (c *slowClosingConn) Close() error {
 	time.Sleep(c.hold)
 	return c.Conn.Close()
+}
+
+// endsOnceDone is a body that sends sent and then, once ctx is done, ends with
+// io.EOF and no error.
+type endsOnceDone struct {
+	ctx  context.Context
+	sent []byte
+}
+
+func (b *endsOnceDone) Read(p []byte) (int, error) {
+	if len(b.sent) > 0 {
+		n := copy(p, b.sent)
+		b.sent = b.sent[n:]
+		return n, nil
+	}
+	<-b.ctx.Done()
+	return 0, io.EOF
+}
+
+func (b *endsOnceDone) Close() error { return nil }
+
+// roundTripFunc answers each request itself, with no connection.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// newEndsOnceDoneClient returns a client whose HTTP client has the timeout
+// given and a transport that answers each request 200 without a connection: at
+// path with an endsOnceDone body that sends sent and ends once the request's
+// context is done, and elsewhere with a discovery document that names
+// testListPath and no key.
+//
+// A server can end its answer cleanly when it sees the client cancel the
+// request, and the client can read that end before it sees its own
+// cancellation. This client reads that end every time.
+func newEndsOnceDoneClient(t *testing.T, path, sent string, timeout time.Duration) *CachedCRLClient {
+	t.Helper()
+	discovery, err := json.Marshal(map[string]any{"endpoints": map[string]any{"revocations": testListPath}, "publicKeys": []any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body := io.NopCloser(bytes.NewReader(discovery))
+		if r.URL.Path == path {
+			body = &endsOnceDone{ctx: r.Context(), sent: []byte(sent)}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: body, Request: r}, nil
+	})
+	c, err := NewCachedCRLClient("https://registry.example", "", &http.Client{Transport: transport, Timeout: timeout})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// A 200 answer whose body ends once the deadline of its read has passed is
+// refused as timeout however the body ends: empty, or cut inside the list. The
+// deadline is that of the refresh's context or the timeout of the HTTP client.
+func TestCRLClient_RefusesABodyThatEndsAfterItsDeadlineAsTimeout(t *testing.T) {
+	cases := []struct {
+		name     string
+		path     string
+		sent     string
+		timeout  time.Duration // of the HTTP client
+		deadline time.Duration // of the refresh's context
+	}{
+		{"an empty discovery document that ends at the refresh's deadline", "/.well-known/atp", "", 0, 200 * time.Millisecond},
+		{"an empty discovery document that ends at the HTTP client's timeout", "/.well-known/atp", "", 200 * time.Millisecond, 0},
+		{"a list body that ends at the refresh's deadline", testListPath, `{"entryCount":0,`, 0, 200 * time.Millisecond},
+		{"a list body that ends at the HTTP client's timeout", testListPath, `{"entryCount":0,`, 200 * time.Millisecond, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newEndsOnceDoneClient(t, tc.path, tc.sent, tc.timeout)
+			ctx := context.Background()
+			if tc.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.deadline)
+				defer cancel()
+			}
+			requireRefreshOutcome(t, c.Refresh(ctx), CRLOutcomeTimeout)
+		})
+	}
+}
+
+// A 200 answer whose body ends once the refresh's context is canceled is
+// refused as fetch, a read that ended before its deadline with no answer,
+// however the body ends.
+func TestCRLClient_RefusesABodyThatEndsAfterTheRefreshIsCanceledAsFetch(t *testing.T) {
+	cases := []struct{ name, path, sent string }{
+		{"an empty discovery document", "/.well-known/atp", ""},
+		{"a list body", testListPath, `{"entryCount":0,`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := newEndsOnceDoneClient(t, tc.path, tc.sent, 0)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			timer := time.AfterFunc(200*time.Millisecond, cancel)
+			defer timer.Stop()
+			requireRefreshOutcome(t, c.Refresh(ctx), CRLOutcomeFetch)
+		})
+	}
 }
 
 // Both addresses must be https URLs with a host, and the client needs the base.
