@@ -67,7 +67,7 @@ var sdkPathsUnregistered = []sdkUnregisteredPath{
 	{"POST", "/api/v1/a2a/attestations/:param/revoke",
 		"the Python and Java A2A clients' revokeAttestation reaches a registered route or is deprecated, as the TypeScript client's is; the server registers no route that revokes a skill attestation"},
 	{"GET", "/api/v1/a2a/skills",
-		"the Python and Java A2A clients' listSkills reads GET /api/v1/a2a/agents/:id/skills, the route the TypeScript client reads"},
+		"the Java A2A client's listSkills reads GET /api/v1/a2a/agents/:id/skills, the route the Python and TypeScript clients read"},
 	{"GET", "/api/v1/a2a/consent",
 		"the Java A2A client's listUserConsents reads GET /api/v1/a2a/consent/user/:userId, the route the Python and TypeScript clients read"},
 	{"GET", "/api/v1/agents/:param/.well-known/agent.json",

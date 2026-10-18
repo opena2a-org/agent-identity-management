@@ -1545,7 +1545,10 @@ class A2AClient:
 
     def list_skills(self) -> List[Dict[str, Any]]:
         """
-        List all skills for the current agent.
+        List the skills of the current agent.
+
+        Requests GET /api/v1/a2a/agents/{agentId}/skills with this client's
+        agent ID, the request get_skills() makes when it is given no agent ID.
 
         Returns:
             List of skills
@@ -1553,10 +1556,9 @@ class A2AClient:
         Example:
             >>> skills = a2a.list_skills()
             >>> for skill in skills:
-            ...     print(f"{skill['name']}: {skill['description']}")
+            ...     print(f"{skill['skillId']}: {skill['name']}")
         """
-        response = self._make_request("GET", "/api/v1/a2a/skills")
-        return response.get("skills", [])
+        return self.get_skills()
 
     # =========================================================================
     # Security Settings Update
