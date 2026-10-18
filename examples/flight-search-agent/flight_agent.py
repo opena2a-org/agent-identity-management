@@ -503,6 +503,11 @@ class FlightAgent:
 
                 print("❌ Unknown command. Type 'help' for available commands.")
 
+            except EOFError:
+                # Standard input ended (closed, a pipe that finished, Ctrl-D):
+                # no command can follow, so asking again would loop forever.
+                print("\n👋 Goodbye!")
+                break
             except KeyboardInterrupt:
                 print("\n\n👋 Goodbye!")
                 break

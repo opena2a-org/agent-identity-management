@@ -233,10 +233,12 @@ func agentListFilter(c fiber.Ctx) (domain.AgentListFilter, error) {
 
 // ListAgents returns agents for the organization. Optional limit/offset
 // query parameters page server-side; without them all agents are
-// returned (existing client behavior). Optional status and agentType query
-// parameters keep the agents whose status and type equal them; total then
-// counts the agents that pass, on every page. A filter value that is not
-// valid UTF-8 or holds a NUL character is answered 400.
+// returned (existing client behavior). A limit that is not a positive
+// integer is answered 400, and an offset that is not a positive integer
+// reads as 0. Optional status and agentType query parameters keep the
+// agents whose status and type equal them; total then counts the agents
+// that pass, on every page. A filter value that is not valid UTF-8 or
+// holds a NUL character is answered 400.
 func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 	orgID, err := RequireOrganizationID(c)
 	if err != nil {
@@ -252,11 +254,15 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
+	// A limit of 0 is the repository's "no paging", so a sent limit that is
+	// not a positive integer is refused here rather than read as no limit.
 	limit := 0
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit > 0 {
-			limit = parsedLimit
+		parsedLimit, err := strconv.Atoi(limitStr)
+		if err != nil || parsedLimit <= 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "limit must be a positive integer"})
 		}
+		limit = parsedLimit
 	}
 	offset := 0
 	if offsetStr := c.Query("offset"); offsetStr != "" {
