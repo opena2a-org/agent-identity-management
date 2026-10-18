@@ -129,6 +129,33 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/application/secrets_resolve_atc_revocation_test.go`,
   `apps/backend/internal/infrastructure/repository/agent_status_read_test.go`.
 
+### Fixed — the MCP server page lays out within a 375px phone viewport, and its Integration tab opens on a tap
+
+- On the MCP server page (`apps/web/app/dashboard/mcp/[id]/page.tsx`), the header row holding the server's icon,
+  name, URL and the Edit and Delete actions did not wrap, and its two groups did not shrink below the name's and the
+  URL's unbroken width, so the row laid the page out wider than the phone. Measured in Chromium at a 375x812 viewport
+  under mobile emulation, with every API call answered by the readability sweep's route mocks
+  (`apps/web/scripts/ux-sweep.mjs`), the previous code laid the page out at 521 CSS px (`window.innerWidth`) with the
+  URL `https://mcp.example.com` and at 560 with `https://mcp-server.example.com/mcp/v1/sse`; shown zoomed out, the
+  Integration tab's right edge sat at 852 CSS px inside the scrolling tab list, and in one of two runs a tap at the
+  tab did not select it until a mousedown event was dispatched to it. The row now wraps, its groups shrink, a long
+  name breaks within the word where it overflows and the URL breaks anywhere, so the page keeps the device width.
+- On the Details tab, the server ID, name, URL and description break inside their grid column; on the Attestations
+  tab, the empty state's two cards take one column below the `md` breakpoint instead of a column as wide as their
+  unwrapped code lines.
+- With the change, measured as above with the URLs `https://mcp.example.com` and `https://mcp-server.example.com/mcp/v1/sse`,
+  and with the name `production_mcp_gateway_server_us_east_1` and the URL
+  `https://mcp-gateway.example.com/api/v1/mcp/servers/production/sse` on the Details, Capabilities, Connected agents,
+  Attestations and Integration tabs, `window.innerWidth` reads 375 and the document's horizontal overflow 0, a tap
+  selects the Integration tab, and the cURL example scrolls inside its card: its box ends at 338 CSS px and its
+  content measures 925 CSS px against a 301 CSS px box.
+- Test: `apps/web/tests/e2e/mobile-mcp-detail.spec.ts` opens the page at 375x812 under mobile emulation as a signed-in
+  admin over route mocks, with the URL `https://mcp-server.example.com/mcp/v1/sse`, and checks that `window.innerWidth`
+  and the document's scroll width are 375 as loaded and on the Integration tab, that the tab list ends inside the
+  viewport, that a tap selects the Integration tab and shows its panel, and that the cURL example ends inside the
+  viewport and scrolls inside its card. On the previous code, the same emulation and URL measured `window.innerWidth`
+  at 560 as loaded.
+
 ### Fixed: the MCP server setup guide and the register-agent dialog's verification command name the API the dashboard signs in to
 
 - The setup guide on the Integration tab of an MCP server's page wrote its cURL commands for an address of its own:
