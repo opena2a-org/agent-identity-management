@@ -6,6 +6,7 @@ import type {
   IntelligenceConfig,
   LLMAdapter,
   LLMAssessment,
+  LLMResponse,
   EventCategory,
   EventSeverity,
 } from '../types';
@@ -21,6 +22,13 @@ import {
 import type { GuardAnomalySource, GuardAnomalyStatus } from './guard-anomaly';
 
 const SEVERITY_ORDER: EventSeverity[] = ['info', 'low', 'medium', 'high', 'critical'];
+
+/**
+ * Input tokens assumed for an L2 call's budget reservation (~200 for a micro-prompt).
+ * It sizes only the estimate held while the call is in flight: the actual cost
+ * replaces the estimate when the call returns.
+ */
+const ESTIMATED_PROMPT_TOKENS = 200;
 
 /**
  * Reason the comply gate denied a classified event. `prohibited` means the
@@ -72,7 +80,7 @@ export interface ComplyDecision {
  *
  * L0: Rules (free)      — Pattern matching, allowlists, thresholds. Every event.
  * L1: Statistical (free) — Z-score anomaly detection, baseline deviation. L0 flags.
- * L2: LLM-Assisted ($)   — Micro-prompt to agent's LLM. Only L1 flags + budget check.
+ * L2: LLM-Assisted ($)   — Micro-prompt to agent's LLM. Only L1 flags + budget reservation.
  *
  * 99% of events never reach L2. Cost is ~$0.01/day for most agents.
  */
@@ -362,7 +370,7 @@ export class IntelligenceCoordinator {
     // L1 records this event for future baseline
     this.anomaly.record(event);
 
-    // L2: LLM assessment (only if L1 flagged and budget allows)
+    // L2: LLM assessment (only if L1 flagged; the budget is reserved when the call is made)
     if (this.shouldEscalateToL2(event)) {
       if (this.config.enableBatching && event.severity !== 'critical') {
         return this.queueForBatch(event);
@@ -404,14 +412,48 @@ export class IntelligenceCoordinator {
     const minSev = this.config.minSeverityForLlm ?? 'medium';
     if (severityIndex(event.severity) < severityIndex(minSev)) return false;
 
-    // Budget check
-    const estimatedCost = this.adapter.estimateCost(
-      200, // ~200 input tokens for micro-prompt
-      this.config.maxTokensPerCall ?? 300,
-    );
-    if (!this.budget.canAfford(estimatedCost)) return false;
-
+    // The budget is not checked here: callWithinBudget reserves it when the call is
+    // made, which for a batched event is when its batch is sent.
     return true;
+  }
+
+  /**
+   * Make one L2 call within a budget reservation.
+   *
+   * The reservation is taken before the call is awaited, so a call in flight counts
+   * against `budgetUsd` and `maxCallsPerHour` when the next event asks for a call.
+   * Returns null without calling the adapter when the reservation is refused.
+   * A call that throws releases its reservation; an answered call settles it at the
+   * cost of the tokens the adapter reported, or at the estimate when that cost cannot
+   * be worked out.
+   */
+  private async callWithinBudget(
+    prompt: string,
+    maxTokens: number,
+  ): Promise<{ response: LLMResponse; cost: number } | null> {
+    const adapter = this.adapter;
+    if (!adapter) return null;
+
+    const reservation = this.budget.reserve(adapter.estimateCost(ESTIMATED_PROMPT_TOKENS, maxTokens));
+    if (!reservation) return null;
+
+    let response: LLMResponse;
+    try {
+      response = await adapter.assess(prompt, maxTokens);
+    } catch (error) {
+      this.budget.release(reservation);
+      throw error;
+    }
+
+    // Settle even when pricing the answer throws: record() charges the estimate for a
+    // cost that is not a number, so the reservation does not stay open.
+    let cost = Number.NaN;
+    try {
+      cost = adapter.estimateCost(response.inputTokens, response.outputTokens);
+    } finally {
+      this.budget.record(reservation, cost, response.inputTokens + response.outputTokens);
+    }
+    return { response, cost };
   }
 
   private async assessWithLlm(event: ARPEvent): Promise<LLMAssessment | null> {
@@ -421,10 +463,9 @@ export class IntelligenceCoordinator {
     const maxTokens = this.config.maxTokensPerCall ?? 300;
 
     try {
-      const response = await this.adapter.assess(prompt, maxTokens);
-      const cost = this.adapter.estimateCost(response.inputTokens, response.outputTokens);
-
-      this.budget.record(cost, response.inputTokens + response.outputTokens);
+      const answered = await this.callWithinBudget(prompt, maxTokens);
+      if (!answered) return null;
+      const { response, cost } = answered;
 
       const assessment = parseAssessment(response.content, response.inputTokens + response.outputTokens, cost);
 
@@ -473,9 +514,8 @@ export class IntelligenceCoordinator {
     const maxTokens = Math.min((this.config.maxTokensPerCall ?? 300) * 2, 1000);
 
     try {
-      const response = await this.adapter.assess(prompt, maxTokens);
-      const cost = this.adapter.estimateCost(response.inputTokens, response.outputTokens);
-      this.budget.record(cost, response.inputTokens + response.outputTokens);
+      // One call for the whole batch, so one reservation, taken when the batch is sent.
+      await this.callWithinBudget(prompt, maxTokens);
     } catch {
       // Batch failure — events remain at L1 classification
     }

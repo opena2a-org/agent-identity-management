@@ -7,14 +7,33 @@ const DEFAULT_BUDGET_USD = 5.0;
 const DEFAULT_MAX_CALLS_PER_HOUR = 20;
 
 /**
+ * One L2 call's hold on the budget: a slot in the hour's call count and the call's
+ * estimated cost. `reserve` takes it before the call is made, and it is closed once:
+ * by `record` with the actual cost when the call returns, or by `release` when it fails.
+ */
+export interface BudgetReservation {
+  /** The estimated cost held for the call, in USD. */
+  readonly estimatedCostUsd: number;
+}
+
+/**
  * Tracks LLM usage costs with hard limits to prevent runaway spending.
  * Resets monthly. Persists to disk so restarts don't lose tracking.
+ *
+ * The limits are enforced by reservation: `reserve` counts a call and holds its
+ * estimated cost before the call is made, so the calls still in flight count against
+ * `budgetUsd` and `maxCallsPerHour` when the next call asks. A limit that counted a
+ * call only after it returned would not see the calls in flight.
  */
 export class BudgetController {
   private state: BudgetState;
   private readonly budgetUsd: number;
   private readonly maxCallsPerHour: number;
   private readonly dataDir: string;
+  /** Open reservations, each with the hour window its call was counted in. */
+  private readonly holds = new Map<BudgetReservation, { hourWindow: number }>();
+  /** Advances every time `callsThisHour` starts again from zero. */
+  private hourWindow = 0;
 
   constructor(dataDir: string, config?: IntelligenceConfig) {
     this.dataDir = dataDir;
@@ -23,36 +42,61 @@ export class BudgetController {
     this.state = this.loadState();
   }
 
-  /** Check if we can afford an LLM call. Returns false if budget exhausted. */
-  canAfford(estimatedCostUsd: number): boolean {
+  /**
+   * Reserve one call and its estimated cost before the call is made.
+   *
+   * Returns null when the estimate does not fit in what is left of the budget once the
+   * estimates held for calls in flight are counted, or when the hour's calls are used
+   * up. An estimate that is not a number of 0 or more is refused as well: NaN passes
+   * every comparison, and a negative estimate would make room for other calls. The
+   * reservation is saved to disk before it is returned.
+   */
+  reserve(estimatedCostUsd: number): BudgetReservation | null {
+    if (typeof estimatedCostUsd !== 'number' || !(estimatedCostUsd >= 0)) return null;
     this.rolloverIfNeeded();
+    this.rolloverHourIfNeeded();
 
     // Hard budget limit
-    if (this.state.totalSpentUsd + estimatedCostUsd > this.budgetUsd) {
-      return false;
+    if (this.state.totalSpentUsd + this.heldUsd() + estimatedCostUsd > this.budgetUsd) {
+      return null;
     }
 
     // Hourly rate limit
-    this.rolloverHourIfNeeded();
     if (this.state.callsThisHour >= this.maxCallsPerHour) {
-      return false;
+      return null;
     }
 
-    return true;
+    const reservation: BudgetReservation = Object.freeze({ estimatedCostUsd });
+    this.holds.set(reservation, { hourWindow: this.hourWindow });
+    this.state.callsThisHour += 1;
+    try {
+      this.saveState();
+    } catch (error) {
+      // The caller never receives this reservation, so nothing stays held for it.
+      this.holds.delete(reservation);
+      this.state.callsThisHour -= 1;
+      throw error;
+    }
+    return reservation;
   }
 
-  /** Record a completed LLM call */
-  record(costUsd: number, tokens: number): void {
+  /**
+   * Settle a reservation with what the call cost, in place of the estimate held for it.
+   * The call stays counted in the hour it was reserved in. A cost that is NaN, infinite
+   * or negative is charged at the estimate.
+   */
+  record(reservation: BudgetReservation, costUsd: number, tokens: number): void {
+    this.close(reservation, 'record');
     this.rolloverIfNeeded();
     this.rolloverHourIfNeeded();
 
-    this.state.totalSpentUsd += costUsd;
+    const charged = Number.isFinite(costUsd) && costUsd >= 0 ? costUsd : reservation.estimatedCostUsd;
+    this.state.totalSpentUsd += charged;
     this.state.totalCalls += 1;
-    this.state.callsThisHour += 1;
 
     this.state.recentCosts.push({
       timestamp: new Date().toISOString(),
-      cost: costUsd,
+      cost: charged,
       tokens,
     });
 
@@ -64,7 +108,23 @@ export class BudgetController {
     this.saveState();
   }
 
-  /** Get current budget status */
+  /**
+   * Give back the reservation of a call that failed: its estimate, and its slot in the
+   * hour's call count unless that count has started again since the reservation.
+   */
+  release(reservation: BudgetReservation): void {
+    const hold = this.close(reservation, 'release');
+    this.rolloverIfNeeded();
+    this.rolloverHourIfNeeded();
+
+    if (hold.hourWindow === this.hourWindow) {
+      this.state.callsThisHour -= 1;
+    }
+
+    this.saveState();
+  }
+
+  /** Get current budget status. `spent` counts each call in flight at its estimate. */
   getStatus(): {
     spent: number;
     budget: number;
@@ -75,21 +135,45 @@ export class BudgetController {
     totalCalls: number;
   } {
     this.rolloverIfNeeded();
+    const spent = this.state.totalSpentUsd + this.heldUsd();
     return {
-      spent: Math.round(this.state.totalSpentUsd * 10000) / 10000,
+      spent: Math.round(spent * 10000) / 10000,
       budget: this.budgetUsd,
-      remaining: Math.round((this.budgetUsd - this.state.totalSpentUsd) * 10000) / 10000,
-      percentUsed: Math.round((this.state.totalSpentUsd / this.budgetUsd) * 100),
+      remaining: Math.round((this.budgetUsd - spent) * 10000) / 10000,
+      percentUsed: Math.round((spent / this.budgetUsd) * 100),
       callsThisHour: this.state.callsThisHour,
       maxCallsPerHour: this.maxCallsPerHour,
       totalCalls: this.state.totalCalls,
     };
   }
 
-  /** Reset budget for new period */
+  /** Reset budget for new period. A call still in flight stays held until it settles. */
   reset(): void {
     this.state = freshState();
+    this.hourWindow += 1;
     this.saveState();
+  }
+
+  /** The estimates held for calls still in flight, summed afresh so none is left over. */
+  private heldUsd(): number {
+    let held = 0;
+    for (const reservation of this.holds.keys()) {
+      held += reservation.estimatedCostUsd;
+    }
+    return held;
+  }
+
+  /** Close an open reservation, so that each one is recorded or released once. */
+  private close(reservation: BudgetReservation, method: 'record' | 'release'): { hourWindow: number } {
+    const hold = this.holds.get(reservation);
+    if (!hold) {
+      throw new Error(
+        `BudgetController.${method}() needs an open reservation from reserve() on this controller; ` +
+          'this one was already recorded or released, or did not come from reserve()',
+      );
+    }
+    this.holds.delete(reservation);
+    return hold;
   }
 
   private rolloverIfNeeded(): void {
@@ -99,6 +183,7 @@ export class BudgetController {
     // Reset monthly
     if (now.getMonth() !== periodStart.getMonth() || now.getFullYear() !== periodStart.getFullYear()) {
       this.state = freshState();
+      this.hourWindow += 1;
       this.saveState();
     }
   }
@@ -110,6 +195,7 @@ export class BudgetController {
     if (now.getTime() - hourStart.getTime() > 3600000) {
       this.state.callsThisHour = 0;
       this.state.hourStart = now.toISOString();
+      this.hourWindow += 1;
     }
   }
 
@@ -128,7 +214,10 @@ export class BudgetController {
   private saveState(): void {
     fs.mkdirSync(this.dataDir, { recursive: true });
     const filePath = path.join(this.dataDir, BUDGET_FILE);
-    fs.writeFileSync(filePath, JSON.stringify(this.state, null, 2), 'utf-8');
+    // The file counts the estimates still held as spent, so a process that stops while
+    // a call is in flight leaves that call's estimate charged instead of forgotten.
+    const persisted: BudgetState = { ...this.state, totalSpentUsd: this.state.totalSpentUsd + this.heldUsd() };
+    fs.writeFileSync(filePath, JSON.stringify(persisted, null, 2), 'utf-8');
   }
 }
 
