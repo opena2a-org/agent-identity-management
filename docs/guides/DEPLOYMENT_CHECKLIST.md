@@ -205,13 +205,15 @@ docker build -f infrastructure/docker/Dockerfile.frontend -t aim-frontend:latest
 
 The dashboard reads `NEXT_PUBLIC_API_URL` from its environment each time it renders a page. When the variable is
 set, the page hands it to the browser, and the dashboard calls the API at that URL. The `NEXT_PUBLIC_API_URL` entry
-under `environment:` in `docker-compose.yml` and `docker-compose.quickstart.yml` sets it on the container. When the
-variable is not set, the browser calls the URL the dashboard was built with (`--build-arg NEXT_PUBLIC_API_URL`). A
-dashboard built with no URL calls port 8080, the API's default port, on the host name the dashboard was opened at
+under `environment:` in `docker-compose.yml` and `docker-compose.quickstart.yml` sets it on the container. The image
+`infrastructure/docker/Dockerfile.frontend` builds takes no API URL when it is built: the file declares no
+`NEXT_PUBLIC_API_URL` build argument, so `next build` does not read one passed with `--build-arg`. When the variable
+is not set, the dashboard calls port 8080, the API's default port, on the host name it was opened at
 (`http://127.0.0.1:8080` for a dashboard opened at `http://127.0.0.1:3000`), or its own origin when that name is an
-IPv6 address, and `next build` fails when the browser code of such a build holds `http://localhost:8080`. An
-`aim-dashboard` image built before this change reads the variable only when it is built, and the published image is
-built for `http://localhost:8080`.
+IPv6 address. A dashboard built with `next build` and `NEXT_PUBLIC_API_URL` in the build's environment calls that URL
+instead, and `next build` fails when the browser code of a build given no such URL holds `http://localhost:8080`. An
+`aim-dashboard` image built from code that reads the variable only when it is built ignores it at runtime: `latest`
+pointed to such an image on 2026-10-17 (revision `3ab8285e`), built for `http://localhost:8080`.
 
 Each page carries a `<meta http-equiv="Content-Security-Policy">` element whose `connect-src` lists the dashboard's
 own origin and the API origin the page uses, and the browser refuses a request from the page to any other origin.

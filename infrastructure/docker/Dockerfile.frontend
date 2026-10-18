@@ -7,9 +7,14 @@
 # musl/libstdc++ come from one alpine release.
 FROM node:22-alpine3.21@sha256:af8023ec879993821f6d5b21382ed915622a1b0f1cc03dbeb6804afaf01f8885 AS builder
 
-# Accept build argument
-ARG NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# No API URL goes into the image. next build writes a NEXT_PUBLIC_API_URL it
+# reads into the browser's code, where no setting of the running container
+# changes it; the dashboard reads NEXT_PUBLIC_API_URL from the container's
+# environment each time it renders a page (apps/web/lib/runtime-config.ts).
+# This file declares no ARG of that name, so a --build-arg
+# NEXT_PUBLIC_API_URL=... reaches no instruction below, and it sets no ENV of
+# that name (sdk/typescript/tests/dockerfile-frontend-takes-no-api-url.test.ts
+# holds that shape).
 
 WORKDIR /app
 

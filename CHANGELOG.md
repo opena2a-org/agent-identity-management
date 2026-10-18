@@ -11,6 +11,39 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: the `aim-dashboard` image takes no `NEXT_PUBLIC_API_URL` build argument, and its browser code holds no `http://localhost:8080`
+
+- `infrastructure/docker/Dockerfile.frontend` declared `ARG NEXT_PUBLIC_API_URL` and set `ENV NEXT_PUBLIC_API_URL`
+  from it before `npm run build`, so `next build` read the build argument the image workflow passes
+  (`NEXT_PUBLIC_API_URL=http://localhost:8080`) and wrote it into the browser's code. Built from the previous commit
+  with that argument, the image held `http://localhost:8080` in 2 files under `.next/static`, and a container started
+  from it with no `NEXT_PUBLIC_API_URL` and opened on `127.0.0.1` sent sign-in to `http://localhost:8080`.
+- The file declares no such argument and sets no such variable. A `--build-arg NEXT_PUBLIC_API_URL` reaches no
+  instruction of the file, and the build prints no warning for it (measured with Docker 29.7.2); the dashboard takes
+  the URL from `NEXT_PUBLIC_API_URL` in the container's environment, which both compose files set. A dashboard started
+  with none calls the `-backend` host of a `-frontend` host name, or port 8080 on the host name it was opened at.
+  `next build` in the image build reads no `NEXT_PUBLIC_API_URL`, so the check in `apps/web/lib/local-api-origin.ts`
+  fails the image build when its browser code holds `http://localhost:8080`, with the image workflow's build argument
+  as without it.
+- `docs/guides/DEPLOYMENT_CHECKLIST.md` says the image takes no build argument for the URL.
+- Tests: `sdk/typescript/tests/dockerfile-frontend-takes-no-api-url.test.ts` fails when a line outside comments in the
+  file the `build-frontend` job of `docker-publish.yml` builds, the file `docker-compose.yml` builds, or the twin under
+  `apps/backend` names `NEXT_PUBLIC_API_URL`. It runs the same check over the earlier text and over planted forms: an
+  `ARG` alone or with a default, an `ENV` in either stage or on a continuation line, a `RUN` that assigns the
+  variable, and a heredoc that writes it to `.env.production`. On the previous file, 2 of its 6 tests fail, naming
+  lines 11 and 12.
+- Measured on images built from this tree and from the previous commit, each with
+  `--build-arg NEXT_PUBLIC_API_URL=http://localhost:8080`: this tree's image holds no `http://localhost:8080` under
+  `.next/static`. In Chromium, signing in with keyboard and mouse input on a container started from it with no
+  `NEXT_PUBLIC_API_URL` and opened on `127.0.0.1` sent the request to `http://127.0.0.1:8080`, under
+  `connect-src 'self' 127.0.0.1:8080`; started with `NEXT_PUBLIC_API_URL=http://localhost:8081`, the page set
+  `window.__RUNTIME_CONFIG__` to `{"apiUrl":"http://localhost:8081"}` and sent the request there; started with no
+  `NEXT_PUBLIC_API_URL` and opened on `aim-frontend.example.test`, it sent the request to
+  `http://aim-backend.example.test`, under a `connect-src` that lists `aim-backend.example.test` and no
+  `http://localhost:8080`. No page's `connect-src` refused a request. A copy of the file with
+  `ENV NEXT_PUBLIC_SUPPORT_EMAIL=http://localhost:8080` in the build stage failed to build with and without the build
+  argument, naming the chunk that holds the address.
+
 ### Fixed: `docker-compose.yml` takes the dashboard's API URL from `FRONTEND_API_URL`, and the deployment guide says to set it behind a reverse proxy
 
 - `docker-compose.yml` set `NEXT_PUBLIC_API_URL=http://localhost:${AIM_BACKEND_PORT:-8080}` on the dashboard's container,
