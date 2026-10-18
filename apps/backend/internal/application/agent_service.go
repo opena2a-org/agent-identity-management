@@ -56,6 +56,7 @@ type AgentService struct {
 	mcpServerRepo            domain.MCPServerRepository    // Optional: resolves talks_to entries to MCP servers in AddMCPServers; injected via SetMCPServerLookup
 	atcRevoker               RegistryATCRevoker            // Optional: revokes the agent's Registry-issued credentials in RevokeAgent; set by SetRegistryATCRevoker
 	atcRevocationRetryDelays []time.Duration               // Waits between those revocation requests; nil means defaultRegistryATCRevocationRetryDelays
+	atcRevocations           *RegistryATCRevocations       // Optional: stores RevokeAgent's revocation request before it is sent, in place of atcRevoker; set by SetRegistryATCRevocations
 }
 
 // SetWebhookService wires the webhook service that the agent.* and
@@ -2710,7 +2711,7 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 
 	// The Registry signs the agent's Agent Trust Credentials (ATCIssuanceService),
 	// so the revocation is sent to it as well, to be listed there as it is here.
-	s.requestRegistryATCRevocation(agent.ID)
+	s.requestRegistryATCRevocation(ctx, agent.ID)
 
 	// Recalculate trust score (revocation drops trust to 0)
 	trustScore, err := s.trustCalc.Calculate(agent)

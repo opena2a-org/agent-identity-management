@@ -44,11 +44,25 @@ func (s *AgentService) SetRegistryATCRevoker(revoker RegistryATCRevoker) {
 	s.atcRevoker = revoker
 }
 
-// requestRegistryATCRevocation asks the Registry, on its own goroutine, to
-// revoke the credentials it issued for the agent, and returns at once: the
-// revocation AIM stored stands whatever the Registry answers, and a Registry
-// that is slow or unreachable does not hold the request that revoked the agent.
-func (s *AgentService) requestRegistryATCRevocation(agentID uuid.UUID) {
+// SetRegistryATCRevocations wires the server's store of revocation requests.
+// When set, RevokeAgent stores its request there and the store's sender sends
+// it, so a server stop before the Registry has answered does not end it; the
+// revoker set by SetRegistryATCRevoker is then not used.
+func (s *AgentService) SetRegistryATCRevocations(q *RegistryATCRevocations) {
+	s.atcRevocations = q
+}
+
+// requestRegistryATCRevocation asks the Registry to revoke the credentials it
+// issued for the agent, and returns without waiting for the Registry's answer:
+// the revocation AIM stored stands whatever the Registry answers, and a
+// Registry that is slow or unreachable does not hold the request that revoked
+// the agent. The request goes through the store SetRegistryATCRevocations
+// wired, or is sent from memory when none is wired.
+func (s *AgentService) requestRegistryATCRevocation(ctx context.Context, agentID uuid.UUID) {
+	if s.atcRevocations != nil {
+		s.atcRevocations.Request(ctx, agentID)
+		return
+	}
 	startRegistryATCRevocation(s.atcRevoker, agentID, s.atcRevocationRetryDelays)
 }
 
@@ -56,7 +70,8 @@ func (s *AgentService) requestRegistryATCRevocation(agentID uuid.UUID) {
 // credentials the Registry issued for agentID, as revokeRegistryATCs does with
 // delays (defaultRegistryATCRevocationRetryDelays when nil), and returns at
 // once. A nil revoker is sent nothing. The goroutine uses a background context
-// because it outlives the request that started it.
+// because it outlives the request that started it. Nothing of the request is
+// stored: a server stop ends it.
 func startRegistryATCRevocation(revoker RegistryATCRevoker, agentID uuid.UUID, delays []time.Duration) {
 	if revoker == nil {
 		return
@@ -78,20 +93,37 @@ func revokeRegistryATCs(revoker RegistryATCRevoker, agentID string, delays []tim
 		ctx, cancel := context.WithTimeout(context.Background(), registryATCRevocationAttemptTimeout)
 		err := revoker.RevokeATC(ctx, agentID, registryATCRevocationReason)
 		cancel()
-		switch {
-		case err == nil:
-			return nil
-		case errors.Is(err, registry.ErrTokenNotConfigured):
-			log.Printf("agent %s: no Registry credential revocation sent: %v", agentID, err)
-			return err
-		case !registryATCRevocationRetryable(err) || attempt > len(delays):
-			log.Printf("agent %s: the Registry did not revoke the agent's credentials (attempt %d, not retried): %v", agentID, attempt, err)
+		delay, again := registryATCRevocationNext(agentID, attempt, err, delays)
+		if !again {
 			return err
 		}
-		delay := delays[attempt-1]
-		log.Printf("agent %s: the Registry did not revoke the agent's credentials (attempt %d, retrying in %s): %v", agentID, attempt, delay, err)
 		time.Sleep(delay)
 	}
+}
+
+// registryATCRevocationNext logs the answer err to revocation request number
+// attempt for agentID and reports whether another request follows, and after
+// which of delays. None follows once the Registry has revoked the credentials,
+// after an answer a later request repeats, or after the request that follows
+// the last delay. A request that follows a failed one is logged when it
+// succeeds.
+func registryATCRevocationNext(agentID string, attempt int, err error, delays []time.Duration) (time.Duration, bool) {
+	switch {
+	case err == nil:
+		if attempt > 1 {
+			log.Printf("agent %s: the Registry revoked the agent's credentials (attempt %d)", agentID, attempt)
+		}
+		return 0, false
+	case errors.Is(err, registry.ErrTokenNotConfigured):
+		log.Printf("agent %s: no Registry credential revocation sent: %v", agentID, err)
+		return 0, false
+	case !registryATCRevocationRetryable(err) || attempt > len(delays):
+		log.Printf("agent %s: the Registry did not revoke the agent's credentials (attempt %d, not retried): %v", agentID, attempt, err)
+		return 0, false
+	}
+	delay := delays[attempt-1]
+	log.Printf("agent %s: the Registry did not revoke the agent's credentials (attempt %d, retrying in %s): %v", agentID, attempt, delay, err)
+	return delay, true
 }
 
 // registryATCRevocationRetryable reports whether a later revocation request can
