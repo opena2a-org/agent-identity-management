@@ -11,6 +11,40 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: a Registry credential revocation request waiting for a retry is sent after the server starts again
+
+- The request asking the Registry to revoke a revoked agent's credentials, `POST /internal/atc/<agent id>/revoke`,
+  was held in the server's memory between its attempts, as was the one issuance sends again for an agent revoked
+  while the Registry was issuing. A server that stopped or restarted ended every request waiting for a retry, and
+  the Registry was not asked again.
+- Migration `133_registry_atc_revocations.sql` creates `registry_atc_revocations`. With `REGISTRY_ATC_TOKEN` set, the
+  request is stored there once the revocation is stored and before it is sent, and a sender the server starts with
+  its background jobs sends it: at once, then on the same retry schedule, 5 seconds, 30 seconds, 2 minutes,
+  10 minutes and 30 minutes in turn, with the time of the next attempt kept in the row on the database clock. The
+  sender looks for due requests every 5 seconds and whenever its server stores a request. A row is deleted when the
+  Registry answers `2xx` or when the attempts end.
+- A request still waiting when the server stops stays stored, and the next server to start sends it once it is due.
+  A request in flight when the server stops is ended, and is due again 60 seconds after it was started. Every replica
+  reads the same rows: a server takes a due request with `FOR UPDATE SKIP LOCKED` and holds it for 60 seconds while
+  it sends it, so no other server takes it during that time.
+- When issuance stores the request again, the stored request is replaced, and the answer to a request already in
+  flight neither deletes nor reschedules it, so the later request is still sent.
+- A request that cannot be stored is sent from memory, as before, and the failure is logged. With
+  `REGISTRY_ATC_TOKEN` unset nothing is stored, as no request is sent. A request that follows a failed one is logged
+  when the Registry revokes the credentials: `agent <id>: the Registry revoked the agent's credentials (attempt <n>)`.
+- Tests: `apps/backend/internal/application/registry_atc_revocations_test.go` (a request waiting for a retry, and one
+  in flight, when the server stops is sent by the next server on the same store; the stored retry schedule; the end
+  of the attempts; a request stored again while one is in flight; a request the store refuses is sent from memory;
+  `RevokeAgent` and issuance store their request),
+  `apps/backend/internal/infrastructure/repository/registry_atc_revocation_repository_test.go` (the statements, their
+  parameters and the database clock), `apps/backend/internal/infrastructure/registry/atc_client_test.go`
+  (`Configured`), and, against PostgreSQL with `-tags=integration`,
+  `apps/backend/internal/infrastructure/repository/registry_atc_revocation_integration_test.go` (the hold, the
+  retry, a request stored again, concurrent claims taking each request once, a request claimed through a new
+  database handle) and `apps/backend/internal/application/registry_atc_revocations_integration_test.go` (a real
+  agent revoked while a local Registry answers 503, the first server stopped, and the request sent by the next
+  server to a local Registry that answers 200).
+
 ### Fixed: no Agent Trust Credential is issued for a revoked agent
 
 - The issuance service behind `POST /api/v1/agents/:id/atc` did not read the agent's status, so issuance for a
@@ -141,8 +175,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   for the Registry, and a Registry that refuses or cannot be reached leaves the agent revoked in AIM.
 - A failed connection, a timeout, a `408`, a `429` or a `5xx` answer is followed by another request after 5 seconds,
   30 seconds, 2 minutes, 10 minutes and 30 minutes in turn, six requests at most; any other answer that is not `2xx`
-  ends the attempts. Each failed request is logged with the agent ID. A request still waiting when the server stops
-  is not sent. With `REGISTRY_ATC_TOKEN` unset no request is sent, as no credential is issued without it.
+  ends the attempts. Each failed request is logged with the agent ID. The request is stored before it is sent, and a
+  request still waiting when the server stops is sent by the next server to start. With `REGISTRY_ATC_TOKEN` unset no
+  request is sent, as no credential is issued without it.
 - Tests: `apps/backend/internal/infrastructure/registry/atc_client_test.go` (the request's method, path, bearer and
   body, an agent ID holding a slash sent as one path segment, no request without a token or an agent ID, and which
   answers are retried) and `apps/backend/internal/application/agent_registry_revocation_test.go` (a revocation reaches

@@ -221,6 +221,38 @@ func TestClient_RevokeATC_SendsNothingWithoutATokenOrAnAgentID(t *testing.T) {
 	}
 }
 
+// Configured reports the token RevokeATC and IssueATC need, so the server
+// stores no revocation request a client without one would not send.
+func TestClient_ConfiguredReportsTheToken(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token string
+		want  bool
+	}{
+		{"a token", "not-a-real-token", true},
+		{"no token", "", false},
+		{"only spaces", "   ", false},
+	} {
+		if got := NewATCClient("https://registry.example", tc.token, nil).Configured(); got != tc.want {
+			t.Errorf("%s: Configured() = %t, want %t", tc.name, got, tc.want)
+		}
+	}
+
+	t.Setenv("REGISTRY_ATC_TOKEN", "")
+	if NewATCClientFromEnv().Configured() {
+		t.Error("REGISTRY_ATC_TOKEN empty: Configured() = true, want false")
+	}
+	t.Setenv("REGISTRY_ATC_TOKEN", "not-a-real-token")
+	if !NewATCClientFromEnv().Configured() {
+		t.Error("REGISTRY_ATC_TOKEN set: Configured() = false, want true")
+	}
+
+	var unset *ATCClient
+	if unset.Configured() {
+		t.Error("a nil client: Configured() = true, want false")
+	}
+}
+
 func TestClient_RevokeATC_Non2xxIsAStatusError(t *testing.T) {
 	for _, tc := range []struct {
 		status    int

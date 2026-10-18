@@ -338,6 +338,15 @@ func main() {
 	// so startup does not wait on it.
 	startConsensusVerificationRecheck(services.MCPAttestation)
 
+	// Send the stored requests asking the Registry to revoke a revoked agent's
+	// credentials, those a stopped server left waiting included, and each new
+	// one as it is stored. Stopping ends the requests in flight; they stay
+	// stored for the next server.
+	if services.RegistryATCRevocations != nil {
+		stopRegistryATCRevocations := services.RegistryATCRevocations.Start()
+		defer stopRegistryATCRevocations()
+	}
+
 	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
 	if services.RegistryBridge != nil {
 		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
@@ -764,6 +773,8 @@ type Services struct {
 	FGA               *application.FGAEngine                // Fine-Grained Authorization engine (5-step decision flow)
 	ATCIssuance       *application.ATCIssuanceService       // Issues Registry-signed ATCs carrying AIM's behavioral score
 	SigningKeys       *crypto.SigningKeyRing                // One server signing key per purpose; public keys served at /.well-known/jwks.json
+	// Sends the stored requests asking the Registry to revoke a revoked agent's credentials; nil without REGISTRY_ATC_TOKEN
+	RegistryATCRevocations *application.RegistryATCRevocations
 	// Admits and purges the nonces of signed action-request statements
 	ActionRequestNonces *application.ActionRequestNonceService
 }
@@ -1115,6 +1126,18 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// agent was revoked while the Registry was issuing a credential.
 	agentService.SetRegistryATCRevoker(atcClient)
 	atcIssuanceService.SetRegistryATCRevoker(atcClient)
+	// With REGISTRY_ATC_TOKEN set, each of those requests is stored in
+	// registry_atc_revocations before it is sent, and the sender that main
+	// starts with the other background jobs sends it, so a request still
+	// waiting for a retry when the server stops is sent by the next server to
+	// start. Without the token the client sends no request, and nothing is
+	// stored.
+	var registryATCRevocations *application.RegistryATCRevocations
+	if atcClient.Configured() {
+		registryATCRevocations = application.NewRegistryATCRevocations(repository.NewRegistryATCRevocationRepository(db), atcClient)
+		agentService.SetRegistryATCRevocations(registryATCRevocations)
+		atcIssuanceService.SetRegistryATCRevocations(registryATCRevocations)
+	}
 
 	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
 	issuerURI := cfg.Registry.ATCIssuerURI
@@ -1273,6 +1296,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		FGA:               fgaEngine,                                            // Fine-Grained Authorization engine
 		ATCIssuance:       atcIssuanceService,                                   // Registry-delegated ATC issuance
 		SigningKeys:       signingKeys,                                          // Per-purpose server signing keys
+
+		// Sender of the stored Registry credential revocation requests
+		RegistryATCRevocations: registryATCRevocations,
 
 		// Admission store for signed action-request statements and secrets resolve requests
 		ActionRequestNonces: actionRequestNonces,

@@ -393,18 +393,18 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 34 migrations, `098_mcp_manifest_baselines.sql` to
-`132_alert_channels_teams_email.sql`. Measured on 2026-10-17 on an Apple M4 Max laptop with PostgreSQL 18.3: a
+Upgrading from 1.0.0 applies 35 migrations, `098_mcp_manifest_baselines.sql` to
+`133_registry_atc_revocations.sql`. Measured on 2026-10-17 on an Apple M4 Max laptop with PostgreSQL 18.3: a
 database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own transaction and
 recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. Then `aim-server migrate`, built from
-commit `c694174a`, was timed against it with `/usr/bin/time -p`, three runs on separate copies by a binary that had
-already run on that laptop, while other work held the laptop's load average near 16. Each run logged
-`Successfully applied 34 pending migration(s)`:
+the tree of the commit that adds `133_registry_atc_revocations.sql`, was timed against it with `/usr/bin/time -p`,
+three runs on separate copies by a binary that had already run on that laptop, while other work held the laptop's
+load average between 12 and 18. Each run logged `Successfully applied 35 pending migration(s)`:
 
 | 1.0.0 database | Wall time, three runs |
 |----------------|-----------------------|
-| only the rows the migrations write, 14 MB | 0.17 s, 0.19 s, 0.19 s |
-| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 878 MB | 1.72 s, 1.17 s, 1.86 s |
+| only the rows the migrations write, 14 MB | 0.11 s, 0.07 s, 0.07 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 648 MB | 0.60 s, 0.48 s, 1.07 s |
 
 The time grows with the size of the tables the migrations alter or index. The agent private key conversion runs at the
 server's first start, not in `aim-server migrate`, and is not in these times; it reads every agent row that holds a

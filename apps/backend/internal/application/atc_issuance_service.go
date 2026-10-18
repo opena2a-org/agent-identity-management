@@ -124,6 +124,9 @@ type ATCIssuanceService struct {
 	// revoker is asked to revoke the agent's credentials again when the agent is
 	// revoked while the Registry is issuing one; set by SetRegistryATCRevoker.
 	revoker RegistryATCRevoker
+	// revocations, when set, stores that request before it is sent, in place
+	// of sending it to revoker from memory; set by SetRegistryATCRevocations.
+	revocations *RegistryATCRevocations
 }
 
 // NewATCIssuanceService wires the issuance trigger. grants is the capability
@@ -152,6 +155,14 @@ func NewATCIssuanceService(
 // issuing one. When unset, IssueForAgent still hands no such credential on.
 func (s *ATCIssuanceService) SetRegistryATCRevoker(revoker RegistryATCRevoker) {
 	s.revoker = revoker
+}
+
+// SetRegistryATCRevocations wires the server's store of revocation requests.
+// When set, IssueForAgent stores its request to revoke the agent's credentials
+// again there, so a server stop before the Registry has answered does not end
+// it, and the revoker set by SetRegistryATCRevoker is not used.
+func (s *ATCIssuanceService) SetRegistryATCRevocations(q *RegistryATCRevocations) {
+	s.revocations = q
 }
 
 // IssueForAgent computes the agent's behavioral score, builds the issuance
@@ -211,7 +222,11 @@ func (s *ATCIssuanceService) IssueForAgent(ctx context.Context, agentID uuid.UUI
 	current, err := s.loadAgent(agentID)
 	switch {
 	case err == nil && current.Status == domain.AgentStatusRevoked:
-		startRegistryATCRevocation(s.revoker, agentID, nil)
+		if s.revocations != nil {
+			s.revocations.Request(ctx, agentID)
+		} else {
+			startRegistryATCRevocation(s.revoker, agentID, nil)
+		}
 		return nil, ErrATCAgentRevoked
 	case issueErr != nil:
 		return nil, fmt.Errorf("atc issuance: registry issue: %w", issueErr)

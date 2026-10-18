@@ -160,6 +160,12 @@ func NewATCClient(baseURL, token string, httpClient *http.Client) *ATCClient {
 	}
 }
 
+// Configured reports whether the client holds the REGISTRY_ATC_TOKEN bearer,
+// without which IssueATC and RevokeATC send no request.
+func (c *ATCClient) Configured() bool {
+	return c != nil && c.token != ""
+}
+
 // IssueATC POSTs the issuance request to the Registry and returns the signed
 // credential. Errors fail closed: a missing token, a transport failure, or a
 // non-2xx status all return an error rather than a partial credential.
