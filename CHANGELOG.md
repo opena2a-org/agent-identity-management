@@ -156,6 +156,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   viewport and scrolls inside its card. On the previous code, the same emulation and URL measured `window.innerWidth`
   at 560 as loaded.
 
+### Fixed — the register-agent dialog's Copy button sits above the verification command instead of over its first line (#776)
+
+- After an agent is registered with a capability, the manual integration step of the register-agent dialog shows a
+  cURL command that verifies the capability. The command's Copy button was positioned in the top right corner of the
+  command's block, over its first line. It now has a row of its own at the top of the block, and the command starts
+  below that row. The command shown and the text the button copies are unchanged.
+- Measured in headless Chromium on macOS with the dashboard's stylesheet, for an agent ID of 36 characters and the API
+  at `http://localhost:8080`, with the button reading Copy: on the previous code the button was drawn over the last
+  characters of the command's first line, `555555` from the last group of the agent ID at 1280x800, and `/localho` in
+  the API address at 375x812. With this change the same measurement finds no character of the command under the
+  button at either size, whether it reads Copy or Copied.
+- Test: `apps/web/components/modals/register-agent-modal.copy-button.test.tsx`; its layout measurement runs where a
+  Chromium build for the installed Playwright is present.
+
 ### Fixed: the MCP server setup guide and the register-agent dialog's verification command name the API the dashboard signs in to
 
 - The setup guide on the Integration tab of an MCP server's page wrote its cURL commands for an address of its own:
