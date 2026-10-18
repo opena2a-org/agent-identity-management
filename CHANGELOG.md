@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
+
+- After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"
+  with the key field, the button that reveals the key and the Copy key button in one row. The key field kept its
+  intrinsic width in that row, so at a phone width the row ran past the card. The field now shrinks to the width the
+  row leaves it, and the buttons stay inside the card. The key shown and the text the button copies are unchanged.
+- Measured in headless Chromium on macOS with the dashboard's stylesheet, with the key field masked as a password: on
+  the previous code at 375x812 the field was 175 CSS px wide, the card's content edge was at x=317, and the Copy key
+  button was drawn at x=289..376, 48 px tall, or at x=289..387.58 reading Copied. With this change the same
+  measurement at 375x812 finds the field 91.86 px wide and the button at x=205.86..317, 34 px tall, reading Copy key,
+  and the field 104.42 px wide and the button at x=218.42..317 reading Copied. At 1280x800 the measurement is the same
+  before and after the change, with the button's right edge at the card's content edge, x=982.
+- Test: `apps/web/components/modals/register-agent-modal.api-key-card.test.tsx`; its layout measurement runs where a
+  Chromium build for the installed Playwright is present.
+
 ### Fixed: a Registry credential revocation request waiting for a retry is sent after the server starts again
 
 - The request asking the Registry to revoke a revoked agent's credentials, `POST /internal/atc/<agent id>/revoke`,

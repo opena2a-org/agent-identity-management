@@ -726,7 +726,7 @@ export function RegisterAgentModal({
                         type={showPrivateKey ? "text" : "password"}
                         value={createdApiKey.key}
                         readOnly
-                        className="flex-1 px-3 py-2 bg-glass-inset-brand border border-warning-border rounded-inset-sm text-xs font-mono text-ink"
+                        className="flex-1 min-w-0 px-3 py-2 bg-glass-inset-brand border border-warning-border rounded-inset-sm text-xs font-mono text-ink"
                       />
                       <button
                         type="button"
