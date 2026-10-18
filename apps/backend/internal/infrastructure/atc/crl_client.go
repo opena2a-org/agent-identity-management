@@ -1,6 +1,7 @@
 package atc
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
@@ -143,13 +144,17 @@ var ErrCRLStateUnknown = errors.New("the revocation list state is unknown")
 // agentDid. Refresh reads the authority's discovery document at the base URL
 // the client is built with, at /.well-known/atp or its alias
 // /.well-known/opena2a, and then the list at the document's
-// endpoints.revocations, or at the endpoint override when one is set. A list
-// is held when it passes these checks: the form and bounds parseCRL reads, a
-// verified Ed25519 signature by a key the discovery document lists in
-// publicKeys and no failed signature by a listed key, an entryCount equal to
-// the entries it holds, a thisUpdate and nextUpdate within the clock skew
-// bound, and a thisUpdate not before that of the list held. IsRevoked reads
-// only the list held. Implements atcdomain.CRLClient.
+// endpoints.revocations, or at the endpoint override when one is set. A
+// request for the discovery document carries in If-None-Match the ETag of the
+// last document the client used when that document was read at the same
+// address, and a request for the list carries the ETag of the list held when
+// that list was read at the same address under the keys the document lists
+// now. A list is held when it passes these checks: the form and bounds
+// parseCRL reads, a verified Ed25519 signature by a key the discovery
+// document lists in publicKeys and no failed signature by a listed key, an
+// entryCount equal to the entries it holds, a thisUpdate and nextUpdate
+// within the clock skew bound, and a thisUpdate not before that of the list
+// held. IsRevoked reads only the list held. Implements atcdomain.CRLClient.
 type CachedCRLClient struct {
 	base     *url.URL
 	override *url.URL
@@ -158,6 +163,10 @@ type CachedCRLClient struct {
 
 	refreshMu sync.Mutex
 	held      atomic.Pointer[crlList]
+
+	// discovered is the last discovery document the client read and used.
+	// Guarded by refreshMu.
+	discovered *crlDiscovery
 }
 
 var _ atcdomain.CRLClient = (*CachedCRLClient)(nil)
@@ -171,6 +180,25 @@ type crlList struct {
 	readAt     time.Time
 	endpoint   string
 	etag       string
+	keys       map[string]crlKey // the keys the list was checked under
+}
+
+// crlDiscovery is a discovery document the client read and used: the address
+// that answered with it, the ETag of that answer, and the list address and
+// keys read from it.
+type crlDiscovery struct {
+	at       string
+	etag     string
+	endpoint *url.URL
+	keys     map[string]crlKey
+}
+
+// etagFor returns the ETag of d when d was read at at, and "" otherwise.
+func (d *crlDiscovery) etagFor(at *url.URL) string {
+	if d == nil || d.at != at.String() {
+		return ""
+	}
+	return d.etag
 }
 
 // NewCachedCRLClient returns a client of the authority whose discovery
@@ -260,9 +288,11 @@ func answerable(list *crlList, now time.Time) error {
 
 // Refresh reads the discovery document and the list, and holds the list when
 // it passes the checks CachedCRLClient names. When the list held was read
-// from the same address with an ETag, the request carries that ETag in
-// If-None-Match, and a 304 answer counts as a read of the list held. An error
-// is a *CRLRefreshError, and the list held stays.
+// from the same address with an ETag, under the keys the discovery document
+// lists now, the request carries that ETag in If-None-Match, and a 304 answer
+// counts as a read of the list held. When the keys have changed, the list is
+// read in full and checked under the keys listed now. An error is a
+// *CRLRefreshError, and the list held stays.
 func (c *CachedCRLClient) Refresh(ctx context.Context) error {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
@@ -273,7 +303,7 @@ func (c *CachedCRLClient) Refresh(ctx context.Context) error {
 	}
 	held := c.held.Load()
 	ifNoneMatch := ""
-	if held != nil && held.endpoint == endpoint.String() {
+	if held != nil && held.endpoint == endpoint.String() && sameCRLKeys(held.keys, keys) {
 		ifNoneMatch = held.etag
 	}
 	answer, err := c.get(ctx, endpoint, maxCRLBodyBytes, ifNoneMatch)
@@ -303,8 +333,24 @@ func (c *CachedCRLClient) Refresh(ctx context.Context) error {
 	list.readAt = now
 	list.endpoint = endpoint.String()
 	list.etag = answer.etag
+	list.keys = keys
 	c.held.Store(list)
 	return nil
+}
+
+// sameCRLKeys reports whether a and b list the same keyIds, each with the same
+// algorithm and public key.
+func sameCRLKeys(a, b map[string]crlKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for keyID, key := range a {
+		other, listed := b[keyID]
+		if !listed || other.algorithm != key.algorithm || !bytes.Equal(other.public, key.public) {
+			return false
+		}
+	}
+	return true
 }
 
 // discoveryDocument is the part of an authority's discovery document the list
@@ -327,19 +373,26 @@ type crlKey struct {
 }
 
 // discover reads the discovery document and returns the list address and the
-// listed keys by keyId.
+// listed keys by keyId. A request to the address that answered with the last
+// document the client used carries that answer's ETag in If-None-Match, and a
+// 304 answer returns the list address and keys read from that document.
 func (c *CachedCRLClient) discover(ctx context.Context) (*url.URL, map[string]crlKey, error) {
 	var at *url.URL
 	var answer *httpAnswer
+	ifNoneMatch := ""
 	for _, path := range discoveryPaths {
 		at = c.base.ResolveReference(&url.URL{Path: path})
+		ifNoneMatch = c.discovered.etagFor(at)
 		var err error
-		if answer, err = c.get(ctx, at, maxDiscoveryBytes, ""); err != nil {
+		if answer, err = c.get(ctx, at, maxDiscoveryBytes, ifNoneMatch); err != nil {
 			return nil, nil, refreshFailure(readOutcome(err), fmt.Errorf("reading the discovery document at %s: %w", at.Redacted(), err))
 		}
 		if answer.status != http.StatusNotFound {
 			break
 		}
+	}
+	if answer.status == http.StatusNotModified && ifNoneMatch != "" {
+		return c.discovered.endpoint, c.discovered.keys, nil
 	}
 	if answer.status != http.StatusOK {
 		return nil, nil, refreshFailure(CRLOutcomeStatus, fmt.Errorf("the discovery document at %s answered %d", at.Redacted(), answer.status))
@@ -351,6 +404,7 @@ func (c *CachedCRLClient) discover(ctx context.Context) (*url.URL, map[string]cr
 	if err != nil {
 		return nil, nil, refreshFailure(documentOutcome(err), fmt.Errorf("the discovery document at %s: %w", at.Redacted(), err))
 	}
+	c.discovered = &crlDiscovery{at: at.String(), etag: answer.etag, endpoint: endpoint, keys: keys}
 	return endpoint, keys, nil
 }
 

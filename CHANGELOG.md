@@ -67,6 +67,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/interfaces/http/handlers/atc_issuance_handler_test.go` (the `409` body for an agent revoked
   before the request and for one revoked while the Registry issues).
 
+### Changed: the revocation list refresher reads the discovery document with `If-None-Match`, and reads the list in full when the document's keys change
+
+- With `REGISTRY_URL` set, a request for the discovery document carries `If-None-Match` with the ETag of the last
+  document the refresher used, when that document was read at the same address, and a `304` answer reuses the list
+  address and the keys read from that document. The ETag of a document read at `/.well-known/opena2a` while
+  `/.well-known/atp` answers 404 is sent to `/.well-known/opena2a` only. A `304` to a request that carried no
+  `If-None-Match` is refused as `status`, for the discovery document as for the list. On the previous code a request
+  for the discovery document carried no `If-None-Match`: against a TLS stub that sends an ETag with its document, the
+  six requests of four refreshes carried none.
+- A request for the list carries the ETag of the list held only while the discovery document lists the keys that list
+  was checked under. When the document withdraws the key that signed the list held, lists its `keyId` with another
+  public key, or lists another key beside it, the list is read in full and checked under the keys listed now: in the
+  third case the list passes and is held again. On the previous code, after the document withdrew that key or listed
+  its `keyId` with another public key, the list request carried the ETag of the list held, the stub answered `304`, and
+  the list held still answered 9 minutes after its first read. Now such a list is refused as `signature`, the list held
+  answers until 5 minutes after its last read, and a list signed by the key the document lists now is held at the next
+  read.
+- Tests: `apps/backend/internal/infrastructure/atc/crl_client_test.go`, against TLS stubs listening on 127.0.0.1.
+
 ### Added: `GET /health/ready` carries `dependencies.revocationState`, the state of the revocation list the server reads with `REGISTRY_URL` set
 
 - `GET /health/ready` carries `dependencies.revocationState`, with `"required": false` and no `latencyMs`. It is
