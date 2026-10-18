@@ -11,6 +11,40 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: a dashboard built with no `NEXT_PUBLIC_API_URL` holds no `http://localhost:8080` in its browser code, and `next build` fails when such code does
+
+- `next.config.ts` set `NEXT_PUBLIC_API_URL` to `http://localhost:8080` when the build read none, and `next build`
+  writes that value into the browser's code. Built from the previous commit with no `NEXT_PUBLIC_API_URL`, the
+  dashboard held the address in 2 files under `.next/static`; the published `aim-dashboard:latest` image (revision
+  `3ab8285e`, built with `NEXT_PUBLIC_API_URL=http://localhost:8080`) holds it 23 times in 10 files. With no runtime
+  configuration and a hostname that derives no `-backend` host, `getApiUrl` in `apps/web/lib/api.ts` returned that
+  address, on a dashboard opened at `dashboard.example.com` as well.
+- `next.config.ts` no longer lists `NEXT_PUBLIC_API_URL` under `env`: `next build` writes the value it reads, and
+  nothing when it reads none. When no URL is named (no runtime configuration, no build value, no `-frontend`
+  hostname), `getApiUrl` calls port 8080, the API's default port, on the host name the dashboard was opened at, and
+  the dashboard's own origin when that name is an IPv6 address. The page's `connect-src` lists that host and port in
+  place of `http://localhost:8080` (`defaultApiHost` in `apps/web/lib/backend-host.ts`, read by
+  `apps/web/lib/runtime-config.ts`), and lists no build origin when the build read none.
+- After it compiles, `next build` fails when a file under `.next/static` holds `http://localhost:8080` and the build's
+  `NEXT_PUBLIC_API_URL` does not (`apps/web/lib/local-api-origin.ts`, run from `compiler.runAfterProductionCompile`
+  in `next.config.ts`). The frontend job in `.github/workflows/ci.yml` runs `npm run build` with no
+  `NEXT_PUBLIC_API_URL`. A build given `NEXT_PUBLIC_API_URL=http://localhost:8080`, as the image workflow's build
+  argument gives it, passes and holds the address in 2 files.
+- `docs/guides/DEPLOYMENT_CHECKLIST.md` describes the URL a dashboard built with no URL calls.
+- Tests: `apps/web/lib/local-api-origin.test.ts` checks the file walk and when the check fails. `apps/web/next-config.test.ts`
+  checks that the configuration lists no `NEXT_PUBLIC_API_URL` when the build reads none and that its
+  `runAfterProductionCompile` fails over a build directory holding the address. `apps/web/lib/api.backend-host.test.ts`
+  checks the URL the client calls with no URL named on four host names, and the page's `connect-src` for each.
+  `apps/web/lib/runtime-config.test.ts` and `apps/web/app/layout.test.tsx` check the page's `connect-src` for a build
+  that read no URL. On the previous code, 6 of these tests fail and `local-api-origin.test.ts` does not load.
+- Measured with `next build` on this tree: with no `NEXT_PUBLIC_API_URL`, and with an empty one, the build passes and
+  no file under `.next/static` holds `http://localhost:8080`; with `NEXT_PUBLIC_SUPPORT_EMAIL=http://localhost:8080`
+  and no `NEXT_PUBLIC_API_URL`, the build fails and names the chunk that holds it. Served by `next start` with no
+  `NEXT_PUBLIC_API_URL`, beside a stand-in API on `127.0.0.1:8080`: in Chromium, signing in with keyboard and mouse
+  input on the dashboard opened at `http://127.0.0.1:13900` sent the request to `http://127.0.0.1:8080`
+  (`Host: 127.0.0.1:8080`) under `connect-src 'self' 127.0.0.1:8080`, and opened at `http://localhost:13900` to
+  `http://localhost:8080`, with no `connect-src` violation on either page.
+
 ### Fixed: the dashboard reads `NEXT_PUBLIC_API_URL` from its environment when it renders a page, and the page's `connect-src` lists that API
 
 - The dashboard read `NEXT_PUBLIC_API_URL` only when it was built: `next build` writes the value into the browser's

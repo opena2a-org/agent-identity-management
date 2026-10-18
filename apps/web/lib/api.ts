@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { derivedBackendHost } from "./backend-host";
+import { defaultApiHost, derivedBackendHost } from "./backend-host";
 import { forgetOnboardingViewed } from "./onboarding-viewed";
 import { normalizeViolation, type SecurityViolation } from "./violations";
 import { SERVER_ERROR_MESSAGE, isServerErrorStatus } from "./error-messages";
@@ -92,9 +92,13 @@ const getApiUrl = (): string => {
     return process.env.NEXT_PUBLIC_API_URL;
   }
 
-  // 4. Fallback to localhost for local development
-  console.log("[API] Using localhost fallback (local development)");
-  return "http://localhost:8080";
+  // 4. No URL named anywhere: the API's default port on the dashboard's host, which the
+  // page's connect-src lists (lib/backend-host.ts). For a hostname no policy can list,
+  // the dashboard's own origin.
+  const defaultHost = defaultApiHost(hostname);
+  const defaultUrl = defaultHost ? `${protocol}//${defaultHost}` : window.location.origin;
+  console.log("[API] No API URL configured, using:", defaultUrl);
+  return defaultUrl;
 };
 
 // Agent types representing different AI models, frameworks, and architectures

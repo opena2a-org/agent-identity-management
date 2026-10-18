@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { readdirSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import loadCustomRoutes from "next/dist/lib/load-custom-routes";
 import { normalizeConfig } from "next/dist/server/config-shared";
@@ -145,6 +146,47 @@ describe("dashboard Content-Security-Policy", () => {
       }
     } finally {
       vi.unstubAllEnvs();
+    }
+  });
+});
+
+// next build writes the NEXT_PUBLIC_API_URL it reads into the browser's code. With none,
+// the code resolves the API's address when it runs (getApiUrl in lib/api.ts).
+describe("the dashboard build", () => {
+  it("gives the browser's code no NEXT_PUBLIC_API_URL when the build reads none", async () => {
+    try {
+      vi.resetModules();
+      vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+      const { default: built } = await import("./next.config.js");
+      // Control: the configuration was evaluated again, with the variable unset.
+      expect(built).not.toBe(nextConfig);
+      expect(built.env?.NEXT_PUBLIC_APP_NAME).toBe("Agent Identity Management");
+
+      expect(built.env ?? {}).not.toHaveProperty("NEXT_PUBLIC_API_URL");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("fails after compiling when the browser's code holds http://localhost:8080 and the build was not given it", async () => {
+    const hook = nextConfig.compiler?.runAfterProductionCompile;
+    expect(hook).toBeTypeOf("function");
+    const dir = mkdtempSync(join(tmpdir(), "aim-built-"));
+    try {
+      mkdirSync(join(dir, "static", "chunks"), { recursive: true });
+      writeFileSync(join(dir, "static", "chunks", "a.js"), '"http://localhost:8080"');
+      const afterCompile = () => hook!({ distDir: dir, projectDir: __dirname });
+
+      vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+      await expect(afterCompile()).rejects.toThrow("given no NEXT_PUBLIC_API_URL that holds it: static/chunks/a.js");
+      vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
+      await expect(afterCompile()).rejects.toThrow("static/chunks/a.js");
+
+      vi.stubEnv("NEXT_PUBLIC_API_URL", "http://localhost:8080");
+      await expect(afterCompile()).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

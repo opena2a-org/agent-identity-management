@@ -1,11 +1,7 @@
 import type { NextConfig } from 'next';
 import { dashboardRedirects } from './lib/redirects';
 import { dashboardHeaderRules } from './lib/content-security-policy';
-
-// The API URL the build writes in where the code reads process.env.NEXT_PUBLIC_API_URL.
-// A page rendered with NEXT_PUBLIC_API_URL in the server's environment hands the
-// browser that value instead (lib/runtime-config.ts).
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+import { assertNoLocalApiOrigin } from './lib/local-api-origin';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -22,9 +18,20 @@ const nextConfig: NextConfig = {
     // React 19 + recharts v2 type incompatibilities; tracked for recharts v3 upgrade
     ignoreBuildErrors: true,
   },
+  // NEXT_PUBLIC_API_URL is not listed: next build writes the value it reads into the
+  // code that reads process.env.NEXT_PUBLIC_API_URL, and writes nothing when it reads
+  // none. A page rendered with NEXT_PUBLIC_API_URL in the server's environment hands
+  // the browser that value instead (lib/runtime-config.ts).
   env: {
-    NEXT_PUBLIC_API_URL: apiUrl,
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Agent Identity Management',
+  },
+  compiler: {
+    // Once the browser's code is written, the build fails when that code holds
+    // http://localhost:8080 and the NEXT_PUBLIC_API_URL the build read does not
+    // (lib/local-api-origin.ts).
+    async runAfterProductionCompile({ distDir }) {
+      assertNoLocalApiOrigin(distDir, process.env.NEXT_PUBLIC_API_URL);
+    },
   },
   // Content-Security-Policy on every dashboard page. The policy lives in
   // lib/content-security-policy.ts; each page also carries its connect-src

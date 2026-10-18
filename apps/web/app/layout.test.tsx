@@ -52,6 +52,10 @@ describe("the root layout", () => {
     const page = await renderedPage();
 
     expect(runtimeConfig(page)).toBeUndefined();
-    expect(connectPolicy(page)).toBe("connect-src 'self' http://localhost:8080 aim-backend.example.com");
+    expect(connectPolicy(page)).toBe("connect-src 'self' aim-backend.example.com");
+
+    // With a Host that derives no backend: the API's default port on that host.
+    request.host = "localhost:3001";
+    expect(connectPolicy(await renderedPage())).toBe("connect-src 'self' localhost:8080");
   });
 });

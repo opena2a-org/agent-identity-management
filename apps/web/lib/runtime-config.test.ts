@@ -51,11 +51,36 @@ describe("pageApiConfig", () => {
       connectPolicy: "connect-src 'self' https://api.example.com",
     });
 
-    // A build that read no URL: getApiUrl's last source.
+    // A build that read no URL: getApiUrl's last source, the API's default port on the
+    // dashboard's host.
     vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
     expect(pageApiConfig({ NEXT_PUBLIC_API_URL: " " }, "localhost:3000")).toEqual({
-      connectPolicy: "connect-src 'self' http://localhost:8080",
+      connectPolicy: "connect-src 'self' localhost:8080",
     });
+  });
+
+  // getApiUrl calls the default host only when the page names no URL, the build read none
+  // and the hostname derives no backend.
+  it("lists the API's default port on the dashboard's host when no URL is named and no backend is derived", () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+    const cases: Array<[host: string | null, connectPolicy: string]> = [
+      ["localhost:3000", "connect-src 'self' localhost:8080"],
+      ["127.0.0.1:3001", "connect-src 'self' 127.0.0.1:8080"],
+      ["Dashboard.Example.com", "connect-src 'self' dashboard.example.com:8080"],
+      ["aim-frontend.example.com:3000", "connect-src 'self' aim-backend.example.com"],
+      // Hosts a policy host source cannot hold: the client calls the dashboard's origin.
+      ["[::1]:3000", "connect-src 'self'"],
+      ["my_app.test", "connect-src 'self'"],
+      ["x.example.com; script-src *", "connect-src 'self'"],
+      [null, "connect-src 'self'"],
+    ];
+    for (const [host, connectPolicy] of cases) {
+      expect(pageApiConfig({}, host), String(host)).toEqual({ connectPolicy });
+    }
+
+    // Control: a build that read a URL lists that origin and no default host.
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
+    expect(pageApiConfig({}, "localhost:3000")).toEqual({ connectPolicy: "connect-src 'self' https://api.example.com" });
   });
 
   it("lists no origin for a relative or non-HTTP URL, which 'self' covers or nothing reaches", () => {
