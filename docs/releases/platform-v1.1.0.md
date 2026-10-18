@@ -92,11 +92,12 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   *Security: creating an API key requires a live sign-in session*.
 - **Password changes end sessions and SDK credentials.** A password change or reset ends every session signed in
   before it, and every SDK-download token minted before it: their tokens are answered 401, so an SDK install whose
-  user changes or resets the password needs a new download. While an account must change its password
-  (`force_password_change`), the auth middleware admits its session only to `GET /api/v1/auth/me` and
-  `POST /api/v1/auth/change-password`; every other route behind the middleware, and `POST /api/v1/auth/refresh`,
-  answers 403 with the code `passwordChangeRequired`. CHANGELOG: *Security: a password change ends every session
-  signed in before it, and the API enforces a required password change*.
+  user changes or resets the password needs a new download. The user's list of SDK tokens shows those tokens
+  revoked, with the reason `password_changed`, and SDK token recovery does not restore them. While an account must
+  change its password (`force_password_change`), the auth middleware admits its session only to
+  `GET /api/v1/auth/me` and `POST /api/v1/auth/change-password`; every other route behind the middleware, and
+  `POST /api/v1/auth/refresh`, answers 403 with the code `passwordChangeRequired`. CHANGELOG: *Security: a password
+  change ends every session signed in before it, and the API enforces a required password change*.
 - **Sign-in through the `Authorization` header only.** Sign-in no longer sets `access_token` or `refresh_token`
   cookies, and the API no longer accepts them in place of the header. A sign-in ends 8 hours after it began by default
   (`JWT_SESSION_MAX_AGE`), however often it is refreshed. CHANGELOG: *Security: the API no longer uses cookies for

@@ -828,6 +828,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		securityPolicyService, // ✅ For auto-creating default policies
 		emailService,          // ✅ For sending welcome/approval emails
 	)
+	// A password change marks the user's sdk_tokens rows revoked, so the
+	// user's list of SDK tokens agrees with the change, which refuses them.
+	authService.SetSDKTokenRepository(repos.SDKToken)
 
 	adminService := application.NewAdminService(
 		repos.User,
@@ -1035,6 +1038,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		auditService,
 		emailService, // ✅ NEW: Email service for password reset and admin notifications
 	)
+	// A password reset marks the user's sdk_tokens rows revoked, as a
+	// password change does.
+	registrationService.SetSDKTokenRepository(repos.SDKToken)
 
 	tagService := application.NewTagService(
 		repos.Tag,

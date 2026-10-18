@@ -138,8 +138,8 @@ func (h *AuthRefreshHandler) recordRefusalWith(c fiber.Ctx, claims *auth.JWTClai
 // longer active was refused. A row the server retired by rotation, presented
 // again, is a reuse and ends the family. A row revoked with its family is a
 // member of an ended family and is recorded as one, as a login family member
-// is. A row its owner revoked records nothing, and neither does any token of
-// another issuer tracked in the table.
+// is. A row its owner revoked, or a password change revoked, records nothing,
+// and neither does any token of another issuer tracked in the table.
 func (h *AuthRefreshHandler) sdkRowRefused(c fiber.Ctx, token string, row *domain.SDKToken) {
 	claims, err := h.jwtService.ValidateToken(token)
 	if err != nil || claims.Issuer != auth.IssuerSDK || claims.FamilyID() == "" {

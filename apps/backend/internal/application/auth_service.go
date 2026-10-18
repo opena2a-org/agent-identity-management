@@ -29,6 +29,15 @@ type AuthService struct {
 	policyService   *SecurityPolicyService
 	emailService    domain.EmailService
 	failureConfig   domain.AuthFailureConfig
+	sdkTokenRepo    domain.SDKTokenRepository
+}
+
+// SetSDKTokenRepository attaches the sdk_tokens rows a password change
+// revokes: ChangePassword marks each row of the user not yet revoked as
+// revoked, with the reason domain.SDKTokenRevokeReasonPasswordChanged. With
+// none attached, a change revokes no row.
+func (s *AuthService) SetSDKTokenRepository(repo domain.SDKTokenRepository) {
+	s.sdkTokenRepo = repo
 }
 
 // NewAuthService creates a new auth service
@@ -346,7 +355,24 @@ func (s *AuthService) ChangePassword(
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 
+	revokeSDKTokenRowsAtPasswordChange(s.sdkTokenRepo, user.ID)
 	return nil
+}
+
+// revokeSDKTokenRowsAtPasswordChange marks each sdk_tokens row of the user
+// not yet revoked as revoked, with the reason
+// domain.SDKTokenRevokeReasonPasswordChanged, once a password change or reset
+// is written, so the user's list of SDK tokens shows none of them active.
+// Every token those rows track was minted before the change, which refuses
+// it, so a failed write is logged and the change stands. Nil rows revoke
+// nothing.
+func revokeSDKTokenRowsAtPasswordChange(rows domain.SDKTokenRepository, userID uuid.UUID) {
+	if rows == nil {
+		return
+	}
+	if err := rows.RevokeAllForUser(userID, domain.SDKTokenRevokeReasonPasswordChanged); err != nil {
+		log.Printf("Password change: sdk_tokens rows of user %s not revoked: %v", userID, err)
+	}
 }
 
 // ValidateAPIKeyResponse contains API key validation result

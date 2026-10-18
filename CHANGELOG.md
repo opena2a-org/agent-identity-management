@@ -60,11 +60,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   token's user ID.
 - An SDK install whose user changes or resets the password needs a new download: its SDK-download token was minted
   before the change.
+- Once the change or reset is written, every `sdk_tokens` row of the user that is not yet revoked is marked revoked,
+  with the reason `password_changed`, through the SDK token repository `cmd/server` attaches to `AuthService` and
+  `RegistrationService`. `GET /api/v1/users/me/sdk-tokens` then lists those tokens only with `include_revoked=true`,
+  showing that reason. A change or reset that is refused or not written revokes no row. When the rows cannot be
+  written, the failure is logged and the change stands; the change refuses the tokens of those rows either way.
+  `POST /api/v1/auth/sdk/recover` takes a row revoked for a password change to end its token family, as it takes a row
+  revoked by a logout: it answers 401 for each token of the family and mints no credential.
 - Tests: `apps/backend/internal/interfaces/http/handlers/password_change_sessions_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/password_change_sdk_tokens_test.go`,
   `apps/backend/internal/interfaces/http/middleware/auth_password_change_test.go`,
   `apps/backend/internal/infrastructure/auth/password_change_test.go`,
   `apps/backend/internal/infrastructure/repository/user_repository_password_change_test.go`,
   `apps/backend/internal/application/password_change_sessions_test.go`,
+  `apps/backend/internal/application/password_change_sdk_tokens_test.go`,
   `apps/backend/cmd/server/password_change_sessions_wiring_test.go`.
 
 ### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)

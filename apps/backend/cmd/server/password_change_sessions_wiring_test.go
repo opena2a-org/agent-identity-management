@@ -22,3 +22,15 @@ func TestServer_AttachesTheUserRecordToTheJWTService(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(src, "jwtService.SetSessionStateReader(repos.User)"),
 		"cmd/server/main.go attaches the user repository as the session-state reader once")
 }
+
+// A password change (AuthService.ChangePassword) and a password reset
+// (RegistrationService.ResetPassword) mark the user's sdk_tokens rows revoked
+// through the SDK token repository attached to each service. A service with
+// none attached revokes no row, so the server must attach it to both.
+func TestServer_AttachesTheSDKTokenRowsToThePasswordChangeAndReset(t *testing.T) {
+	src := aim03ReadRepoFile(t, "apps/backend/cmd/server/main.go")
+	assert.Equal(t, 1, strings.Count(src, "authService.SetSDKTokenRepository(repos.SDKToken)"),
+		"cmd/server/main.go attaches the SDK token repository to the auth service once")
+	assert.Equal(t, 1, strings.Count(src, "registrationService.SetSDKTokenRepository(repos.SDKToken)"),
+		"cmd/server/main.go attaches the SDK token repository to the registration service once")
+}
