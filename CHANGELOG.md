@@ -99,6 +99,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `docker compose up` that starts the services it depends on, omits the email or the dashboard URL, or names a password
   variable the script does not write.
 
+### Fixed — the README's Quick start says the PyPI release does not yet print a sign-in code, and links a self-hosted install from the dashboard (#789)
+
+- The Quick start installs the SDK with `pip install "aim-sdk[rich]"` and says `aim-sdk login` prints a code you
+  approve on the dashboard's `/device` page, which is what the SDK in this repository does. The release on PyPI,
+  aim-sdk 2.0.3, has no device sign-in: with it, `aim-sdk login --url http://localhost:8080` prints `Opening browser for
+  authentication...` and an `http://localhost:8080/auth/login?response_type=code&...` address, then waits, and the API
+  registers no `/auth/login` route. The sentence now says the PyPI release does not yet, and links the self-hosted
+  install and #789.
+- `docs/quick-start.md` gives that install under Install the SDK from your dashboard: Developers, then SDK & docs
+  (`/dashboard/sdk`), Download Python SDK, then, from a folder outside the repository clone,
+  `unzip ~/Downloads/aim-sdk-python-v*.zip`, `cd aim-sdk-python` and `pip install -e ".[rich]"`. The archive holds the
+  SDK from the `sdk/python` tree the server image was built with and the user's sign-in in
+  `aim-sdk-python/.aim/sdk_credentials.json`, which the SDK reads from any directory once installed editable. The steps
+  it replaces named Settings → SDK Download, a "Download SDK" button, `unzip aim-sdk-python.zip` and
+  `pip install -r requirements.txt`.
+- A Python SDK test (`sdk/python/tests/test_readme_self_hosted_sign_in.py`) reads the README sentence that names
+  `/device`, the dashboard page's path and button label from `apps/web/app/dashboard/sdk/page.tsx`, and the archive's
+  name, folder and sign-in path from the server's download handler, and compares them with the README and the install
+  steps.
+
 ### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
 
 - After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"
