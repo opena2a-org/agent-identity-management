@@ -438,6 +438,8 @@ func TestRegistrationErrorStatus(t *testing.T) {
 		{"agent name exists -> 409", application.ErrAgentNameExists, fiber.StatusConflict},
 		{"invalid org or user -> 400", application.ErrInvalidOrgOrUser, fiber.StatusBadRequest},
 		{"wrapped invalid org/user -> 400", fmt.Errorf("create agent: %w", application.ErrInvalidOrgOrUser), fiber.StatusBadRequest},
+		{"missing required member -> 400", &application.AgentRequestError{Missing: []string{"displayName"}}, fiber.StatusBadRequest},
+		{"wrapped unknown agent type -> 400", fmt.Errorf("create agent: %w", &application.AgentRequestError{UnknownAgentType: true}), fiber.StatusBadRequest},
 		{"unknown error -> 500", errors.New("some unexpected failure"), fiber.StatusInternalServerError},
 		{"nil error -> 500", nil, fiber.StatusInternalServerError},
 	}

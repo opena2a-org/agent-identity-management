@@ -1606,9 +1606,11 @@ func TestAgentService_CreateAgent_MissingName(t *testing.T) {
 	ctx := context.Background()
 	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
 
-	assert.Error(t, err)
 	assert.Nil(t, agent)
-	assert.Contains(t, err.Error(), "name and display_name are required")
+	var refusal *AgentRequestError
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, []string{"name"}, refusal.Missing)
+	assert.Equal(t, "name is required", refusal.Message())
 }
 
 func TestAgentService_CreateAgent_MissingDisplayName(t *testing.T) {
@@ -1622,9 +1624,33 @@ func TestAgentService_CreateAgent_MissingDisplayName(t *testing.T) {
 	ctx := context.Background()
 	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
 
-	assert.Error(t, err)
 	assert.Nil(t, agent)
-	assert.Contains(t, err.Error(), "name and display_name are required")
+	var refusal *AgentRequestError
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, []string{"displayName"}, refusal.Missing)
+	assert.Equal(t, "displayName is required", refusal.Message())
+}
+
+// A request without an agent type names it as missing, and an empty request
+// names every required member, in one refusal.
+func TestAgentService_CreateAgent_MissingAgentTypeAndEmptyRequest(t *testing.T) {
+	service := &AgentService{}
+	ctx := context.Background()
+
+	agent, err := service.CreateAgent(ctx, &CreateAgentRequest{Name: "test-agent", DisplayName: "Test Agent"},
+		uuid.New(), uuid.New(), nil, nil, "")
+	assert.Nil(t, agent)
+	var refusal *AgentRequestError
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, []string{"agentType"}, refusal.Missing)
+	assert.False(t, refusal.UnknownAgentType)
+	assert.Equal(t, "agentType is required", refusal.Message())
+
+	agent, err = service.CreateAgent(ctx, &CreateAgentRequest{}, uuid.New(), uuid.New(), nil, nil, "")
+	assert.Nil(t, agent)
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, []string{"name", "displayName", "agentType"}, refusal.Missing)
+	assert.Equal(t, "name, displayName and agentType are required", refusal.Message())
 }
 
 func TestAgentService_CreateAgent_InvalidAgentType(t *testing.T) {
@@ -1639,9 +1665,15 @@ func TestAgentService_CreateAgent_InvalidAgentType(t *testing.T) {
 	ctx := context.Background()
 	agent, err := service.CreateAgent(ctx, req, uuid.New(), uuid.New(), nil, nil, "")
 
-	assert.Error(t, err)
 	assert.Nil(t, agent)
-	assert.Contains(t, err.Error(), "invalid agent_type")
+	var refusal *AgentRequestError
+	require.ErrorAs(t, err, &refusal)
+	assert.True(t, refusal.UnknownAgentType)
+	assert.Empty(t, refusal.Missing)
+	assert.Equal(t, "agentType must be one of: ai_agent, assistant, autogen, autogpt, babyagi, chatbot, claude, "+
+		"cohere, copilot, crewai, custom, demo, gemini, gpt, haystack, langchain, langgraph, llama, llamaindex, "+
+		"mistral, semantic_kernel", refusal.Message())
+	assert.NotContains(t, refusal.Message(), "invalid_type", "the refusal does not echo the value sent")
 }
 
 func TestAgentService_CreateAgent_WithCapabilities(t *testing.T) {

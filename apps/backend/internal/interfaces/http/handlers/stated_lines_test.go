@@ -33,6 +33,7 @@ func TestRegistrationRefusalsAnswerTheStatedLine(t *testing.T) {
 	}{
 		{fmt.Errorf("%w: %s", application.ErrAgentNameExists, plantedText), fiber.StatusConflict, "an agent with this name already exists"},
 		{fmt.Errorf("%w: %s", application.ErrInvalidOrgOrUser, plantedText), fiber.StatusBadRequest, "invalid organization or user for this registration"},
+		{fmt.Errorf("%w: %s", &application.AgentRequestError{Missing: []string{"displayName", "agentType"}}, plantedText), fiber.StatusBadRequest, "displayName and agentType are required"},
 		{fmt.Errorf("failed to create agent: %s", plantedText), fiber.StatusInternalServerError, ServerErrorMessage},
 	}
 	for _, tc := range cases {

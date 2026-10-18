@@ -42,6 +42,33 @@ describe("API reference: POST /api/v1/public/agents/register", () => {
   });
 });
 
+// POST /api/v1/agents binds CreateAgentRequest
+// (apps/backend/internal/application/agent_service.go), and CreateAgent refuses a
+// request without name, displayName or agentType. The example used to send
+// `type` and `tags`, names the request does not bind, and neither displayName
+// nor agentType, so the server answered it 500.
+describe("API reference: POST /api/v1/agents", () => {
+  const create = () => endpoint("POST", "/api/v1/agents");
+
+  it("marks name, displayName and agentType as required, under the names the handler binds", () => {
+    const properties = create().requestSchema?.properties ?? {};
+    const required = Object.entries(properties)
+      .filter(([, property]) => property.required)
+      .map(([name]) => name)
+      .sort();
+    expect(required).toEqual(["agentType", "displayName", "name"]);
+    expect(Object.keys(properties)).not.toContain("type");
+    expect(Object.keys(properties)).not.toContain("tags");
+  });
+
+  it("gives an example that sends every required field, and only documented ones", () => {
+    const entry = create();
+    const sent = Object.keys(JSON.parse(entry.example));
+    expect(sent).toEqual(expect.arrayContaining(["agentType", "displayName", "name"]));
+    expect(Object.keys(entry.requestSchema?.properties ?? {})).toEqual(expect.arrayContaining(sent));
+  });
+});
+
 // POST /api/v1/admin/security-policies binds CreatePolicyRequest
 // (apps/backend/internal/interfaces/http/handlers/security_policy_handler.go). The
 // example used to send `enabled`, a name the handler does not bind, left out the

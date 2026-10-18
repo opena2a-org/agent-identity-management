@@ -592,16 +592,25 @@ export const apiDocumentation: EndpointCategory[] = [
           type: "object",
           properties: {
             name: { type: "string", description: "Agent name", required: true },
-            type: { type: "string", description: "Agent type", required: true },
+            displayName: {
+              type: "string",
+              description: "Name shown in the dashboard",
+              required: true,
+            },
+            agentType: {
+              type: "string",
+              description:
+                "Agent type, for example claude, gpt, langchain, crewai, assistant or custom",
+              required: true,
+            },
             description: { type: "string", description: "Agent description" },
-            tags: { type: "array", description: "Agent tags (optional)" },
           },
         },
         example: `{
   "name": "data-processor",
-  "type": "automation_bot",
-  "description": "Automated data processing agent",
-  "tags": ["production", "critical"]
+  "displayName": "Data Processor",
+  "agentType": "custom",
+  "description": "Automated data processing agent"
 }`,
       },
       {
