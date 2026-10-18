@@ -299,7 +299,8 @@ func TestCRLClient_HoldsTheSignedListTheDiscoveryDocumentNames(t *testing.T) {
 	}
 }
 
-// An authority that does not serve /.well-known/atp is read at its alias.
+// An authority that does not serve /.well-known/atp is read at its alias, and
+// one that serves neither is refused as status.
 func TestCRLClient_ReadsTheDiscoveryAliasWhenTheATPPathAnswers404(t *testing.T) {
 	signer := newEd25519Signer(t, testListKeyID)
 	a := newCRLAuthority(t, discoveryFor(signer))
@@ -314,7 +315,7 @@ func TestCRLClient_ReadsTheDiscoveryAliasWhenTheATPPathAnswers404(t *testing.T) 
 	requireAnswer(t, c, revokedDID, true)
 
 	a.set(func(a *crlAuthority) { a.aliasServed = false })
-	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeFetch)
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeStatus)
 }
 
 // The endpoint override replaces the list address; the keys still come from
@@ -342,8 +343,9 @@ func TestCRLClient_EndpointOverrideReplacesOnlyTheListAddress(t *testing.T) {
 }
 
 // Without a list that passed its checks there is no answer: before the first
-// refresh, after a first refresh the list address answers 500, and after one
-// where nothing listens, IsRevoked is unknown and never not revoked.
+// refresh, after a first refresh the list address answers 500, refused as
+// status, and after one where nothing listens, refused as fetch, IsRevoked is
+// unknown and never not revoked.
 func TestCRLClient_WithoutAListThatPassedItsChecksTheStateIsUnknown(t *testing.T) {
 	signer := newEd25519Signer(t, testListKeyID)
 	a := newCRLAuthority(t, discoveryFor(signer))
@@ -352,7 +354,7 @@ func TestCRLClient_WithoutAListThatPassedItsChecksTheStateIsUnknown(t *testing.T
 	requireUnknown(t, c, otherDID)
 
 	a.set(func(a *crlAuthority) { a.listStatus = http.StatusInternalServerError })
-	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeFetch)
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeStatus)
 	requireUnknown(t, c, otherDID)
 
 	a.srv.Close()
@@ -457,8 +459,9 @@ func TestCRLClient_VerifiesTheMLDSA65SignatureOfAListedKey(t *testing.T) {
 	}
 }
 
-// A list that breaks the form of the list contract is refused as shape, even
-// when a listed key signed it.
+// A list that breaks the form of the list contract is refused as shape, and a
+// body that is not an I-JSON text (RFC 7493) as parse, even when a listed key
+// signed it.
 func TestCRLClient_RefusesAListThatBreaksTheContractsForm(t *testing.T) {
 	signer := newEd25519Signer(t, testListKeyID)
 	now := time.Now()
@@ -509,13 +512,39 @@ func TestCRLClient_RefusesAListThatBreaksTheContractsForm(t *testing.T) {
 			return append(signList(t, testList(now, revokedDID), signer), []byte(`{}`)...)
 		}},
 		{"an array where the list belongs", func() []byte { return []byte(`[]`) }},
+		{"an entry that names a member twice", func() []byte {
+			return bytes.Replace(signList(t, testList(now, revokedDID), signer),
+				[]byte(`"reason":"compromised"`), []byte(`"reason":"compromised","reason":"compromised"`), 1)
+		}},
+		{"a number beyond the binary64 range", func() []byte {
+			return bytes.Replace(signList(t, testList(now, revokedDID), signer), []byte(`"entryCount":1,`), []byte(`"entryCount":1e999,`), 1)
+		}},
+		{"a list cut short", func() []byte {
+			body := signList(t, testList(now, revokedDID), signer)
+			return body[:len(body)/2]
+		}},
+		{"a body that is not JSON", func() []byte { return []byte(`<html><body>Service Unavailable</body></html>`) }},
+	}
+	// These bodies are not I-JSON texts, and are refused as parse.
+	notIJSON := map[string]bool{
+		"a member named twice":               true,
+		"a string that is not UTF-8":         true,
+		"data after the list":                true,
+		"an entry that names a member twice": true,
+		"a number beyond the binary64 range": true,
+		"a list cut short":                   true,
+		"a body that is not JSON":            true,
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			a := newCRLAuthority(t, discoveryFor(signer))
 			a.setList(tc.body())
 			c := newTestCRLClient(t, a, "", &now)
-			requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeShape)
+			outcome := CRLOutcomeShape
+			if notIJSON[tc.name] {
+				outcome = CRLOutcomeParse
+			}
+			requireRefreshOutcome(t, c.Refresh(context.Background()), outcome)
 			requireUnknown(t, c, revokedDID)
 		})
 	}
@@ -680,7 +709,8 @@ func TestCRLClient_RefusesABodyLongerThanTheBodyBound(t *testing.T) {
 }
 
 // thisUpdate may be up to 60 s ahead of this server's clock, and a list is
-// read up to 60 s after its nextUpdate.
+// read up to 60 s after its nextUpdate; past either it is refused as expired.
+// A nextUpdate that is not after thisUpdate is refused as shape.
 func TestCRLClient_RefusesAListOutsideTheClockSkewBound(t *testing.T) {
 	signer := newEd25519Signer(t, testListKeyID)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -690,10 +720,10 @@ func TestCRLClient_RefusesAListOutsideTheClockSkewBound(t *testing.T) {
 		outcome                string
 	}{
 		{"thisUpdate 60 s ahead", 60 * time.Second, 5 * time.Minute, ""},
-		{"thisUpdate 61 s ahead", 61 * time.Second, 5 * time.Minute, CRLOutcomeTime},
+		{"thisUpdate 61 s ahead", 61 * time.Second, 5 * time.Minute, CRLOutcomeExpired},
 		{"nextUpdate 60 s ago", -5 * time.Minute, -60 * time.Second, ""},
-		{"nextUpdate 61 s ago", -5 * time.Minute, -61 * time.Second, CRLOutcomeTime},
-		{"nextUpdate equal to thisUpdate", -time.Minute, -time.Minute, CRLOutcomeTime},
+		{"nextUpdate 61 s ago", -5 * time.Minute, -61 * time.Second, CRLOutcomeExpired},
+		{"nextUpdate equal to thisUpdate", -time.Minute, -time.Minute, CRLOutcomeShape},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -717,8 +747,8 @@ func TestCRLClient_RefusesAListOutsideTheClockSkewBound(t *testing.T) {
 	}
 }
 
-// A list whose thisUpdate is before that of the list held is refused, and the
-// list held stays; a later list replaces it.
+// A list whose thisUpdate is before that of the list held is refused as
+// rollback, and the list held stays; a later list replaces it.
 func TestCRLClient_RefusesAListOlderThanTheListHeld(t *testing.T) {
 	signer := newEd25519Signer(t, testListKeyID)
 	now := time.Now().UTC().Truncate(time.Second)
@@ -732,7 +762,7 @@ func TestCRLClient_RefusesAListOlderThanTheListHeld(t *testing.T) {
 	older := testList(now, otherDID)
 	older["thisUpdate"] = now.Add(-2 * time.Minute).Format(time.RFC3339)
 	a.setList(signList(t, older, signer))
-	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeTime)
+	requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeRollback)
 	requireAnswer(t, c, revokedDID, true)
 	requireAnswer(t, c, otherDID, false)
 
@@ -853,6 +883,128 @@ func TestCRLClient_FollowsNoRedirectAwayFromHTTPS(t *testing.T) {
 	requireRefreshOutcome(t, err, CRLOutcomeFetch)
 	if !strings.Contains(err.Error(), "refused a redirect to an address that is not https") {
 		t.Fatalf("Refresh: %v", err)
+	}
+}
+
+// A discovery document answered with another status than 200 is refused as
+// status, one that is not a JSON text as parse, and a JSON text that is not of
+// the document's form as shape. The list is not read.
+func TestCRLClient_ClassifiesADiscoveryDocumentItCannotRead(t *testing.T) {
+	cases := []struct {
+		name    string
+		status  int
+		body    string
+		outcome string
+	}{
+		{"an answer of 500", http.StatusInternalServerError, "", CRLOutcomeStatus},
+		{"an answer of 503", http.StatusServiceUnavailable, "", CRLOutcomeStatus},
+		{"a body that is not JSON", http.StatusOK, `<html><body>Service Unavailable</body></html>`, CRLOutcomeParse},
+		{"a document cut short", http.StatusOK, `{"endpoints":{"revocations":`, CRLOutcomeParse},
+		{"an array where the document belongs", http.StatusOK, `[]`, CRLOutcomeShape},
+		{"an endpoints member that is a string", http.StatusOK, `{"endpoints":"` + testListPath + `"}`, CRLOutcomeShape},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var paths []string
+			var mu sync.Mutex
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				paths = append(paths, r.URL.Path)
+				mu.Unlock()
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+			c, err := NewCachedCRLClient(srv.URL, "", srv.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			requireRefreshOutcome(t, c.Refresh(context.Background()), tc.outcome)
+			mu.Lock()
+			defer mu.Unlock()
+			if len(paths) != 1 || paths[0] != "/.well-known/atp" {
+				t.Fatalf("the authority was asked for %v, want /.well-known/atp alone", paths)
+			}
+		})
+	}
+}
+
+// A list address answered with another status than 200, or with 304 to a
+// request that carried no If-None-Match, is refused as status.
+func TestCRLClient_RefusesAListAnsweredWithAnotherStatusThan200(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusNotModified} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			signer := newEd25519Signer(t, testListKeyID)
+			a := newCRLAuthority(t, discoveryFor(signer))
+			now := time.Now()
+			a.setList(signList(t, testList(now, revokedDID), signer))
+			a.set(func(a *crlAuthority) { a.listStatus = status })
+			c := newTestCRLClient(t, a, "", &now)
+
+			requireRefreshOutcome(t, c.Refresh(context.Background()), CRLOutcomeStatus)
+			requireUnknown(t, c, revokedDID)
+			if _, ifNoneMatch := a.requests(); len(ifNoneMatch) != 1 || ifNoneMatch[0] != "" {
+				t.Fatalf("If-None-Match of the list requests: %q, want one request without it", ifNoneMatch)
+			}
+		})
+	}
+}
+
+// A read that has not ended by its deadline is refused as timeout: the
+// deadline of the refresh's context and the timeout of the HTTP client, while
+// the authority sends no answer, and while it sends a list body that stops.
+func TestCRLClient_RefusesAReadThatOutlivesItsDeadlineAsTimeout(t *testing.T) {
+	discovery, err := json.Marshal(map[string]any{"endpoints": map[string]any{"revocations": testListPath}, "publicKeys": []any{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	silent := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	t.Cleanup(silent.Close)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/atp", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(discovery)
+	})
+	mux.HandleFunc(testListPath, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"entryCount":0,`))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	stopping := httptest.NewTLSServer(mux)
+	t.Cleanup(stopping.Close)
+
+	withTimeout := func(srv *httptest.Server) *http.Client {
+		client := *srv.Client()
+		client.Timeout = 200 * time.Millisecond
+		return &client
+	}
+	cases := []struct {
+		name     string
+		srv      *httptest.Server
+		client   *http.Client
+		deadline time.Duration
+	}{
+		{"no answer by the refresh's deadline", silent, silent.Client(), 200 * time.Millisecond},
+		{"no answer within the HTTP client's timeout", silent, withTimeout(silent), 0},
+		{"a list body that stops before the refresh's deadline", stopping, stopping.Client(), 200 * time.Millisecond},
+		{"a list body that stops within the HTTP client's timeout", stopping, withTimeout(stopping), 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := NewCachedCRLClient(tc.srv.URL, "", tc.client)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			if tc.deadline > 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.deadline)
+				defer cancel()
+			}
+			requireRefreshOutcome(t, c.Refresh(ctx), CRLOutcomeTimeout)
+		})
 	}
 }
 

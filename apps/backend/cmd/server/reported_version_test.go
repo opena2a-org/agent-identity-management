@@ -73,7 +73,7 @@ func reportedVersionGet(t *testing.T, app *fiber.App, path string) map[string]an
 func reportedVersionApp() *fiber.App {
 	app := fiber.New()
 	ok := func(context.Context) error { return nil }
-	app.Get("/health/ready", newHealthReadyHandler(ok, nil, nil))
+	app.Get("/health/ready", newHealthReadyHandler(ok, nil, nil, nil))
 	app.Get("/api/v1/status", newStatusHandler(func() error { return nil }, nil, false, config.LoadServer().Environment, time.Now()))
 	return app
 }

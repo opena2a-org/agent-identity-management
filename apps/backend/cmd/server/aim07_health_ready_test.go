@@ -70,7 +70,7 @@ func aim07LoadSchema(t *testing.T) *aim07Schema {
 
 func aim07App(checkDB, checkRedis func(context.Context) error) *fiber.App {
 	app := fiber.New()
-	app.Get("/health/ready", newHealthReadyHandler(checkDB, checkRedis, nil))
+	app.Get("/health/ready", newHealthReadyHandler(checkDB, checkRedis, nil, nil))
 	return app
 }
 

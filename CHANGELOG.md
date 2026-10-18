@@ -67,6 +67,39 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/interfaces/http/handlers/atc_issuance_handler_test.go` (the `409` body for an agent revoked
   before the request and for one revoked while the Registry issues).
 
+### Added: `GET /health/ready` carries `dependencies.revocationState`, the state of the revocation list the server reads with `REGISTRY_URL` set
+
+- `GET /health/ready` carries `dependencies.revocationState`, with `"required": false` and no `latencyMs`. It is
+  `notConfigured` when `REGISTRY_URL` is unset. With `REGISTRY_URL` set it is `ok` while the list held is fit to answer
+  from: last read at most 5 minutes ago, and at most 60 s past its `nextUpdate`. Otherwise it is `unavailable`,
+  with one word in `reason`, and the response has `"degraded": true`. The entry does not change the HTTP status, which
+  the database alone decides: 200 when it answers, 503 when it does not. The entry reads the refresher's record of its
+  reads and sends no request.
+- The words: `noList`, no list is held, and no read has ended or the last one ended with no answer before its deadline
+  (the connection, TLS, or a redirect to an address that is not `https`); `status`, the discovery document or the list
+  was answered with an HTTP status other than 200, or with 304 to a request without `If-None-Match`; `timeout`, a read
+  had not ended by its deadline; `parse`, a document is not an I-JSON text (not JSON, not UTF-8, an object that names a
+  member twice, a number beyond the binary64 range, or data after the value); `shape`, a document is longer than its
+  bound or breaks the form of the list contract, a `nextUpdate` that is not after `thisUpdate` included; `signature`,
+  the list's signatures do not verify under the keys the discovery document lists; `rollback`, the list's `thisUpdate`
+  is before that of the list held; `expired`, the list's `thisUpdate` is more than 60 s ahead of the server's clock or
+  its `nextUpdate` passed more than 60 s ago, or a list is held that is no longer fit to answer from and the last read
+  held it, read it again or ended with no answer; and `refresherStalled`, no read has ended for more than 8 minutes,
+  counted from the refresher's start until its first read ends.
+- The refresher's log line names a refused read with the same words, and with `fetch` for a read that ended with no
+  answer before its deadline:
+  `Revocation list: refresh failed (status): the list at <address> answered 503; no list fit to answer from is held; next refresh in <wait>`.
+  On the previous code the line named `fetch` for an answer other than 200 too, `shape` for a body that is not an
+  I-JSON text, and `time` for a rollback, for a list outside the clock skew bound and for a `nextUpdate` that is not
+  after `thisUpdate`: the outcomes the tests of the list client and the refresher asserted.
+- The server starts the refresher before it registers `GET /health/ready`, and hands the route the refresher's state.
+  On the previous code the route carried no entry for the list: with a list held, it answered 200 with the
+  dependencies `database`, `redis` and `siem`.
+- Tests: `apps/backend/cmd/server/health_ready_revocation_test.go`, against the route built with fixed states and with
+  the refresher of a TLS stub of an authority listening on 127.0.0.1, and
+  `apps/backend/internal/infrastructure/atc/crl_refresher_test.go` and
+  `apps/backend/internal/infrastructure/atc/crl_client_test.go`, against TLS stubs listening on 127.0.0.1.
+
 ### Added: with `REGISTRY_URL` set, the server reads the revocation list an authority's discovery document names, and `ATC_CRL_ENDPOINT` has no default
 
 - `REGISTRY_URL`, unset by default, is the base URL of an authority's discovery document. When it is set, the server
@@ -76,7 +109,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   first read starts with the server. The next starts 4 minutes after a read that holds a list, or 60 s before the
   `nextUpdate` of the list held when that is sooner. After a read that fails or whose list is refused, and when the
   next read would start in less than 1 s, it starts after a wait drawn at random from 1 s to 30 s. No request the
-  server answers reads the list: the ATC verifier reads revocation from the agent store, as before.
+  server answers fetches the list or decides on it: the ATC verifier reads revocation from the agent store, as
+  before.
 - `ATC_CRL_ENDPOINT` has no default. Its default was `https://registry.opena2a.org/api/v1/crl/latest`, which is not a
   route of the Registry route table pinned in `apps/backend/testdata/registry-routes.txt`; that table carries
   `GET /api/v1/trust/revocations`, `GET /.well-known/atp` and `GET /.well-known/opena2a`. With `REGISTRY_URL` set, the
@@ -96,8 +130,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The refresher logs a line after its first read and after each read that ends in another state than the one before
   it: `Revocation list: holds a list, thisUpdate <time>, nextUpdate <time>; next refresh in <wait>`, or
   `Revocation list: refresh failed (<outcome>): <cause>; <held>; next refresh in <wait>`, where the outcome is
-  `fetch`, `shape`, `signature` or `time`, and `<held>` is `the list held is still answered from` or
-  `no list fit to answer from is held`.
+  `status`, `timeout`, `fetch`, `parse`, `shape`, `signature`, `rollback` or `expired`, and `<held>` is
+  `the list held is still answered from` or `no list fit to answer from is held`.
 - `internal/config` reads `REGISTRY_URL`. Its environment table gains five `REGISTRY_URL` rows, and its
   `ATC_CRL_ENDPOINT` rows record an empty setting when the variable is unset or empty, and the startup line above.
 - Tests: `apps/backend/internal/infrastructure/atc/crl_refresher_test.go` and

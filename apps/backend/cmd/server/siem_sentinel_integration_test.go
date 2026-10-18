@@ -153,7 +153,7 @@ func sentinelRoundTripServer(t *testing.T, db *sql.DB, getenv func(string) strin
 
 	app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
 	app.Use(middleware.RecoveryMiddleware())
-	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(forwarder)))
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(forwarder), nil))
 	mountAPIRoutes(app, h, services, jwtService, nil, db)
 	return app, forwarder
 }

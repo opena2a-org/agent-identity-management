@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -67,19 +68,35 @@ const (
 	crlAlgorithmMLDSA65 = string(pqc.AlgorithmMLDSA65)
 )
 
-// Outcomes of a refresh that holds no new list.
+// Outcomes of a refresh that holds no new list. Each but CRLOutcomeFetch is
+// also a reason word of CRLRefresher.State.
 const (
-	// CRLOutcomeFetch: the discovery document or the list could not be read.
+	// CRLOutcomeStatus: the discovery document or the list was answered with
+	// an HTTP status other than 200, or with 304 to a request that carried no
+	// If-None-Match.
+	CRLOutcomeStatus = "status"
+	// CRLOutcomeTimeout: a read of the discovery document or the list had not
+	// ended by its deadline.
+	CRLOutcomeTimeout = "timeout"
+	// CRLOutcomeFetch: a read of the discovery document or the list ended
+	// before its deadline with no answer: the connection, TLS, or a redirect
+	// the client does not follow.
 	CRLOutcomeFetch = "fetch"
+	// CRLOutcomeParse: a document is not an I-JSON text (RFC 7493).
+	CRLOutcomeParse = "parse"
 	// CRLOutcomeShape: a document is longer than its bound or breaks the
 	// form of the list contract.
 	CRLOutcomeShape = "shape"
 	// CRLOutcomeSignature: the list's signatures do not verify under the keys
 	// the discovery document lists.
 	CRLOutcomeSignature = "signature"
-	// CRLOutcomeTime: the list's thisUpdate or nextUpdate is outside the
-	// clock skew bound, or its thisUpdate is before that of the list held.
-	CRLOutcomeTime = "time"
+	// CRLOutcomeRollback: the list's thisUpdate is before that of the list
+	// held.
+	CRLOutcomeRollback = "rollback"
+	// CRLOutcomeExpired: the list's thisUpdate is more than the clock skew
+	// bound ahead of this server's clock, or its nextUpdate passed more than
+	// the clock skew bound ago.
+	CRLOutcomeExpired = "expired"
 )
 
 // CRLRefreshError is the error of a refresh that holds no new list. Outcome
@@ -97,6 +114,25 @@ func (e *CRLRefreshError) Unwrap() error { return e.Err }
 
 func refreshFailure(outcome string, err error) error {
 	return &CRLRefreshError{Outcome: outcome, Err: err}
+}
+
+// readOutcome is the outcome of a read that ended with err before its answer
+// was read whole: timeout when its deadline passed, fetch otherwise.
+func readOutcome(err error) string {
+	var netErr net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()) {
+		return CRLOutcomeTimeout
+	}
+	return CRLOutcomeFetch
+}
+
+// documentOutcome is the outcome of a document refused with err: parse when
+// it is not an I-JSON text, shape otherwise.
+func documentOutcome(err error) string {
+	if isNotIJSON(err) {
+		return CRLOutcomeParse
+	}
+	return CRLOutcomeShape
 }
 
 // ErrCRLStateUnknown is wrapped by the error IsRevoked returns when it holds
@@ -242,7 +278,7 @@ func (c *CachedCRLClient) Refresh(ctx context.Context) error {
 	}
 	answer, err := c.get(ctx, endpoint, maxCRLBodyBytes, ifNoneMatch)
 	if err != nil {
-		return refreshFailure(CRLOutcomeFetch, fmt.Errorf("reading the list at %s: %w", endpoint.Redacted(), err))
+		return refreshFailure(readOutcome(err), fmt.Errorf("reading the list at %s: %w", endpoint.Redacted(), err))
 	}
 	now := c.now()
 	switch {
@@ -252,7 +288,7 @@ func (c *CachedCRLClient) Refresh(ctx context.Context) error {
 		c.held.Store(&read)
 		return nil
 	case answer.status != http.StatusOK:
-		return refreshFailure(CRLOutcomeFetch, fmt.Errorf("the list at %s answered %d", endpoint.Redacted(), answer.status))
+		return refreshFailure(CRLOutcomeStatus, fmt.Errorf("the list at %s answered %d", endpoint.Redacted(), answer.status))
 	case answer.tooLong:
 		return refreshFailure(CRLOutcomeShape, fmt.Errorf("the list at %s is longer than %d bytes", endpoint.Redacted(), maxCRLBodyBytes))
 	}
@@ -261,7 +297,7 @@ func (c *CachedCRLClient) Refresh(ctx context.Context) error {
 		return err
 	}
 	if held != nil && list.thisUpdate.Before(held.thisUpdate) {
-		return refreshFailure(CRLOutcomeTime, fmt.Errorf("thisUpdate %s is before %s, the thisUpdate of the list held",
+		return refreshFailure(CRLOutcomeRollback, fmt.Errorf("thisUpdate %s is before %s, the thisUpdate of the list held",
 			list.thisUpdate.UTC().Format(time.RFC3339), held.thisUpdate.UTC().Format(time.RFC3339)))
 	}
 	list.readAt = now
@@ -299,34 +335,39 @@ func (c *CachedCRLClient) discover(ctx context.Context) (*url.URL, map[string]cr
 		at = c.base.ResolveReference(&url.URL{Path: path})
 		var err error
 		if answer, err = c.get(ctx, at, maxDiscoveryBytes, ""); err != nil {
-			return nil, nil, refreshFailure(CRLOutcomeFetch, fmt.Errorf("reading the discovery document at %s: %w", at.Redacted(), err))
+			return nil, nil, refreshFailure(readOutcome(err), fmt.Errorf("reading the discovery document at %s: %w", at.Redacted(), err))
 		}
 		if answer.status != http.StatusNotFound {
 			break
 		}
 	}
 	if answer.status != http.StatusOK {
-		return nil, nil, refreshFailure(CRLOutcomeFetch, fmt.Errorf("the discovery document at %s answered %d", at.Redacted(), answer.status))
+		return nil, nil, refreshFailure(CRLOutcomeStatus, fmt.Errorf("the discovery document at %s answered %d", at.Redacted(), answer.status))
 	}
 	if answer.tooLong {
 		return nil, nil, refreshFailure(CRLOutcomeShape, fmt.Errorf("the discovery document at %s is longer than %d bytes", at.Redacted(), maxDiscoveryBytes))
 	}
 	endpoint, keys, err := c.readDiscovery(at, answer.body)
 	if err != nil {
-		return nil, nil, refreshFailure(CRLOutcomeShape, fmt.Errorf("the discovery document at %s: %w", at.Redacted(), err))
+		return nil, nil, refreshFailure(documentOutcome(err), fmt.Errorf("the discovery document at %s: %w", at.Redacted(), err))
 	}
 	return endpoint, keys, nil
 }
 
 // readDiscovery reads the list address and the keys from a discovery document
-// read at at. A keyId that publicKeys lists twice refuses the document. A key
-// is used when it has a keyId, an algorithm of Ed25519 or ML-DSA-65, and
+// read at at. A body that is not a JSON text refuses the document with a
+// *notIJSONError. A keyId that publicKeys lists twice refuses the document. A
+// key is used when it has a keyId, an algorithm of Ed25519 or ML-DSA-65, and
 // publicKeyHex, the hex of a raw public key of that algorithm's size; a key
 // written otherwise is not used.
 func (c *CachedCRLClient) readDiscovery(at *url.URL, body []byte) (*url.URL, map[string]crlKey, error) {
 	var doc discoveryDocument
 	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil, nil, errors.New("not a JSON object of the discovery document's form")
+		var typeErr *json.UnmarshalTypeError
+		if errors.As(err, &typeErr) {
+			return nil, nil, errors.New("not a JSON object of the discovery document's form")
+		}
+		return nil, nil, notIJSON(errors.New("not a JSON text"))
 	}
 	keys := make(map[string]crlKey, len(doc.PublicKeys))
 	listed := map[string]bool{}
@@ -407,20 +448,20 @@ func (c *CachedCRLClient) get(ctx context.Context, at *url.URL, limit int64, ifN
 func checkCRL(body []byte, keys map[string]crlKey, now time.Time) (*crlList, error) {
 	doc, err := parseCRL(body)
 	if err != nil {
-		return nil, refreshFailure(CRLOutcomeShape, err)
+		return nil, refreshFailure(documentOutcome(err), err)
 	}
 	if err := verifyCRLSignatures(doc.signed, doc.signatures, keys); err != nil {
 		return nil, refreshFailure(CRLOutcomeSignature, err)
 	}
 	if doc.thisUpdate.After(now.Add(crlClockSkew)) {
-		return nil, refreshFailure(CRLOutcomeTime, fmt.Errorf("thisUpdate %s is more than %s after this server's clock",
+		return nil, refreshFailure(CRLOutcomeExpired, fmt.Errorf("thisUpdate %s is more than %s after this server's clock",
 			doc.thisUpdate.UTC().Format(time.RFC3339), crlClockSkew))
 	}
 	if !doc.nextUpdate.After(doc.thisUpdate) {
-		return nil, refreshFailure(CRLOutcomeTime, errors.New("nextUpdate is not after thisUpdate"))
+		return nil, refreshFailure(CRLOutcomeShape, errors.New("nextUpdate is not after thisUpdate"))
 	}
 	if now.After(doc.nextUpdate.Add(crlClockSkew)) {
-		return nil, refreshFailure(CRLOutcomeTime, fmt.Errorf("nextUpdate %s passed more than %s ago",
+		return nil, refreshFailure(CRLOutcomeExpired, fmt.Errorf("nextUpdate %s passed more than %s ago",
 			doc.nextUpdate.UTC().Format(time.RFC3339), crlClockSkew))
 	}
 	return &crlList{revoked: doc.revoked, thisUpdate: doc.thisUpdate, nextUpdate: doc.nextUpdate}, nil
@@ -447,13 +488,18 @@ type crlSignature struct {
 // whose other members take at most maxCRLEnvelopeBytes, whose entryCount
 // equals the number of entries, whose thisUpdate and nextUpdate are RFC 3339
 // times, and whose signatures, when it is present, is an array of objects with
-// string keyId, algorithm and value.
+// string keyId, algorithm and value. Its error for a body that is not an
+// I-JSON text is a *notIJSONError.
 func parseCRL(body []byte) (*crlDocument, error) {
 	r, err := newJSONReader(body)
 	if err != nil {
 		return nil, err
 	}
-	if tok, err := r.dec.Token(); err != nil || tok != json.Delim('{') {
+	tok, err := r.token()
+	if err != nil {
+		return nil, err
+	}
+	if tok != json.Delim('{') {
 		return nil, errors.New("the list is not a JSON object")
 	}
 	members := map[string]any{}
@@ -461,13 +507,13 @@ func parseCRL(body []byte) (*crlDocument, error) {
 	var entries []any
 	envelope := 0
 	for r.dec.More() {
-		tok, err := r.dec.Token()
+		tok, err := r.token()
 		if err != nil {
 			return nil, err
 		}
 		name, _ := tok.(string)
 		if _, named := canonical[name]; named {
-			return nil, fmt.Errorf("the list names member %q twice", name)
+			return nil, notIJSON(fmt.Errorf("the list names member %q twice", name))
 		}
 		key := append(appendCanonicalString(nil, name), ':')
 		if name == "revocations" {
@@ -489,7 +535,7 @@ func parseCRL(body []byte) (*crlDocument, error) {
 		canonical[name] = member
 		members[name] = value
 	}
-	if _, err := r.dec.Token(); err != nil {
+	if _, err := r.token(); err != nil {
 		return nil, err
 	}
 	if err := r.end(); err != nil {
@@ -548,7 +594,11 @@ func parseCRL(body []byte) (*crlDocument, error) {
 // most maxCRLEntryBytes each in canonical form. It returns the array's
 // canonical form and its entries.
 func (r *jsonReader) crlEntries() ([]byte, []any, error) {
-	if tok, err := r.dec.Token(); err != nil || tok != json.Delim('[') {
+	tok, err := r.token()
+	if err != nil {
+		return nil, nil, err
+	}
+	if tok != json.Delim('[') {
 		return nil, nil, errors.New("revocations is not an array")
 	}
 	out := []byte{'['}
@@ -570,7 +620,7 @@ func (r *jsonReader) crlEntries() ([]byte, []any, error) {
 		out = append(out, entry...)
 		entries = append(entries, value)
 	}
-	if _, err := r.dec.Token(); err != nil {
+	if _, err := r.token(); err != nil {
 		return nil, nil, err
 	}
 	return append(out, ']'), entries, nil

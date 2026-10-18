@@ -22,6 +22,23 @@ const maxJSONDepth = 16
 // the bytes it is allowed.
 var errCanonicalLimit = errors.New("the canonical form exceeds its size bound")
 
+// notIJSONError is the error of a document that is not an I-JSON text (RFC
+// 7493): one that is not JSON, is not valid UTF-8, has an object that names a
+// member twice, writes a number beyond the binary64 range, or carries data
+// after its value. Its message is the message of the error it wraps.
+type notIJSONError struct{ err error }
+
+func (e *notIJSONError) Error() string { return e.err.Error() }
+func (e *notIJSONError) Unwrap() error { return e.err }
+
+func notIJSON(err error) error { return &notIJSONError{err: err} }
+
+// isNotIJSON reports whether err says that a document is not an I-JSON text.
+func isNotIJSON(err error) bool {
+	var e *notIJSONError
+	return errors.As(err, &e)
+}
+
 // jsonReader reads the values of one JSON document and writes the RFC 8785
 // (JSON Canonicalization Scheme) form of each value it reads. A value is
 // returned as nil, bool, string, json.Number, []any or map[string]any; a
@@ -33,11 +50,21 @@ type jsonReader struct {
 // newJSONReader returns a reader of data, which must be valid UTF-8.
 func newJSONReader(data []byte) (*jsonReader, error) {
 	if !utf8.Valid(data) {
-		return nil, errors.New("the document is not valid UTF-8")
+		return nil, notIJSON(errors.New("the document is not valid UTF-8"))
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	return &jsonReader{dec: dec}, nil
+}
+
+// token reads the next token. Its error, for a document that is not JSON or
+// ends before its value does, is a *notIJSONError.
+func (r *jsonReader) token() (json.Token, error) {
+	tok, err := r.dec.Token()
+	if err != nil {
+		return nil, notIJSON(err)
+	}
+	return tok, nil
 }
 
 // next reads the next value, appends its canonical form to out, and returns
@@ -46,7 +73,7 @@ func newJSONReader(data []byte) (*jsonReader, error) {
 // object that names a member twice, a number beyond the binary64 range, and
 // an out longer than limit bytes, which it checks as the value is read.
 func (r *jsonReader) next(out []byte, depth, limit int) ([]byte, any, error) {
-	tok, err := r.dec.Token()
+	tok, err := r.token()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -62,7 +89,7 @@ func (r *jsonReader) next(out []byte, depth, limit int) ([]byte, any, error) {
 		case '{':
 			out, value, err = r.object(out, depth, limit)
 		default:
-			err = fmt.Errorf("unexpected %q", rune(t))
+			err = notIJSON(fmt.Errorf("unexpected %q", rune(t)))
 		}
 		if err != nil {
 			return nil, nil, err
@@ -103,7 +130,7 @@ func (r *jsonReader) array(out []byte, depth, limit int) ([]byte, any, error) {
 		}
 		values = append(values, value)
 	}
-	if _, err := r.dec.Token(); err != nil {
+	if _, err := r.token(); err != nil {
 		return nil, nil, err
 	}
 	return append(out, ']'), values, nil
@@ -119,13 +146,13 @@ func (r *jsonReader) object(out []byte, depth, limit int) ([]byte, any, error) {
 	// size is the length out has once the members read so far are written.
 	size := len(out) + len("{}")
 	for r.dec.More() {
-		tok, err := r.dec.Token()
+		tok, err := r.token()
 		if err != nil {
 			return nil, nil, err
 		}
 		name, _ := tok.(string)
 		if _, named := values[name]; named {
-			return nil, nil, fmt.Errorf("an object names member %q twice", name)
+			return nil, nil, notIJSON(fmt.Errorf("an object names member %q twice", name))
 		}
 		if len(members) > 0 {
 			size++ // the comma before this member
@@ -139,7 +166,7 @@ func (r *jsonReader) object(out []byte, depth, limit int) ([]byte, any, error) {
 		values[name] = value
 		members = append(members, member{name: name, canonical: canonical})
 	}
-	if _, err := r.dec.Token(); err != nil {
+	if _, err := r.token(); err != nil {
 		return nil, nil, err
 	}
 	sort.Slice(members, func(i, j int) bool { return lessUTF16(members[i].name, members[j].name) })
@@ -156,7 +183,7 @@ func (r *jsonReader) object(out []byte, depth, limit int) ([]byte, any, error) {
 // end refuses anything but white space after the document's value.
 func (r *jsonReader) end() error {
 	if _, err := r.dec.Token(); err != io.EOF {
-		return errors.New("the document carries data after its value")
+		return notIJSON(errors.New("the document carries data after its value"))
 	}
 	return nil
 }
@@ -167,7 +194,7 @@ func (r *jsonReader) end() error {
 func canonicalNumber(n json.Number) (string, error) {
 	f, err := strconv.ParseFloat(string(n), 64)
 	if err != nil {
-		return "", fmt.Errorf("the number %s is beyond the binary64 range", n)
+		return "", notIJSON(fmt.Errorf("the number %s is beyond the binary64 range", n))
 	}
 	if f == 0 {
 		return "0", nil

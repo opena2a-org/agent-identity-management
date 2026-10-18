@@ -272,9 +272,20 @@ func main() {
 		})
 	})
 
+	// Hold the signed revocation list of the authority whose discovery
+	// document is served at REGISTRY_URL, refreshed in the background.
+	// Nothing is read when REGISTRY_URL is unset, and no request fetches the
+	// list or decides on it; the readiness probe reports its state.
+	revocationList, err := startRevocationList(cfg.Registry, nil)
+	if err != nil {
+		log.Fatal("Revocation list: ", err)
+	}
+	defer revocationList.Stop()
+
 	// Readiness probe (no auth required). Body contract:
 	// apps/backend/contracts/health-ready.schema.json.
-	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(cfg.Redis.Configured, redisClient), siemReadyCheck(siemForwarder)))
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(cfg.Redis.Configured, redisClient),
+		siemReadyCheck(siemForwarder), revocationReadyCheck(revocationList)))
 
 	// System status endpoint (no auth required). Its version is the stamped
 	// build version, reported as GET /health/ready reports it.
@@ -352,15 +363,6 @@ func main() {
 		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
 		defer close(stopRegistryBridge)
 	}
-
-	// Hold the signed revocation list of the authority whose discovery
-	// document is served at REGISTRY_URL, refreshed in the background.
-	// Nothing is read when REGISTRY_URL is unset, and no request reads the list.
-	revocationList, err := startRevocationList(cfg.Registry, nil)
-	if err != nil {
-		log.Fatal("Revocation list: ", err)
-	}
-	defer revocationList.Stop()
 
 	// Graceful shutdown
 	go func() {

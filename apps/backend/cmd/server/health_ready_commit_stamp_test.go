@@ -77,7 +77,7 @@ func init() {
 		fail("want exactly one argument, the file to write the body to")
 	}
 	app := fiber.New()
-	app.Get("/health/ready", newHealthReadyHandler(func(context.Context) error { return nil }, nil, nil))
+	app.Get("/health/ready", newHealthReadyHandler(func(context.Context) error { return nil }, nil, nil, nil))
 	resp, err := app.Test(
 		httptest.NewRequest(http.MethodGet, "/health/ready", nil),
 		fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true},
