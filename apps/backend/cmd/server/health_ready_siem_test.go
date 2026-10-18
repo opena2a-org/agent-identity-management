@@ -52,7 +52,7 @@ func TestHealthReadySIEMStatusByCheck(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			app := fiber.New()
-			app.Get("/health/ready", newHealthReadyHandler(aim07CheckOK, nil, tc.checkSIEM))
+			app.Get("/health/ready", newHealthReadyHandler(aim07CheckOK, nil, tc.checkSIEM, nil))
 			status, _, body := aim07Get(t, app)
 
 			require.Equal(t, http.StatusOK, status, "the SIEM is optional")

@@ -90,7 +90,7 @@ func TestSIEMHealthRoundTrip(t *testing.T) {
 
 	app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
 	app.Use(middleware.RecoveryMiddleware())
-	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(forwarder)))
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(forwarder), nil))
 	mountAPIRoutes(app, h, services, jwtService, nil, db)
 	metricsApp := newMetricsApp("")
 
@@ -188,7 +188,7 @@ func TestSIEMHealthRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, none)
 	unconfigured := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
-	unconfigured.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(none)))
+	unconfigured.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(none), nil))
 
 	readiness = siemReadiness(t, unconfigured, schema)
 	assert.Equal(t, false, readiness["degraded"])

@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 
+	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/integrations/siem"
 )
 
@@ -57,7 +58,8 @@ const (
 	depStatusNotConfigured = "notConfigured"
 )
 
-// reason is always one of these fixed strings; driver error text (hosts,
+// reason is always one of these fixed strings, or for revocationState one of
+// the fixed words CRLRefresher.State returns; driver error text (hosts,
 // ports, dial errors) must never reach the response body.
 const (
 	reasonCheckFailed   = "dependency check failed"
@@ -147,19 +149,32 @@ func siemReadyCheck(forwarder *siem.Forwarder) func() error {
 	}
 }
 
+// revocationReadyCheck returns the readiness check of the revocation list. A
+// nil result means no list is read (notConfigured): the server starts no
+// refresher without REGISTRY_URL. The check is the refresher's State: whether
+// the list held is fit to answer from and, when it is not, one reason word.
+// It reads no address.
+func revocationReadyCheck(refresher *infraatc.CRLRefresher) func() (bool, string) {
+	if refresher == nil {
+		return nil
+	}
+	return refresher.State
+}
+
 // newHealthReadyHandler builds GET /health/ready. checkDB is the required
 // database ping; a nil checkRedis means Redis is not configured (it is
-// optional; see redisReadyCheck), and a nil checkSIEM means no SIEM is
-// configured (it is optional; see siemReadyCheck). The response is 200 iff
-// every required dependency is ok; an unavailable optional dependency only
-// sets degraded. checkSIEM reads state and is not timed, so the SIEM entry
-// carries no latencyMs.
-func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, checkSIEM func() error) fiber.Handler {
+// optional; see redisReadyCheck), a nil checkSIEM means no SIEM is configured
+// (it is optional; see siemReadyCheck), and a nil checkRevocation means no
+// revocation list is read (it is optional; see revocationReadyCheck). The
+// response is 200 iff every required dependency is ok; an unavailable
+// optional dependency only sets degraded. checkSIEM and checkRevocation read
+// state and are not timed, so their entries carry no latencyMs.
+func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, checkSIEM func() error, checkRevocation func() (bool, string)) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), healthReadyDeadline)
 		defer cancel()
 
-		deps := make(map[string]healthReadyDependency, 3)
+		deps := make(map[string]healthReadyDependency, 4)
 
 		dbStatus, dbLatency, dbReason := runBoundedCheck(ctx, healthReadyDBTimeout, checkDB)
 		deps["database"] = healthReadyDependency{
@@ -191,6 +206,15 @@ func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, chec
 			degraded = true
 		default:
 			deps["siem"] = healthReadyDependency{Status: depStatusOK, Required: false}
+		}
+
+		if checkRevocation == nil {
+			deps["revocationState"] = healthReadyDependency{Status: depStatusNotConfigured, Required: false}
+		} else if ok, reason := checkRevocation(); ok {
+			deps["revocationState"] = healthReadyDependency{Status: depStatusOK, Required: false}
+		} else {
+			deps["revocationState"] = healthReadyDependency{Status: depStatusUnavailable, Required: false, Reason: reason}
+			degraded = true
 		}
 
 		ready := dbStatus == depStatusOK

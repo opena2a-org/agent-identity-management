@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -137,7 +138,7 @@ func TestCRLRefresher_HoldsDownOneToThirtySecondsAfterAFailedRefresh(t *testing.
 			}
 			requireAnswer(t, c, revokedDID, true)
 			requireLines(t, s,
-				"Revocation list: refresh failed (fetch): the list at "+a.srv.URL+testListPath+" answered 503; no list fit to answer from is held; next refresh in "+tc.wait.String(),
+				"Revocation list: refresh failed (status): the list at "+a.srv.URL+testListPath+" answered 503; no list fit to answer from is held; next refresh in "+tc.wait.String(),
 				"Revocation list: holds a list")
 		})
 	}
@@ -171,8 +172,8 @@ func TestCRLRefresher_LogsWhenTheStateChanges(t *testing.T) {
 	}
 	requireLines(t, s,
 		"Revocation list: holds a list",
-		"Revocation list: refresh failed (fetch): the list at "+a.srv.URL+testListPath+" answered 502; the list held is still answered from;",
-		"Revocation list: refresh failed (fetch): the list at "+a.srv.URL+testListPath+" answered 502; no list fit to answer from is held;",
+		"Revocation list: refresh failed (status): the list at "+a.srv.URL+testListPath+" answered 502; the list held is still answered from;",
+		"Revocation list: refresh failed (status): the list at "+a.srv.URL+testListPath+" answered 502; no list fit to answer from is held;",
 		"Revocation list: holds a list")
 	requireAnswer(t, c, revokedDID, true)
 }
@@ -254,6 +255,217 @@ func TestCRLRefresher_StopEndsTheRefresher(t *testing.T) {
 		}
 		requireStops(t, NewCRLRefresher(c))
 	})
+}
+
+func requireState(t *testing.T, r *CRLRefresher, ok bool, reason string) {
+	t.Helper()
+	if gotOK, gotReason := r.State(); gotOK != ok || gotReason != reason {
+		t.Fatalf("State() = %v, %q; want %v, %q", gotOK, gotReason, ok, reason)
+	}
+}
+
+// Before its first refresh ends the refresher's state is noList, and
+// refresherStalled once more than 8 minutes, two refresh intervals, have
+// passed since Start; once a refresh holds a list, it is ok.
+func TestCRLRefresher_StateBeforeTheFirstRefreshEnds(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	start := time.Now().UTC().Truncate(time.Second)
+	doc := testList(start, revokedDID)
+	doc["nextUpdate"] = start.Add(time.Hour).Format(time.RFC3339)
+	a.setList(signList(t, doc, signer))
+	// gated answers as a does, once gate is closed.
+	gate := make(chan struct{})
+	gated := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-gate:
+			a.srv.Config.Handler.ServeHTTP(w, r)
+		case <-r.Context().Done():
+		}
+	}))
+	t.Cleanup(gated.Close)
+	c, err := NewCachedCRLClient(gated.URL, "", gated.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	now := start
+	c.now = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	setNow := func(at time.Time) {
+		mu.Lock()
+		defer mu.Unlock()
+		now = at
+	}
+	r := NewCRLRefresher(c)
+	r.logf = func(string, ...any) {}
+	r.Start()
+	t.Cleanup(r.Stop)
+
+	requireState(t, r, false, CRLReasonNoList)
+	setNow(start.Add(8 * time.Minute))
+	requireState(t, r, false, CRLReasonNoList)
+	setNow(start.Add(8*time.Minute + time.Second))
+	requireState(t, r, false, CRLReasonRefresherStalled)
+
+	close(gate)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if ok, _ := r.State(); ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no list was held 10 s after the authority answered")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	requireState(t, r, true, "")
+	requireAnswer(t, c, revokedDID, true)
+}
+
+// While no list is held, the state names the outcome of the last refresh,
+// and is noList after a refresh that got no answer before its deadline.
+func TestCRLRefresher_StateNamesTheOutcomeOfTheLastRefresh(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	stranger := newEd25519Signer(t, testListKeyID)
+	now := time.Now().UTC().Truncate(time.Second)
+	miscounted := testList(now, revokedDID)
+	miscounted["entryCount"] = 2
+	expired := testList(now, revokedDID)
+	expired["thisUpdate"] = now.Add(-10 * time.Minute).Format(time.RFC3339)
+	expired["nextUpdate"] = now.Add(-2 * time.Minute).Format(time.RFC3339)
+	miscountedBody, strangerBody, expiredBody := signList(t, miscounted, signer), signList(t, testList(now, revokedDID), stranger), signList(t, expired, signer)
+	cases := []struct {
+		name   string
+		serve  func(a *crlAuthority)
+		reason string
+	}{
+		{"a list answered 503", func(a *crlAuthority) { a.listStatus = http.StatusServiceUnavailable }, CRLOutcomeStatus},
+		{"a list that is not JSON", func(a *crlAuthority) { a.list = []byte(`<html></html>`) }, CRLOutcomeParse},
+		{"a list whose entryCount is not its entries", func(a *crlAuthority) { a.list = miscountedBody }, CRLOutcomeShape},
+		{"a list a listed key did not sign", func(a *crlAuthority) { a.list = strangerBody }, CRLOutcomeSignature},
+		{"a list whose nextUpdate passed", func(a *crlAuthority) { a.list = expiredBody }, CRLOutcomeExpired},
+		{"a list address that redirects to http", func(a *crlAuthority) { a.redirect = "http://127.0.0.1:9" + testListPath }, CRLReasonNoList},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.set(tc.serve)
+			s := newSteppedRefresher(newTestCRLClient(t, a, "", &now), 0)
+			s.run(context.Background())
+			requireState(t, s.CRLRefresher, false, tc.reason)
+		})
+	}
+
+	t.Run("an authority where nothing listens", func(t *testing.T) {
+		a := newCRLAuthority(t, discoveryFor(signer))
+		a.srv.Close()
+		s := newSteppedRefresher(newTestCRLClient(t, a, "", &now), 0)
+		s.run(context.Background())
+		requireState(t, s.CRLRefresher, false, CRLReasonNoList)
+	})
+
+	t.Run("no answer within the HTTP client's timeout", func(t *testing.T) {
+		silent := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			<-r.Context().Done()
+		}))
+		t.Cleanup(silent.Close)
+		client := *silent.Client()
+		client.Timeout = 200 * time.Millisecond
+		c, err := NewCachedCRLClient(silent.URL, "", &client)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.now = func() time.Time { return now }
+		s := newSteppedRefresher(c, 0)
+		s.run(context.Background())
+		requireState(t, s.CRLRefresher, false, CRLOutcomeTimeout)
+	})
+}
+
+// While the list held is fit to answer from, the state is ok whatever the
+// last refresh ended in. Once it is not, the state names the outcome of the
+// last refresh, or is expired after a refresh that got no answer.
+func TestCRLRefresher_StateWhileAListIsHeld(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	start := time.Now().UTC().Truncate(time.Second)
+	now := start
+	hourLong := func(at time.Time, dids ...string) []byte {
+		doc := testList(at, dids...)
+		doc["nextUpdate"] = at.Add(time.Hour).Format(time.RFC3339)
+		return signList(t, doc, signer)
+	}
+	older := testList(start, otherDID)
+	older["thisUpdate"] = start.Add(-2 * time.Minute).Format(time.RFC3339)
+	older["nextUpdate"] = start.Add(time.Hour).Format(time.RFC3339)
+	olderBody, laterBody := signList(t, older, signer), hourLong(start.Add(crlMaxStaleAge+time.Second), otherDID)
+	a.setList(hourLong(start, revokedDID))
+	c := newTestCRLClient(t, a, "", &now)
+
+	var s *steppedRefresher
+	var states []string
+	record := func() {
+		ok, reason := s.State()
+		states = append(states, fmt.Sprint(ok, " ", reason))
+	}
+	s = newSteppedRefresher(c, 0,
+		func() { // the list is held
+			record()
+			a.set(func(a *crlAuthority) { a.listStatus = http.StatusBadGateway })
+		},
+		func() { // the list answers 502, within 5 minutes of the last read
+			record()
+			now = start.Add(crlMaxStaleAge + time.Second)
+		},
+		func() { // and again, more than 5 minutes after it
+			record()
+			a.set(func(a *crlAuthority) { a.listStatus, a.list = http.StatusOK, olderBody })
+		},
+		func() { // a list older than the list held is served
+			record()
+			a.set(func(a *crlAuthority) { a.redirect = "http://127.0.0.1:9" + testListPath })
+		},
+		func() { // the list address redirects to http
+			record()
+			a.set(func(a *crlAuthority) { a.redirect, a.list = "", laterBody })
+		},
+	)
+	s.run(context.Background())
+	record() // a later list is held
+
+	want := []string{"true ", "true ", "false status", "false rollback", "false expired", "true "}
+	if fmt.Sprint(states) != fmt.Sprint(want) {
+		t.Fatalf("the states after each refresh were %q, want %q", states, want)
+	}
+	requireAnswer(t, c, otherDID, true)
+}
+
+// The state is refresherStalled when no refresh has ended for more than 8
+// minutes, two refresh intervals, and for a refresher that was not started.
+func TestCRLRefresher_StateIsRefresherStalledAfterTwoIntervalsWithoutARefresh(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	a := newCRLAuthority(t, discoveryFor(signer))
+	start := time.Now().UTC().Truncate(time.Second)
+	now := start
+	doc := testList(start, revokedDID)
+	doc["nextUpdate"] = start.Add(time.Hour).Format(time.RFC3339)
+	a.setList(signList(t, doc, signer))
+	c := newTestCRLClient(t, a, "", &now)
+	requireState(t, NewCRLRefresher(c), false, CRLReasonRefresherStalled)
+
+	s := newSteppedRefresher(c, 0)
+	s.run(context.Background())
+	requireState(t, s.CRLRefresher, true, "")
+	now = start.Add(5*time.Minute + time.Second)
+	requireState(t, s.CRLRefresher, false, CRLOutcomeExpired)
+	now = start.Add(8 * time.Minute)
+	requireState(t, s.CRLRefresher, false, CRLOutcomeExpired)
+	now = start.Add(8*time.Minute + time.Second)
+	requireState(t, s.CRLRefresher, false, CRLReasonRefresherStalled)
 }
 
 func requireStops(t *testing.T, r *CRLRefresher) {

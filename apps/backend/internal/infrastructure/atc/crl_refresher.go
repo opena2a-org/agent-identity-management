@@ -26,6 +26,22 @@ const (
 
 	// crlRefreshTimeout bounds one refresh.
 	crlRefreshTimeout = 30 * time.Second
+
+	// crlStallAfter is how long after the end of the last refresh, or after
+	// Start while no refresh has ended, State reads the refresher as stalled:
+	// two refresh intervals. A refresher that runs ends a refresh at most
+	// crlRefreshInterval plus crlRefreshTimeout after the one before.
+	crlStallAfter = 2 * crlRefreshInterval
+)
+
+// Reason words of State besides the outcomes of a refresh.
+const (
+	// CRLReasonNoList: no list is held, and no refresh has ended, or the last
+	// one ended with no answer before its deadline (CRLOutcomeFetch).
+	CRLReasonNoList = "noList"
+	// CRLReasonRefresherStalled: no refresh has ended for crlStallAfter, or
+	// the refresher was not started.
+	CRLReasonRefresherStalled = "refresherStalled"
 )
 
 // CRLRefresher refreshes the list of a CachedCRLClient from one goroutine,
@@ -35,7 +51,8 @@ const (
 // list held when that is sooner. After a refresh that fails or whose list is
 // refused, and when the next refresh would start in less than crlHoldDownMin,
 // it starts after a hold-down drawn from crlHoldDownMin to crlHoldDownMax. No
-// request waits for a refresh: IsRevoked reads only the list held.
+// request waits for a refresh: IsRevoked reads only the list held, and State
+// reads the list held and the end and outcome of the last refresh.
 //
 // A line is logged after the first refresh and after each refresh that ends
 // in another state than the one before it. The state is the outcome of a
@@ -51,6 +68,14 @@ type CRLRefresher struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
+
+	// started is when Start was called, and ended when the last refresh
+	// ended, both by the client's clock; outcome is the outcome of the last
+	// refresh, empty after one that held a list or read it again. Guarded by
+	// mu.
+	started time.Time
+	ended   time.Time
+	outcome string
 }
 
 // NewCRLRefresher returns a refresher of client. It refreshes nothing until
@@ -72,6 +97,7 @@ func (r *CRLRefresher) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	r.cancel, r.done = cancel, done
+	r.started = r.client.now()
 	go func() {
 		defer close(done)
 		r.run(ctx)
@@ -121,6 +147,9 @@ func (r *CRLRefresher) run(ctx context.Context) {
 		} else {
 			wait = r.afterHeld(held, now)
 		}
+		r.mu.Lock()
+		r.ended, r.outcome = now, state.outcome
+		r.mu.Unlock()
 		if last == nil || state != *last {
 			r.logState(state, held, err, wait)
 		}
@@ -128,6 +157,37 @@ func (r *CRLRefresher) run(ctx context.Context) {
 		if !r.sleep(ctx, wait) {
 			return
 		}
+	}
+}
+
+// State reports whether the list held is fit to answer from, as IsRevoked
+// reads it, and when it is not, one word for why: refresherStalled when no
+// refresh has ended for crlStallAfter, counted from Start until the first one
+// ends, or when the refresher was not started; otherwise the outcome of the
+// last refresh when it held no new list and that outcome is not fetch, one of
+// status, timeout, parse, shape, signature, rollback and expired; expired
+// when a list is held; and noList when none is. It reads no address.
+func (r *CRLRefresher) State() (bool, string) {
+	now := r.client.now()
+	held := r.client.held.Load()
+	if answerable(held, now) == nil {
+		return true, ""
+	}
+	r.mu.Lock()
+	since, outcome := r.ended, r.outcome
+	if since.IsZero() {
+		since = r.started
+	}
+	r.mu.Unlock()
+	switch {
+	case since.IsZero() || now.Sub(since) > crlStallAfter:
+		return false, CRLReasonRefresherStalled
+	case outcome != "" && outcome != CRLOutcomeFetch:
+		return false, outcome
+	case held != nil:
+		return false, CRLOutcomeExpired
+	default:
+		return false, CRLReasonNoList
 	}
 }
 

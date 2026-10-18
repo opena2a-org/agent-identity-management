@@ -55,9 +55,9 @@ func httpsURL(raw string) (*url.URL, bool) {
 // list of the authority whose discovery document is served at REGISTRY_URL,
 // read from the address ATC_CRL_ENDPOINT names when it is set. It returns a
 // nil refresher when REGISTRY_URL is not set, and the error of
-// revocationListStartupLine. No request the server answers reads the list.
-// The server passes a nil httpClient, and the list client then reads with an
-// HTTP client of its own.
+// revocationListStartupLine. No request the server answers fetches the list:
+// GET /health/ready reads the refresher's State. The server passes a nil
+// httpClient, and the list client then reads with an HTTP client of its own.
 func startRevocationList(registry config.RegistryConfig, httpClient *http.Client) (*infraatc.CRLRefresher, error) {
 	line, err := revocationListStartupLine(registry)
 	if err != nil {
