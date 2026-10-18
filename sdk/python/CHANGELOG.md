@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added: `RevocationUnknownError` for AIM's `503` `atc_revocation_unknown` answer, and `aim-sdk login` names an ATC error code
+
+- `client.secrets.resolve()` raises `aim_sdk.RevocationUnknownError` when AIM answers `503` with a JSON body whose
+  `error` is `atc_revocation_unknown`: AIM could not read the revocation state of the ATC the request presented, so it
+  neither accepted the ATC nor judged it revoked. The class subclasses `VerificationUnavailableError`, so a handler for
+  that class catches it; it is not a `VerificationError`, an `ActionDeniedError` or a `PermissionError`. It carries
+  `code` (`atc_revocation_unknown`), `status` (503), `retry_after` (the answer's `Retry-After` when it is a whole number
+  of seconds of at most nine digits, otherwise `None`), and `revocation_state` and `reason` (the body's
+  `revocationState` and `reason` when each is a letter followed by at most 31 letters, digits, `_` or `-`, otherwise
+  `None`). Its message says that AIM did not decide, when to send the request again, and that a new ATC does not help.
+- Before, against a loopback server giving that answer with `Retry-After: 5`, the client sent the request 4 times,
+  slept 1, 2 and 4 seconds between them, and raised `VerificationError` (`Request failed: 503 Server Error: Service
+  Unavailable for url: ...`). It now sends the request once and does not sleep, with `auto_retry` on or off. A
+  `503` with another JSON body or an HTML body, and a `500` or `502` whose body names `atc_revocation_unknown`, are
+  still sent 4 times with those sleeps and still raise `VerificationError`.
+- `aim-sdk login` takes the body's `error` as the reason code of a `502`, `503` or `504` answer when it is an ATC error
+  code (`atc_`, a lower-case letter, then lower-case letters, digits and underscores, at most 64 characters), after
+  `reasonCode` and `code`. A `503` whose body's `error` is `atc_revocation_unknown`, with `Retry-After: 5`, on the
+  device-code request or on the token poll, now prints `The AIM server at <url> is unavailable: it answered HTTP 503,
+  reason code atc_revocation_unknown.` where it printed `... it answered HTTP 503.`, and still exits 75 and prints `Run
+  the same command again in 5 seconds.` without waiting those seconds. An `error` that is not an ATC error code is
+  still not shown.
+- `docs/sdk/python.md` lists the class under Error Handling.
+- Test: `tests/test_revocation_unknown_error.py`; `tests/test_cli_login_server_unavailable.py` gains two tests.
+
 ### Deprecated — `A2AClient.revoke_attestation` sends no request: the server mounts no route that revokes an A2A skill attestation (#773)
 
 - `A2AClient.revoke_attestation` posted to `POST /api/v1/a2a/attestations/{attestation_id}/revoke`, a route the

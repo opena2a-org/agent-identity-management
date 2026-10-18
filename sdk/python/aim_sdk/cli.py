@@ -379,10 +379,16 @@ def _retry_after_seconds(response):
     return int(raw.strip())
 
 
+# An ATC error code, the `error` member of the answer of a server that
+# verifies ATCs: `atc_` and lower-case letters, digits and underscores.
+_ATC_ERROR_CODE = re.compile(r'atc_[a-z][a-z0-9_]{0,59}')
+
+
 def _machine_code(response):
     """The server's machine code for an answer: the body's `reasonCode` when
-    it is a string, otherwise `code` when it is a string, otherwise None. Read
-    only after the status has set the class of the answer."""
+    it is a string, otherwise `code` when it is a string, otherwise `error`
+    when it is an ATC error code (_ATC_ERROR_CODE), otherwise None. Read only
+    after the status has set the class of the answer."""
     try:
         data = response.json() if response.content else None
     except ValueError:
@@ -392,6 +398,9 @@ def _machine_code(response):
     for member in ('reasonCode', 'code'):
         if isinstance(data.get(member), str):
             return data[member]
+    error = data.get('error')
+    if isinstance(error, str) and _ATC_ERROR_CODE.fullmatch(error):
+        return error
     return None
 
 

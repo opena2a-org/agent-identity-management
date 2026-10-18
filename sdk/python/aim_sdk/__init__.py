@@ -93,6 +93,7 @@ if _TYPE_CHECKING:
         VerificationError,
         ActionDeniedError,
         VerificationUnavailableError,
+        RevocationUnknownError,
         ConfigurationError,
         StaleCredentialsError,
     )
@@ -213,6 +214,7 @@ _EXPORTS = {
         "VerificationError",
         "ActionDeniedError",
         "VerificationUnavailableError",
+        "RevocationUnknownError",
         "ConfigurationError",
         "StaleCredentialsError",
     ),
@@ -382,6 +384,7 @@ __all__ = [
     "VerificationError",
     "ActionDeniedError",
     "VerificationUnavailableError",
+    "RevocationUnknownError",
     "ConfigurationError",
     "StaleCredentialsError",
     # The typed three-state verification decision

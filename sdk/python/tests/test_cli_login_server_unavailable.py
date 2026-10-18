@@ -277,6 +277,46 @@ def test_the_reason_code_is_the_body_reason_code_then_code_and_only_when_it_is_a
     assert "\x1b" not in out
 
 
+# The answer of a server that cannot read the revocation state of an ATC.
+REVOCATION_UNKNOWN = {"error": "atc_revocation_unknown", "message": "the revocation state of this ATC could not be read"}
+
+
+@pytest.mark.parametrize("body,shown", [
+    (REVOCATION_UNKNOWN, "atc_revocation_unknown"),
+    ({"error": "atc_revoked"}, "atc_revoked"),
+    ({**REVOCATION_UNKNOWN, "reasonCode": "store_unavailable"}, "store_unavailable"),
+    ({"error": "ATC_REVOCATION_UNKNOWN"}, None),
+    ({"error": "atc_"}, None),
+    ({"error": "atc_revocation_unknown\x1b[31m"}, None),
+    ({"error": "atc_" + "x" * 61}, None),
+    ({"error": "service_unavailable"}, None),
+], ids=["revocation-unknown", "another-atc-code", "reason-code-first", "upper-case", "prefix-only",
+        "escape", "over-64-characters", "not-an-atc-code"])
+def test_an_atc_error_code_in_the_body_error_is_the_reason_code(aim, monkeypatch, body, shown):
+    aim.polls = [(503, body, {"Retry-After": "5"})]
+    rc, out = _login(aim, monkeypatch)
+    what, next_step = _assert_unavailable(aim, rc, out)
+    assert aim.token_requests == 1
+    assert aim.sleeps == [5], "the wait is printed, never slept"
+    if shown is None:
+        assert what.endswith("it answered HTTP 503.")
+    else:
+        assert what.endswith(f"it answered HTTP 503, reason code {shown}.")
+    assert next_step.endswith("Run the same command again in 5 seconds.")
+    assert "\x1b" not in out
+
+
+def test_an_atc_error_code_on_the_device_code_request_is_the_reason_code(aim, monkeypatch):
+    aim.code = (503, REVOCATION_UNKNOWN, {"Retry-After": "5"})
+    rc, out = _login(aim, monkeypatch)
+    what, next_step = _assert_unavailable(aim, rc, out, before_the_block=True)
+    assert aim.code_requests == 1
+    assert aim.token_requests == 0
+    assert aim.sleeps == []
+    assert what == f"The AIM server at {aim.url} is unavailable: it answered HTTP 503, reason code atc_revocation_unknown."
+    assert next_step.endswith("Run the same command again in 5 seconds.")
+
+
 # --- A 502, 503 or 504 on the device-code request ---------------------------
 
 @pytest.mark.parametrize("status", [502, 503, 504])
