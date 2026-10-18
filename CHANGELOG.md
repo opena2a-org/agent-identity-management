@@ -25,6 +25,33 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `apps/backend/internal/infrastructure/atc/crl_client_test.go`, through a transport that answers without a
   connection.
 
+### Fixed — the quick start's administrator password meets the backend's password rule, and the script stops when the backend refuses it (#788)
+
+- `scripts/quickstart.sh` generated `ADMIN_PASSWORD` with `openssl rand -base64 18`: 24 base64 characters, in which `+`
+  and `/` are the only characters the backend's password rule counts as special. The backend refuses to seed the first
+  administrator from a password without an upper-case letter, a lower-case letter, a digit and a special character: it
+  logs `Failed to seed administrator from ADMIN_PASSWORD:` with the reason, creates no account, and starts anyway. Of
+  2,000 outputs of that `openssl` command, 943 held neither `+` nor `/`. Run 200 times against docker and curl stubs
+  whose backend log held that refusal, the previous script exited 0 each time and printed the `ADMIN_PASSWORD` of its
+  `.env` as the `Login:` line.
+- The script generates the password as `scripts/gen-dev-secrets.sh` does: up to 28 letters and digits from
+  `openssl rand -base64 24`, then `Aa1!`. `scripts/test-quickstart.sh` generates its password the same way.
+- After the backend answers `GET /health`, the script reads its log (`docker compose logs backend`). When the last seed
+  line there (`Seeded administrator`, `ADMIN_PASSWORD not applied` or `Failed to seed administrator from
+  ADMIN_PASSWORD`) is a refusal, the script prints the backend's reason and the next step, prints no credentials, and
+  exits 1, on a first run and on a run over an existing install. For a refused password the step is to change
+  `ADMIN_PASSWORD` in the install's `.env` and run the script again; for another reason it is to correct the cause,
+  restart the backend and run the script again. With no seed line in the log, the script prints the credentials as
+  before.
+- Tests: `apps/backend/cmd/server/quickstart_admin_seed_test.go` runs the script against docker, curl and sleep stubs.
+  It checks the `ADMIN_PASSWORD` the script writes against the backend's password rule, once from an `openssl` stub
+  whose output is all lower-case letters and 24 times with the real `openssl`, and seeds an administrator from the
+  first run's `.env` through `seedAdmin`. It hands the script the lines `seedAdmin` logs, and the line `main` logs for
+  the error `seedAdmin` returns, for a refused password, a missing admin organization, a seeded administrator and one
+  that already exists, and checks the exit status, the reason and step printed, and that no credentials follow a
+  refusal. On the previous script the lower-case case failed, 11 of the 24 real `openssl` passwords failed the rule,
+  and the three refusal cases exited 0.
+
 ### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
 
 - After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"

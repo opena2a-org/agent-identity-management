@@ -104,7 +104,11 @@ else
   redis_pass=$(openssl rand -hex 16)
   jwt_secret=$(openssl rand -hex 32)
   kv_key=$(openssl rand -base64 32)
-  admin_pass=$(openssl rand -base64 18)
+  # ADMIN_PASSWORD seeds the first administrator. The backend refuses a seed
+  # password without an upper-case letter, a lower-case letter, a digit and a
+  # special character, and a random base64 string can lack any of them, so the
+  # Aa1! suffix supplies one of each, as scripts/gen-dev-secrets.sh does.
+  admin_pass="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-28)Aa1!"
 
   # Write .env from variables (restricted permissions). The host ports and the
   # container-name prefix are recorded with the compose file's defaults, so a
@@ -142,6 +146,30 @@ until curl -sf "http://localhost:$backend_port/health" >/dev/null 2>&1; do
   fi
   sleep 2
 done
+
+# --- The first administrator ---
+# The backend runs the ADMIN_PASSWORD seed at each start, before it answers
+# /health. A seed it refuses is logged as "Failed to seed administrator from
+# ADMIN_PASSWORD: <reason>" and the backend starts anyway, so read the outcome
+# from its log. The last seed line there is from the latest start that logged one.
+seed_line=$(docker compose -f docker-compose.quickstart.yml logs backend 2>/dev/null \
+  | grep -E 'Seeded administrator |ADMIN_PASSWORD not applied|Failed to seed administrator from ADMIN_PASSWORD: ' \
+  | tail -n 1) || true
+case "$seed_line" in
+  *'Failed to seed administrator from ADMIN_PASSWORD: '*)
+    printf '\033[1;31m[AIM]\033[0m %s\n' "The backend did not create the administrator from ADMIN_EMAIL and ADMIN_PASSWORD in ./$INSTALL_DIR/.env:" >&2
+    printf '        %s\n' "${seed_line#*Failed to seed administrator from ADMIN_PASSWORD: }" >&2
+    case "$seed_line" in
+      *'ADMIN_PASSWORD was not used to seed '*)
+        printf '      %s\n' "Change ADMIN_PASSWORD in ./$INSTALL_DIR/.env so the backend accepts it, then run this script again." >&2 ;;
+      *)
+        printf '      %s\n' "Correct the cause above, restart the backend with" \
+          "  cd $INSTALL_DIR && docker compose -f docker-compose.quickstart.yml restart backend" \
+          'and run this script again.' >&2 ;;
+    esac
+    printf '      %s\n' "Backend log: cd $INSTALL_DIR && docker compose -f docker-compose.quickstart.yml logs backend" >&2
+    exit 1 ;;
+esac
 
 # --- Done ---
 printf '\n'
