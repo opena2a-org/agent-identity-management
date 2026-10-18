@@ -111,21 +111,25 @@ aim-sdk login --url http://localhost:8080
 
 `aim-sdk login` prints a code; approve it on your dashboard's `/device` page. The SDK saves its credentials to `~/.aim/`.
 
-**Alternative: download a pre-configured SDK.** The dashboard can also give you the SDK as a ZIP with your personal credentials embedded, so you skip `aim-sdk login`:
+That is how the SDK in this repository signs in. The release on PyPI, aim-sdk 2.0.3, has no device sign-in: with it, `aim-sdk login --url http://localhost:8080` prints `Opening browser for authentication...` and an `http://localhost:8080/auth/login?response_type=code&...` address, then waits, and the API at that address registers no `/auth/login` route. Until this repository's SDK is published to PyPI ([#789](https://github.com/opena2a-org/agent-identity-management/issues/789)), install the SDK from your dashboard on a self-hosted AIM.
 
-1. **Login** to AIM dashboard
-2. **Navigate** to Settings → SDK Download
-3. **Click** "Download SDK" (includes pre-configured credentials)
-4. **Extract** the downloaded ZIP file
+### Install the SDK from your dashboard
+
+The dashboard gives you the SDK from the `sdk/python` tree its server image was built with, as a ZIP with your sign-in embedded, so you skip `aim-sdk login`:
+
+1. **Sign in** to the dashboard (`http://localhost:3000` on a quickstart stack)
+2. **Open** Developers, then SDK & docs (`/dashboard/sdk`)
+3. **Click** "Download Python SDK"
+4. **Unzip** the archive and install it:
 
 ```bash
-# Extract SDK
-unzip aim-sdk-python.zip
+cd ~/projects  # or any folder outside the repository clone
+unzip ~/Downloads/aim-sdk-python-v*.zip
 cd aim-sdk-python
-
-# Install dependencies
-pip install -r requirements.txt
+pip install -e ".[rich]"
 ```
+
+The sign-in is `aim-sdk-python/.aim/sdk_credentials.json` inside the archive; with the editable install, the SDK reads it from any directory.
 
 **Verify Installation**:
 ```bash
