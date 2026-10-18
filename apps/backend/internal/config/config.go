@@ -200,10 +200,15 @@ type RegistryConfig struct {
 	BridgeEnabled bool
 	// ATCIssuerURI is ATC_ISSUER_URI, https://aim.opena2a.org when it is unset.
 	ATCIssuerURI string
-	// ATCCRLEndpoint is ATC_CRL_ENDPOINT,
-	// https://registry.opena2a.org/api/v1/crl/latest when it is unset. The ATC
-	// verifier does not read it: an ATC the server verifies is checked against
-	// the status of its agent in the server's store.
+	// URL is REGISTRY_URL, the base URL of the discovery document of the
+	// authority whose signed revocation list the server holds, and empty when
+	// it is unset: the server then reads no list.
+	URL string
+	// ATCCRLEndpoint is ATC_CRL_ENDPOINT, empty when it is unset. When it and
+	// REGISTRY_URL are set, the list is read from it instead of the address
+	// the discovery document names. The ATC verifier does not read the list:
+	// an ATC the server verifies is checked against the status of its agent in
+	// the server's store.
 	ATCCRLEndpoint string
 }
 
@@ -389,7 +394,8 @@ func Load() (*Config, error) {
 			BridgeURL:      getEnv("REGISTRY_BRIDGE_URL", "https://api.oa2a.org"),
 			BridgeEnabled:  getEnvFlag("REGISTRY_BRIDGE_ENABLED", "true"),
 			ATCIssuerURI:   getEnv("ATC_ISSUER_URI", "https://aim.opena2a.org"),
-			ATCCRLEndpoint: getEnv("ATC_CRL_ENDPOINT", "https://registry.opena2a.org/api/v1/crl/latest"),
+			URL:            getEnv("REGISTRY_URL", ""),
+			ATCCRLEndpoint: getEnv("ATC_CRL_ENDPOINT", ""),
 		},
 		Secrets: SecretsBackendsConfig{
 			Vault: VaultConfig{

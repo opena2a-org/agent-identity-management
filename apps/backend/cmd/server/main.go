@@ -344,6 +344,15 @@ func main() {
 		defer close(stopRegistryBridge)
 	}
 
+	// Hold the signed revocation list of the authority whose discovery
+	// document is served at REGISTRY_URL, refreshed in the background.
+	// Nothing is read when REGISTRY_URL is unset, and no request reads the list.
+	revocationList, err := startRevocationList(cfg.Registry, nil)
+	if err != nil {
+		log.Fatal("Revocation list: ", err)
+	}
+	defer revocationList.Stop()
+
 	// Graceful shutdown
 	go func() {
 		if err := app.Listen(apiAddr, apiListenConfig(cfg.Server.Host)); err != nil {
