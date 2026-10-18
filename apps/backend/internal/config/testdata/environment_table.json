@@ -1647,39 +1647,74 @@
       "line": ""
     },
     {
+      "variable": "REGISTRY_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Revocation list: not read (REGISTRY_URL is not set)"
+    },
+    {
+      "variable": "REGISTRY_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Revocation list: not read (REGISTRY_URL is not set)"
+    },
+    {
+      "variable": "REGISTRY_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "error: REGISTRY_URL must be an https URL with a host"
+    },
+    {
+      "variable": "REGISTRY_URL",
+      "input": "valid",
+      "value": "https://registry.example.com",
+      "setting": "\"https://registry.example.com\"",
+      "line": "Revocation list: read in the background from the authority at https://registry.example.com"
+    },
+    {
+      "variable": "REGISTRY_URL",
+      "input": "invalid",
+      "value": "not a url",
+      "setting": "\"not a url\"",
+      "line": "error: REGISTRY_URL must be an https URL with a host"
+    },
+    {
       "variable": "ATC_CRL_ENDPOINT",
       "input": "unset",
       "value": null,
-      "setting": "\"https://registry.opena2a.org/api/v1/crl/latest\"",
-      "line": ""
+      "setting": "\"\"",
+      "line": "Revocation list: not read (REGISTRY_URL is not set)"
     },
     {
       "variable": "ATC_CRL_ENDPOINT",
       "input": "empty",
       "value": "",
-      "setting": "\"https://registry.opena2a.org/api/v1/crl/latest\"",
-      "line": ""
+      "setting": "\"\"",
+      "line": "Revocation list: not read (REGISTRY_URL is not set)"
     },
     {
       "variable": "ATC_CRL_ENDPOINT",
       "input": "whitespace",
       "value": "   ",
       "setting": "\"   \"",
-      "line": ""
+      "line": "Revocation list: not read (REGISTRY_URL is not set; ATC_CRL_ENDPOINT is read only with it)"
     },
     {
       "variable": "ATC_CRL_ENDPOINT",
       "input": "valid",
       "value": "https://registry.example.com/api/v1/crl/latest",
       "setting": "\"https://registry.example.com/api/v1/crl/latest\"",
-      "line": ""
+      "line": "Revocation list: not read (REGISTRY_URL is not set; ATC_CRL_ENDPOINT is read only with it)"
     },
     {
       "variable": "ATC_CRL_ENDPOINT",
       "input": "invalid",
       "value": "not a url",
       "setting": "\"not a url\"",
-      "line": ""
+      "line": "Revocation list: not read (REGISTRY_URL is not set; ATC_CRL_ENDPOINT is read only with it)"
     },
     {
       "variable": "VAULT_ADDR",

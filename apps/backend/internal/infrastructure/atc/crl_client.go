@@ -198,18 +198,28 @@ func refuseRedirectAwayFromHTTPS(req *http.Request, via []*http.Request) error {
 // never an answer of not revoked.
 func (c *CachedCRLClient) IsRevoked(agentDID string) (bool, error) {
 	list := c.held.Load()
-	if list == nil {
-		return false, fmt.Errorf("%w: no list has passed its checks", ErrCRLStateUnknown)
-	}
-	now := c.now()
-	if now.Sub(list.readAt) > crlMaxStaleAge {
-		return false, fmt.Errorf("%w: the list held was last read at %s", ErrCRLStateUnknown, list.readAt.UTC().Format(time.RFC3339))
-	}
-	if now.After(list.nextUpdate.Add(crlClockSkew)) {
-		return false, fmt.Errorf("%w: the nextUpdate of the list held, %s, has passed", ErrCRLStateUnknown, list.nextUpdate.UTC().Format(time.RFC3339))
+	if err := answerable(list, c.now()); err != nil {
+		return false, err
 	}
 	_, revoked := list.revoked[agentDID]
 	return revoked, nil
+}
+
+// answerable returns nil when list is fit to answer from at now. Otherwise it
+// returns an error that wraps ErrCRLStateUnknown: when list is nil, when it
+// was last read more than crlMaxStaleAge before now, or when its nextUpdate
+// passed more than crlClockSkew before now.
+func answerable(list *crlList, now time.Time) error {
+	if list == nil {
+		return fmt.Errorf("%w: no list has passed its checks", ErrCRLStateUnknown)
+	}
+	if now.Sub(list.readAt) > crlMaxStaleAge {
+		return fmt.Errorf("%w: the list held was last read at %s", ErrCRLStateUnknown, list.readAt.UTC().Format(time.RFC3339))
+	}
+	if now.After(list.nextUpdate.Add(crlClockSkew)) {
+		return fmt.Errorf("%w: the nextUpdate of the list held, %s, has passed", ErrCRLStateUnknown, list.nextUpdate.UTC().Format(time.RFC3339))
+	}
+	return nil
 }
 
 // Refresh reads the discovery document and the list, and holds the list when

@@ -192,6 +192,12 @@ func startupLine(t *testing.T, name string, cfg *config.Config) string {
 			return "error: " + forwardErr.Error()
 		}
 		return line
+	case "REGISTRY_URL", "ATC_CRL_ENDPOINT":
+		line, err := revocationListStartupLine(cfg.Registry)
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		return line
 	}
 	return ""
 }

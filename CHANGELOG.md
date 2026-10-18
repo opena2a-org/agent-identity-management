@@ -11,6 +11,43 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: with `REGISTRY_URL` set, the server reads the revocation list an authority's discovery document names, and `ATC_CRL_ENDPOINT` has no default
+
+- `REGISTRY_URL`, unset by default, is the base URL of an authority's discovery document. When it is set, the server
+  starts a refresher that reads the document at `/.well-known/atp`, or at `/.well-known/opena2a` when the first answers
+  404, then the revocation list at the document's `endpoints.revocations`, and holds the list when it passes the
+  checks of the list client: an Ed25519 signature by a key the document lists, its `entryCount` and its times. The
+  first read starts with the server. The next starts 4 minutes after a read that holds a list, or 60 s before the
+  `nextUpdate` of the list held when that is sooner. After a read that fails or whose list is refused, and when the
+  next read would start in less than 1 s, it starts after a wait drawn at random from 1 s to 30 s. No request the
+  server answers reads the list: the ATC verifier reads revocation from the agent store, as before.
+- `ATC_CRL_ENDPOINT` has no default. Its default was `https://registry.opena2a.org/api/v1/crl/latest`, which is not a
+  route of the Registry route table pinned in `apps/backend/testdata/registry-routes.txt`; that table carries
+  `GET /api/v1/trust/revocations`, `GET /.well-known/atp` and `GET /.well-known/opena2a`. With `REGISTRY_URL` set, the
+  list is read from a set `ATC_CRL_ENDPOINT` instead of the address the discovery document names, and its signature
+  is still checked under the document's keys. Without `REGISTRY_URL`, `ATC_CRL_ENDPOINT` is not read.
+- The server logs one startup line for the list. With `REGISTRY_URL` unset it is
+  `Revocation list: not read (REGISTRY_URL is not set)`, or
+  `Revocation list: not read (REGISTRY_URL is not set; ATC_CRL_ENDPOINT is read only with it)` when
+  `ATC_CRL_ENDPOINT` is set. With `REGISTRY_URL` set it is
+  `Revocation list: read in the background from the authority at https://registry.example.com`, or, with
+  `ATC_CRL_ENDPOINT` set too,
+  `Revocation list: read in the background from https://mirror.example.com/revocations, with the keys of the authority at https://registry.example.com`.
+  The line names the scheme and host of `REGISTRY_URL` and the scheme, host and path of `ATC_CRL_ENDPOINT`, and no
+  user name and no query. When `REGISTRY_URL` is set and it or a set `ATC_CRL_ENDPOINT` is not an `https` URL with a
+  host, starting the list returns `REGISTRY_URL must be an https URL with a host`, or the same words for
+  `ATC_CRL_ENDPOINT`, and the server passes the error to `log.Fatal` after the words `Revocation list: `.
+- The refresher logs a line after its first read and after each read that ends in another state than the one before
+  it: `Revocation list: holds a list, thisUpdate <time>, nextUpdate <time>; next refresh in <wait>`, or
+  `Revocation list: refresh failed (<outcome>): <cause>; <held>; next refresh in <wait>`, where the outcome is
+  `fetch`, `shape`, `signature` or `time`, and `<held>` is `the list held is still answered from` or
+  `no list fit to answer from is held`.
+- `internal/config` reads `REGISTRY_URL`. Its environment table gains five `REGISTRY_URL` rows, and its
+  `ATC_CRL_ENDPOINT` rows record an empty setting when the variable is unset or empty, and the startup line above.
+- Tests: `apps/backend/internal/infrastructure/atc/crl_refresher_test.go` and
+  `apps/backend/cmd/server/revocation_list_test.go`, against TLS stubs of an authority listening on 127.0.0.1, and
+  the environment table tests of `apps/backend/internal/config` and `apps/backend/cmd/server`.
+
 ### Security: an ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with `Retry-After`
 
 - The ATC verifier checks revocation, step 8 of `docs/specs/atc-verification-v1.md`, against the status of the agent
