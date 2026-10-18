@@ -296,6 +296,10 @@ var admittedStatusReads = map[string]struct {
 		1, "not an authentication: the caller is authenticated before the route, the chain's agents are " +
 			"read in the caller's organization, and an agent whose status would refuse its own sign-in " +
 			"fails the delegation that names it"},
+	"infrastructure/atc/agent_status_revocation.go#*AgentStatusRevocation.AgentRevoked": {
+		1, "the ATC verifier's revocation step: RealATCVerifier.Verify reads it after the issuer's Ed25519 " +
+			"signature, and the ML-DSA one when present, verifies, or for a token it cached after they did; " +
+			"an agent that is not stored, or whose status would refuse its own sign-in, revokes the ATC"},
 }
 
 func TestAgentStatusReadCensus(t *testing.T) {

@@ -48,6 +48,11 @@ var (
 	ErrResolveNonceAlreadyUsed   = errors.New("nonce already used")
 )
 
+// ErrResolveATCRevocationUnknown means the revocation state of the ATC in the
+// request body could not be read. Nothing was resolved; the request can be
+// sent again (atcdomain.RevocationUnknownRetryAfter).
+var ErrResolveATCRevocationUnknown = errors.New("ATC revocation state unknown")
+
 // ErrCredentialBlobTooLarge refuses a credential blob over MaxCredentialBlobSize.
 var ErrCredentialBlobTooLarge = errors.New("credential blob exceeds maximum size")
 
@@ -197,24 +202,19 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 			return nil, fmt.Errorf("ATC agent ID %s does not match requesting agent %s", atcClaims.AgentID, agentID)
 		}
 	} else if req.ATCID != "" {
-		// Legacy path: verify ATC token from request body
+		// Legacy path: verify ATC token from request body. Verify reads its
+		// revocation state too, once.
 		claims, err := s.atcVerifier.Verify(req.ATCID)
 		if err != nil {
 			denyReason = "ATC verification failed: " + err.Error()
+			var atcErr *atcdomain.ATCError
+			if errors.As(err, &atcErr) && atcErr.Code == atcdomain.ErrCodeRevocationUnknown {
+				return nil, fmt.Errorf("%w: %w", ErrResolveATCRevocationUnknown, err)
+			}
 			return nil, fmt.Errorf("ATC verification failed: %w", err)
 		}
 		atcClaims = claims
 		atcID = claims.ATCID
-
-		revoked, err := s.atcVerifier.IsRevoked(claims.ATCID)
-		if err != nil {
-			denyReason = "ATC revocation check failed"
-			return nil, fmt.Errorf("ATC revocation check failed: %w", err)
-		}
-		if revoked {
-			denyReason = "ATC has been revoked"
-			return nil, fmt.Errorf("ATC %s has been revoked", claims.ATCID)
-		}
 
 		if claims.AgentID != agentID {
 			denyReason = "ATC agent ID mismatch"

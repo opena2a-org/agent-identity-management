@@ -200,8 +200,10 @@ type RegistryConfig struct {
 	BridgeEnabled bool
 	// ATCIssuerURI is ATC_ISSUER_URI, https://aim.opena2a.org when it is unset.
 	ATCIssuerURI string
-	// ATCCRLEndpoint is ATC_CRL_ENDPOINT, the Registry's latest CRL when it is
-	// unset.
+	// ATCCRLEndpoint is ATC_CRL_ENDPOINT,
+	// https://registry.opena2a.org/api/v1/crl/latest when it is unset. The ATC
+	// verifier does not read it: an ATC the server verifies is checked against
+	// the status of its agent in the server's store.
 	ATCCRLEndpoint string
 }
 

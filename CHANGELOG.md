@@ -11,6 +11,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security: an ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with `Retry-After`
+
+- The ATC verifier checks revocation, step 8 of `docs/specs/atc-verification-v1.md`, against the status of the agent
+  the ATC names, read from the server's store once per verification, a token the verifier has cached included, under
+  a 2 second deadline. It verifies the `Authorization: ATC` header on the `/api/v1/agents` routes and
+  `POST /api/v1/secrets/resolve`, and an `atcId` in that route's body. An ATC is revoked when no agent has its
+  `agentId`, or when the agent's status is not `verified` or `pending`: the statuses the signature, API-key and
+  service-token authentication refuses. A revoked header ATC is answered `401` and `atc_revoked`; a revoked body
+  `atcId` is answered the route's `403` refusal, and its secrets audit entry names `atc_revoked`.
+- On the previous code the verifier checked revocation against a list fetched from `ATC_CRL_ENDPOINT`, and counted a
+  failed first fetch as not revoked. With that endpoint set to an address where nothing listens, the list client's
+  `IsRevoked` returned `false` with no error, and the verifier the server builds accepted an ATC without reading
+  the state of the agent it names.
+- When the status read fails or has not answered by its deadline, the answer is `503` with `Retry-After: 5` and
+  `{"error":"atc_revocation_unknown","message":"the revocation state of this ATC could not be read"}`, for the header
+  and for the body `atcId`. For the body `atcId`, the secrets audit entry is a denial whose reason names
+  `atc_revocation_unknown`. The verifier writes the cause to the server log.
+- The server builds no revocation list client from `ATC_CRL_ENDPOINT`, so the variable has no effect, and the start
+  check that stopped the server on a value that is not an `https` URL is removed with it.
+- Tests: `apps/backend/internal/infrastructure/atc/revocation_test.go`,
+  `apps/backend/internal/interfaces/http/middleware/atc_auth_revocation_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/secrets_resolve_atc_revocation_test.go`,
+  `apps/backend/internal/application/secrets_resolve_atc_revocation_test.go`,
+  `apps/backend/internal/infrastructure/repository/agent_status_read_test.go`.
+
 ### Fixed: the MCP server setup guide and the register-agent dialog's verification command name the API the dashboard signs in to
 
 - The setup guide on the Integration tab of an MCP server's page wrote its cURL commands for an address of its own:

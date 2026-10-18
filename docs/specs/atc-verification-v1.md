@@ -23,11 +23,11 @@ This specification defines:
 
 | Goal | Rationale |
 |------|-----------|
-| Local verification | CR-007: Registry never in hot path. No network call during verification. |
+| Local verification | CR-007: Registry never in hot path. No call to the Registry during verification. |
 | Dual signatures | Post-quantum readiness. Ed25519 for speed, ML-DSA for quantum resistance. |
 | Short-lived | ATCs expire in minutes, not days. Reduces revocation window. |
 | Capability-scoped | ATC declares what the agent can do. Service checks before acting. |
-| Fail closed | Invalid, expired, or revoked ATC = 401. No fallback. |
+| Fail closed | Invalid, expired, or revoked ATC = 401. A revocation state that cannot be read = 503, never accepted. No fallback. |
 
 ### 1.2 Terminology
 
@@ -136,7 +136,7 @@ Discovery priority:
 
 ## 4. Verification Algorithm
 
-A service receiving an `Authorization: ATC` header MUST execute the following steps in order. If any step fails, return HTTP 401 with the corresponding error code.
+A service receiving an `Authorization: ATC` header MUST execute the following steps in order. If any step fails, return the HTTP status and error code Section 4.2 gives for it.
 
 ### 4.1 Steps
 
@@ -149,7 +149,8 @@ A service receiving an `Authorization: ATC` header MUST execute the following st
 6. ED25519:   Verify ed25519Signature over canonical fields 1-7 using issuerPublicKey → 401 (atc_signature_invalid).
 7. ML-DSA:    If mldsaSignature present: verify using mldsaPublicKey and declared pqcAlgorithm → 401 (atc_pqc_signature_invalid).
               If not present: proceed (ML-DSA is optional in v1).
-8. CRL:       Check atcId against cached CRL → 401 (atc_revoked).
+8. REVOCATION: Check the ATC's revocation state (Section 5; the AIM backend, Section 9.4) → 401 (atc_revoked).
+              If that state cannot be read → 503 (atc_revocation_unknown) with Retry-After. Never accept.
 9. CHAIN:     If delegationChain present: verify each link's signature → 401 (atc_chain_invalid).
 10. CAPABILITY: Check requested operation is in capabilities list → 403 (atc_insufficient_scope).
 ```
@@ -173,7 +174,8 @@ All ATC verification errors return a JSON body:
 | `atc_untrusted_issuer` | 401 | Issuer not in trusted list |
 | `atc_signature_invalid` | 401 | Ed25519 signature verification failed |
 | `atc_pqc_signature_invalid` | 401 | ML-DSA signature verification failed |
-| `atc_revoked` | 401 | ATC ID found on CRL |
+| `atc_revoked` | 401 | ATC is revoked (Section 5; the AIM backend, Section 9.4) |
+| `atc_revocation_unknown` | 503 | The revocation state could not be read, so the ATC is not accepted. The response carries `Retry-After` |
 | `atc_chain_invalid` | 401 | Delegation chain verification failed |
 | `atc_insufficient_scope` | 403 | ATC lacks required capability |
 
@@ -319,7 +321,7 @@ authentication middleware.
 |-----------|--------|
 | ATC verification (Ed25519 only) | < 100 microseconds |
 | ATC verification (Ed25519 + ML-DSA-65) | < 5 milliseconds |
-| CRL lookup | < 1 microsecond (in-memory map) |
+| Revocation read (AIM backend, Section 9.4) | one store read per verification, ended after 2 seconds |
 | Full resolve with ATC | < 10 milliseconds p99 |
 
 ### 9.3 Go Implementation Reference
@@ -328,7 +330,11 @@ authentication middleware.
 // ATCVerifier interface (already exists in domain/atc/verifier.go)
 type ATCVerifier interface {
     Verify(rawToken string) (*ATCClaims, error)
-    IsRevoked(atcID string) (bool, error)
+}
+
+// RevocationSource is read once for each Verify call (domain/atc/verifier.go)
+type RevocationSource interface {
+    AgentRevoked(ctx context.Context, agentID uuid.UUID) (bool, error)
 }
 
 // New: ATCIssuer for creating real ATCs
@@ -336,6 +342,20 @@ type ATCIssuer interface {
     Issue(agentID uuid.UUID, capabilities []string, ttl time.Duration) ([]byte, error)
 }
 ```
+
+### 9.4 Revocation in the AIM backend
+
+The AIM backend reads step 8 from its own store, not from the list in Section 5, and `ATC_CRL_ENDPOINT` has no
+effect on it:
+
+- Each verification reads the status of the agent the ATC's `agentId` names once, a token the verifier has cached
+  included, and ends the read after 2 seconds.
+- The ATC is revoked (`401`, `atc_revoked`) when no agent has that id, or when the agent's status is not `verified`
+  or `pending`. The backend's signature, API-key and service-token authentication refuses the same statuses.
+- When that read fails or has not answered after 2 seconds, the answer is `503` with `Retry-After: 5` and
+  `{"error":"atc_revocation_unknown","message":"the revocation state of this ATC could not be read"}`, both for an
+  `Authorization: ATC` header and for an `atcId` in the body of `POST /api/v1/secrets/resolve`. In the second case
+  the secrets audit entry is a denial whose reason names `atc_revocation_unknown`.
 
 ---
 

@@ -35,7 +35,7 @@ func newSeparatedKeys(t *testing.T) *aimcrypto.SigningKeyRing {
 // serverVerifier builds the ATC verifier from the ring exactly as cmd/server/main.go wires it.
 func serverVerifier(t *testing.T, ring *aimcrypto.SigningKeyRing, retired ...ed25519.PublicKey) *RealATCVerifier {
 	t.Helper()
-	verifier, err := NewServerATCVerifier(separationIssuerURI, ring.Key(aimcrypto.PurposeATCIssuer).PrivateKey(), nil, retired...)
+	verifier, err := NewServerATCVerifier(separationIssuerURI, ring.Key(aimcrypto.PurposeATCIssuer).PrivateKey(), notRevoked(), retired...)
 	require.NoError(t, err)
 	return verifier
 }

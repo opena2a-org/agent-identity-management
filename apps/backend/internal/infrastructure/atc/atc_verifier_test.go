@@ -62,7 +62,7 @@ func TestRealATCVerifier_VerifyValidATC(t *testing.T) {
 
 	verifier := NewRealATCVerifier([]atcdomain.TrustedIssuer{
 		{URI: issuerURI, PublicKey: []byte(pub)},
-	}, nil) // no CRL for this test
+	}, notRevoked())
 
 	token := issueTestATC(t, priv, agentID, issuerURI, []string{"secrets:resolve"}, 5*time.Minute)
 
@@ -241,7 +241,7 @@ func TestRealATCVerifier_CachesVerifiedClaims(t *testing.T) {
 
 	verifier := NewRealATCVerifier([]atcdomain.TrustedIssuer{
 		{URI: issuerURI, PublicKey: []byte(pub)},
-	}, nil)
+	}, notRevoked())
 
 	token := issueTestATC(t, priv, uuid.New(), issuerURI, []string{"secrets:resolve"}, 5*time.Minute)
 

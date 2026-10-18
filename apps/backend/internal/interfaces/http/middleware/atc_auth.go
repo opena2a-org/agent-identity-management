@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -28,6 +30,8 @@ const (
 // Emits response headers:
 //   - X-ATC-Supported: true
 //   - X-ATC-Version: 1.0
+//   - Retry-After, on the 503 answer atc_revocation_unknown: the ATC's
+//     revocation state could not be read
 func ATCAuthMiddleware(verifier atcdomain.ATCVerifier) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		// Always signal ATC support (spec v1 Section 3.2)
@@ -57,7 +61,8 @@ func ATCAuthMiddleware(verifier atcdomain.ATCVerifier) fiber.Handler {
 			})
 		}
 
-		// Verify the ATC
+		// Verify the ATC. Verify also reads its revocation state (spec v1
+		// Step 8), once for this request.
 		claims, err := verifier.Verify(rawToken)
 		if err != nil {
 			status := fiber.StatusUnauthorized
@@ -67,29 +72,18 @@ func ATCAuthMiddleware(verifier atcdomain.ATCVerifier) fiber.Handler {
 			if atcErr, ok := err.(*atcdomain.ATCError); ok {
 				errCode = atcErr.Code
 				errMsg = atcErr.Message
-				if atcErr.Code == atcdomain.ErrCodeInsufficientScope {
+				switch atcErr.Code {
+				case atcdomain.ErrCodeInsufficientScope:
 					status = fiber.StatusForbidden
+				case atcdomain.ErrCodeRevocationUnknown:
+					status = fiber.StatusServiceUnavailable
+					c.Set(fiber.HeaderRetryAfter, strconv.Itoa(int(atcdomain.RevocationUnknownRetryAfter/time.Second)))
 				}
 			}
 
 			return c.Status(status).JSON(fiber.Map{
 				"error":   errCode,
 				"message": errMsg,
-			})
-		}
-
-		// Check revocation (spec v1 Step 8)
-		revoked, err := verifier.IsRevoked(claims.ATCID)
-		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":   atcdomain.ErrCodeRevoked,
-				"message": "CRL check failed: " + err.Error(),
-			})
-		}
-		if revoked {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":   atcdomain.ErrCodeRevoked,
-				"message": "ATC has been revoked",
 			})
 		}
 

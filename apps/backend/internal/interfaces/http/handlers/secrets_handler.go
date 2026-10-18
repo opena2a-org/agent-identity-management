@@ -98,7 +98,8 @@ type rotateCredentialRequest struct {
 // On both routes the credential is encrypted to the agent's registered key,
 // agentPublicKey must be that key, and a signed request is answered once.
 // When the single-use check cannot run the answer is 503 and nothing is
-// resolved.
+// resolved. When the revocation state of an ATC sent in the body cannot be
+// read the answer is 503 atc_revocation_unknown with Retry-After.
 func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 	agentIDValue := c.Locals("agent_id")
 	if agentIDValue == nil {
@@ -146,6 +147,16 @@ func (h *SecretsHandler) ResolveCredential(c fiber.Ctx) error {
 		if errors.Is(err, application.ErrSecretsNonceAdmissionUnavailable) {
 			log.Printf("secrets resolve refused: nonce check unavailable (error_class=%s)", freshnessErrorClass(err))
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "Nonce check unavailable; retry the request with a new nonce"})
+		}
+		// The body ATC's revocation state could not be read: the answer the
+		// ATC middleware gives a header ATC in the same case, as stated lines.
+		if errors.Is(err, application.ErrResolveATCRevocationUnknown) {
+			log.Printf("secrets resolve refused for agent %s: %v", agentID, err)
+			c.Set(fiber.HeaderRetryAfter, strconv.Itoa(int(atcdomain.RevocationUnknownRetryAfter/time.Second)))
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"error":   atcdomain.ErrCodeRevocationUnknown,
+				"message": atcdomain.RevocationUnknownMessage,
+			})
 		}
 		log.Printf("secrets resolve refused for agent %s: %v", agentID, err)
 		refusal := resolveRefusalLine(err)
