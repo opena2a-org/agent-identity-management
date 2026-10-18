@@ -38,7 +38,35 @@ describe("SDK_TABS", () => {
     expect(java.install("")).toContain("git clone");
     expect(java.note).toContain("AIM_REFRESH_TOKEN");
     expect(java.note).toContain("~/.aim/sdk_credentials.json");
-    expect(java.note).toContain("Download the Java SDK from the SDK page");
+  });
+
+  it("links the Python tab to the hosted quick start and registers the agent with the README's capability", () => {
+    const python = SDK_TABS.find((t) => t.key === "python")!;
+    expect(python.docsHref).toBe("https://opena2a.org/docs/aim/quick-start");
+    expect(python.docsLabel).toBe("Quick start");
+    expect(python.code("")).toContain('agent = secure("my-first-agent", capabilities=["db:read"])');
+  });
+
+  it("says where the TypeScript client's API key comes from and links the TypeScript SDK reference", () => {
+    const ts = SDK_TABS.find((t) => t.key === "typescript")!;
+    expect(ts.docsHref).toMatch(/^https:\/\/github\.com\/opena2a-org\/agent-identity-management\/tree\/main\/sdk\/typescript/);
+    expect(ts.docsLabel).toBe("TypeScript SDK reference");
+    expect(ts.note).toContain("AIM_API_KEY");
+    expect(ts.note).toContain("X-API-Key");
+    expect(ts.note).toContain("/dashboard/credentials");
+  });
+
+  it("sends no tab to the self-hosted SDK quickstart tutorial", () => {
+    for (const t of SDK_TABS) {
+      expect(t.docsHref, t.key).not.toContain("sdk-quickstart");
+    }
+  });
+
+  it("points the Java tab at the SDK page for the credentials file without calling the download the Java SDK", () => {
+    const java = SDK_TABS.find((t) => t.key === "java")!;
+    expect(java.note).not.toContain("Download the Java SDK");
+    expect(java.note).toContain("Developers, then SDK & docs (/dashboard/sdk)");
+    expect(java.note).toContain(".aim/sdk_credentials.json");
   });
 
   it("never leaks an unfilled template into a rendered command", () => {
