@@ -67,6 +67,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/interfaces/http/handlers/atc_issuance_handler_test.go` (the `409` body for an agent revoked
   before the request and for one revoked while the Registry issues).
 
+### Added: `/metrics` carries `aim_atc_revocation_list_age_seconds` and `aim_atc_revocation_list_entries`, the age and the entries of the revocation list the server holds with `REGISTRY_URL` set
+
+- With `REGISTRY_URL` set, `/metrics` carries two gauges of the list the refresher holds.
+  `aim_atc_revocation_list_age_seconds` is the seconds since that list was last read: by the refresh that held it, or
+  by a later refresh answered `304` to its ETag. `aim_atc_revocation_list_entries` is the number of entries in its
+  `revocations` array, where an `agentDid` the list names twice counts twice. Neither gauge has a sample while no list
+  is held, and without `REGISTRY_URL` `/metrics` carries no `aim_atc_revocation_` series. A scrape reads the list held
+  and the server's clock, and sends no request to the authority.
+- Against a TLS stub of an authority listening on 127.0.0.1, the age read 0 after the refresh that held a list, 90
+  when the clock had moved 90 s with no refresh, 0 after a refresh answered `304` to the list's ETag, and 301 after a
+  refresh, 301 s after that read, that the stub answered `503`; the list held was then no longer answered from. The
+  entries read 3 for a list of three entries that names one `agentDid` twice, and 1 once a list of one entry was held.
+- On the previous code, with a list held, the metrics listener's exposition carried no `aim_atc_revocation_` series.
+- The two gauges pass promlint, the checks `promtool check metrics` runs.
+- Tests: `apps/backend/internal/infrastructure/atc/crl_metrics_test.go`, against TLS stubs of an authority listening
+  on 127.0.0.1, and `apps/backend/cmd/server/revocation_list_metrics_test.go`, which scrapes the metrics listener's
+  app while the refresher of a TLS stub of an authority listening on 127.0.0.1 holds a list.
+
 ### Changed: the revocation list refresher reads the discovery document with `If-None-Match`, and reads the list in full when the document's keys change
 
 - With `REGISTRY_URL` set, a request for the discovery document carries `If-None-Match` with the ETag of the last

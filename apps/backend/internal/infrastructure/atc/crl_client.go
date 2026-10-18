@@ -175,6 +175,7 @@ var _ atcdomain.CRLClient = (*CachedCRLClient)(nil)
 // read.
 type crlList struct {
 	revoked    map[string]struct{}
+	entries    int // the entries of revocations, an agentDid named twice counted twice
 	thisUpdate time.Time
 	nextUpdate time.Time
 	readAt     time.Time
@@ -518,7 +519,7 @@ func checkCRL(body []byte, keys map[string]crlKey, now time.Time) (*crlList, err
 		return nil, refreshFailure(CRLOutcomeExpired, fmt.Errorf("nextUpdate %s passed more than %s ago",
 			doc.nextUpdate.UTC().Format(time.RFC3339), crlClockSkew))
 	}
-	return &crlList{revoked: doc.revoked, thisUpdate: doc.thisUpdate, nextUpdate: doc.nextUpdate}, nil
+	return &crlList{revoked: doc.revoked, entries: doc.entries, thisUpdate: doc.thisUpdate, nextUpdate: doc.nextUpdate}, nil
 }
 
 // crlDocument is a list body read in the form of the list contract.
@@ -526,6 +527,7 @@ type crlDocument struct {
 	signed     []byte // the canonical form of the list without its signatures member
 	signatures []crlSignature
 	revoked    map[string]struct{}
+	entries    int
 	thisUpdate time.Time
 	nextUpdate time.Time
 }
@@ -599,7 +601,7 @@ func parseCRL(body []byte) (*crlDocument, error) {
 	if _, ok := canonical["revocations"]; !ok {
 		return nil, errors.New("the list has no revocations member")
 	}
-	doc := &crlDocument{revoked: make(map[string]struct{}, len(entries))}
+	doc := &crlDocument{revoked: make(map[string]struct{}, len(entries)), entries: len(entries)}
 	count, err := crlInteger(members["entryCount"])
 	if err != nil {
 		return nil, fmt.Errorf("entryCount %w", err)
