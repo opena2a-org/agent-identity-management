@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"strings"
@@ -220,6 +221,37 @@ func evaluatePolicyDecision(t *testing.T, raw []byte) map[string]any {
 	return got
 }
 
+// assertDecisionOmits asserts that none of values is in the policy decision raw
+// outside its evaluatedAt, which must hold an RFC 3339 time. The time is left out
+// of the search because its seconds and fraction of a second change with the time
+// of day: a decision made at 01:28:50.939519 holds "0.93" whatever it read (#769).
+func assertDecisionOmits(t assert.TestingT, raw []byte, values ...string) bool {
+	if h, ok := t.(interface{ Helper() }); ok {
+		h.Helper()
+	}
+	var decision map[string]json.RawMessage
+	if !assert.NoError(t, json.Unmarshal(raw, &decision), "body: %s", raw) {
+		return false
+	}
+	var evaluatedAt string
+	if !assert.NoError(t, json.Unmarshal(decision["evaluatedAt"], &evaluatedAt), "evaluatedAt: %s", raw) {
+		return false
+	}
+	if _, err := time.Parse(time.RFC3339Nano, evaluatedAt); !assert.NoError(t, err, "evaluatedAt: %s", raw) {
+		return false
+	}
+	delete(decision, "evaluatedAt")
+	rest, err := json.Marshal(decision)
+	if !assert.NoError(t, err) {
+		return false
+	}
+	omitted := true
+	for _, value := range values {
+		omitted = assert.NotContains(t, string(rest), value, "body: %s", raw) && omitted
+	}
+	return omitted
+}
+
 func TestA2AEvaluatePolicyReadsNoTrustScoreOfAnotherOrganizationsAgents(t *testing.T) {
 	t.Setenv("A2A_MIN_TRUST_SCORE", "")
 	callerOrg := uuid.New()
@@ -242,10 +274,58 @@ func TestA2AEvaluatePolicyReadsNoTrustScoreOfAnotherOrganizationsAgents(t *testi
 	got := evaluatePolicyDecision(t, raw)
 	assert.Equal(t, "DENY", got["decision"])
 	assert.Equal(t, "Trust score below threshold (client: 0.00, remote: 0.00, required: 0.70)", got["reason"])
-	assert.NotContains(t, string(raw), "0.93")
-	assert.NotContains(t, string(raw), "0.87")
+	assertDecisionOmits(t, raw, "0.93", "0.87")
 	assert.NoError(t, agentMock.ExpectationsWereMet(), "the agents are looked up in the caller's organization")
 	assert.Error(t, trustMock.ExpectationsWereMet(), "no trust score of another organization's agent is read")
+}
+
+// recordingT collects the failures an assertion reports, so a test can read
+// what assertDecisionOmits reports without failing itself.
+type recordingT struct{ failures []string }
+
+func (r *recordingT) Errorf(format string, args ...any) {
+	r.failures = append(r.failures, fmt.Sprintf(format, args...))
+}
+
+// decisionAt is the answer TestA2AEvaluatePolicyReadsNoTrustScoreOfAnotherOrganizationsAgents
+// receives, with evaluatedAt as its time.
+func decisionAt(evaluatedAt string) []byte {
+	return []byte(`{"decision":"DENY","policiesEvaluated":["every-agent"],` +
+		`"reason":"Trust score below threshold (client: 0.00, remote: 0.00, required: 0.70)",` +
+		`"evaluatedAt":"` + evaluatedAt + `"}`)
+}
+
+// The check read the whole answer, evaluatedAt included, so the test failed when
+// the time of the decision held 0.93 or 0.87 (#769). Each time below holds one of
+// them across its seconds and fraction of a second.
+func TestAssertDecisionOmitsReadsNoDigitOfEvaluatedAt(t *testing.T) {
+	for _, evaluatedAt := range []string{"2026-10-18T01:28:50.939519Z", "2026-10-18T03:57:00.870012Z"} {
+		raw := decisionAt(evaluatedAt)
+		require.True(t, strings.Contains(string(raw), "0.93") || strings.Contains(string(raw), "0.87"),
+			"evaluatedAt %s holds 0.93 or 0.87", evaluatedAt)
+		rec := &recordingT{}
+		assert.True(t, assertDecisionOmits(rec, raw, "0.93", "0.87"), "evaluatedAt %s", evaluatedAt)
+		assert.Empty(t, rec.failures, "evaluatedAt %s", evaluatedAt)
+	}
+}
+
+// A score in the reason or in another field is reported, and so is an answer
+// whose evaluatedAt is missing or holds no time.
+func TestAssertDecisionOmitsReportsAValueOutsideEvaluatedAt(t *testing.T) {
+	for name, raw := range map[string]string{
+		"a score in the reason": `{"decision":"DENY","policiesEvaluated":["every-agent"],` +
+			`"reason":"Trust score below threshold (client: 0.93, remote: 0.00, required: 0.70)",` +
+			`"evaluatedAt":"2026-10-18T01:28:51.000001Z"}`,
+		"a score in another field":      `{"decision":"DENY","remoteTrust":0.87,"evaluatedAt":"2026-10-18T01:28:51.000001Z"}`,
+		"a score as the evaluatedAt":    `{"decision":"DENY","evaluatedAt":"0.93"}`,
+		"an answer with no evaluatedAt": `{"decision":"DENY","policiesEvaluated":["every-agent"]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			rec := &recordingT{}
+			assert.False(t, assertDecisionOmits(rec, []byte(raw), "0.93", "0.87"))
+			assert.NotEmpty(t, rec.failures)
+		})
+	}
 }
 
 func TestA2AEvaluatePolicyReadsTheTrustScoresOfTheCallersOwnAgents(t *testing.T) {
