@@ -1,8 +1,8 @@
 // The "-frontend" hostname rule, in one place for its two readers. The client turns
 // the dashboard's hostname into its backend's at runtime (getApiUrl in lib/api.ts),
-// and the Content-Security-Policy header lists that backend in connect-src
-// (lib/content-security-policy.ts). Both read the pattern below, so the client never
-// derives a backend for a hostname whose page the header gives no derived source.
+// and the root layout lists that backend in the page's connect-src
+// (lib/runtime-config.ts). Both read the pattern below, so the client never derives a
+// backend for a hostname whose page lists no derived source.
 //
 // A hostname takes part when it is made of a-z, 0-9, "." and "-" only and has a
 // "-frontend" with 1 to 253 characters before it and at most 253 after it. Its
@@ -11,20 +11,14 @@
 //
 // The character set stays inside what a Content-Security-Policy host source may
 // contain, and it keeps policy syntax in a Host header (";", a space, a quote) out of
-// the header value. The prefix is lazy so it stops at the first "-frontend" it
+// the page's policy. The prefix is lazy so it stops at the first "-frontend" it
 // reaches. 253 is the length limit of a host name; with both halves bounded, the
 // time to reject a Host does not grow with the square of its length.
-//
-// Kept free of imports: next.config.ts loads this file at build time, outside the
-// app's module aliases.
 
-// Unanchored, with named groups: Next.js anchors a header rule's `has` value itself
-// and substitutes the groups into the header's value.
+// Unanchored, with named groups: FRONTEND_HOSTNAME anchors it, and derivedBackendHost
+// reads the groups.
 export const FRONTEND_HOST =
   "(?<frontendHostPrefix>[a-z0-9.-]{1,253}?)-frontend(?<frontendHostSuffix>[a-z0-9.-]{0,253})";
-
-// The derived backend as a connect-src source, in the header rule's substitution syntax.
-export const DERIVED_BACKEND_SOURCE = ":frontendHostPrefix-backend:frontendHostSuffix";
 
 const FRONTEND_HOSTNAME = new RegExp(`^${FRONTEND_HOST}$`);
 

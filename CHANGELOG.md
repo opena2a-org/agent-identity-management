@@ -11,6 +11,47 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the dashboard reads `NEXT_PUBLIC_API_URL` from its environment when it renders a page, and the page's `connect-src` lists that API
+
+- The dashboard read `NEXT_PUBLIC_API_URL` only when it was built: `next build` writes the value into the browser's
+  code, and `next.config.ts` built the `connect-src` of the `Content-Security-Policy` header from it. Served with
+  `NEXT_PUBLIC_API_URL=http://localhost:8081` in its environment, a dashboard built with `http://localhost:8080` sent
+  its sign-in page with no runtime configuration and with `connect-src 'self' http://localhost:8080`; with neither a
+  runtime configuration nor a `-frontend` hostname, the API client takes the build's URL (`getApiUrl` in
+  `apps/web/lib/api.ts`). The published `aim-dashboard` image is built with
+  `NEXT_PUBLIC_API_URL=http://localhost:8080`, and `FRONTEND_API_URL` in `docker-compose.quickstart.yml`, which sets
+  the variable on the container, did not reach the browser.
+- The root layout (`apps/web/app/layout.tsx`) reads `NEXT_PUBLIC_API_URL` from the server's environment each time it
+  renders a page (`apps/web/lib/runtime-config.ts`). When the variable is set, the page sets
+  `window.__RUNTIME_CONFIG__.apiUrl`, which `getApiUrl` takes before its other sources. When it is not set, the page
+  sets nothing and `getApiUrl` resolves the URL from its other sources: the `-backend` host of a `-frontend`
+  hostname, else the URL the build read.
+- Each page carries a `<meta http-equiv="Content-Security-Policy">` element whose `connect-src` lists the dashboard
+  origin and the API origins the page may call: the server's `NEXT_PUBLIC_API_URL` when it is set; otherwise the
+  build's URL, and the `-backend` host where the request's `Host` derives one. The header keeps every other
+  directive, and its `connect-src` is `'self' http: https:`, which the page's element narrows. The header rule for
+  `-frontend` hosts is removed, and the header builders are renamed: `contentSecurityPolicy` to
+  `headerContentSecurityPolicy`, `dashboardSecurityHeaders` to `dashboardHeaderRules`. The previous names, whose header
+  listed the API origin, are not kept. `apps/web/lib/api.ts` changes in one comment.
+- The root layout reads the request's headers, so Next.js renders each page when it is requested: `next build` lists
+  every page as dynamic, `/icon.png` excepted, and `/auth/login`, `/dashboard`, `/device` and `/dashboard/agents/abc`
+  are served with `Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate`.
+- `docs/guides/DEPLOYMENT_CHECKLIST.md` and `docs/guides/QUICK_DEPLOYMENT_REFERENCE.md` describe the variable as read
+  from the dashboard's environment and the `connect-src` as carried by the page.
+- Tests: `apps/web/app/layout.test.tsx` renders the root layout with `NEXT_PUBLIC_API_URL=http://localhost:8081` and
+  checks the page's runtime configuration and `connect-src`, and renders it with no URL on `aim-frontend.example.com`;
+  both cases fail on the previous layout, which wrote neither. `apps/web/lib/runtime-config.test.ts` checks the page's
+  values for a URL in the server's environment and for none, the `-frontend` host table the header test held, and
+  that the inline script holds no `<`. `apps/web/next-config.test.ts` checks the header on every page under `app/`
+  and on five `Host` values, `-frontend` ones included.
+- Measured with one build made with `NEXT_PUBLIC_API_URL=http://localhost:8080` and served by its standalone server
+  twice, with `NEXT_PUBLIC_API_URL=http://127.0.0.1:18081` and `http://127.0.0.1:18082`, each beside a stand-in API
+  on that address: in Chromium, signing in with keyboard and mouse input on each dashboard sent the request to its
+  own API (`Host: 127.0.0.1:18081` and `Host: 127.0.0.1:18082`), and a request from each page to the other's API was
+  refused by the page's `connect-src`. Served with no `NEXT_PUBLIC_API_URL` and opened on
+  `aim-frontend.example.test`, the page sent sign-in to `http://aim-backend.example.test`, which its `connect-src`
+  lists.
+
 ### Fixed: on a `-frontend` hostname, the API documentation page and the MCP server dialog call the API the dashboard signs in to
 
 - The API documentation page (`/dashboard/developers`) built the URL its request runner calls, and the URL in its cURL,

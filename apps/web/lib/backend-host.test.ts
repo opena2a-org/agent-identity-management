@@ -40,7 +40,7 @@ describe("derivedBackendHost", () => {
     expect(derivedBackendHost(`a-frontend${"b".repeat(254)}`)).toBeNull();
   });
 
-  // Anchored the way Next.js anchors a header rule's `has` value. With "+?" and "*"
+  // Anchored the way derivedBackendHost anchors it. With "+?" and "*"
   // for the two bounds this input takes about 3 seconds at this size: each "-frontend"
   // is tried in turn and the rest of the input rescanned for it.
   it("rejects a long Host of repeated -frontend without rescanning it for each one", () => {

@@ -7,8 +7,7 @@ import { PHASE_PRODUCTION_SERVER } from "next/dist/shared/lib/constants";
 import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
 import { compileNonPath, matchHas } from "next/dist/shared/lib/router/utils/prepare-destination";
 import nextConfig from "./next.config.js";
-import { derivedBackendHost } from "./lib/backend-host";
-import { contentSecurityPolicy } from "./lib/content-security-policy";
+import { headerContentSecurityPolicy } from "./lib/content-security-policy";
 
 // The backend serves the Prometheus exposition on its own listener, loopback
 // by default. A dashboard rewrite to the backend's /metrics would publish it
@@ -95,8 +94,6 @@ function connectSources(policy: string): string[] {
 }
 
 describe("dashboard Content-Security-Policy", () => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-
   it("is served on every page", async () => {
     const pages = pagePaths();
     // Control: the walk finds the shell's pages.
@@ -104,44 +101,25 @@ describe("dashboard Content-Security-Policy", () => {
 
     for (const page of pages) {
       const served = await servedHeaders(page, "localhost");
-      expect(served["content-security-policy"], page).toBe(contentSecurityPolicy({ apiUrl }));
+      expect(served["content-security-policy"], page).toBe(headerContentSecurityPolicy());
     }
   });
 
-  it("lets a -frontend host connect to the backend the client derives from it", async () => {
-    const served = await servedHeaders("/dashboard/agents", "aim-frontend.blue-1.eastus.azurecontainerapps.io");
-    expect(connectSources(served["content-security-policy"])).toEqual([
-      "'self'",
-      new URL(apiUrl).origin,
-      "aim-backend.blue-1.eastus.azurecontainerapps.io",
-    ]);
-
-    // A host with no domain part, as on a container network.
-    const bare = await servedHeaders("/", "aim-frontend");
-    expect(connectSources(bare["content-security-policy"])).toContain("aim-backend");
-  });
-
-  // The client and the header read one rule (lib/backend-host.ts). Where the client
-  // derives a backend the header lists it; where the client derives none it calls the
-  // API origin, and the header lists nothing more than that.
-  it("lists a derived backend for exactly the hosts the client derives one for", async () => {
-    const base = ["'self'", new URL(apiUrl).origin];
+  // The header is fixed when the dashboard is built. The API origin, and the backend a
+  // -frontend host derives, are listed by the connect-src policy each page carries
+  // (lib/runtime-config.ts, app/layout.tsx).
+  it("is the same on every Host, with a connect-src the page's policy narrows", async () => {
     const hosts = [
+      "localhost",
       "aim-frontend.blue-1.eastus.azurecontainerapps.io",
-      "a-frontend-frontend.example.com",
       "aim-frontend",
       "dashboard.example.com",
-      "my_app-frontend.test",
-      "-frontend.example.com",
       "x-frontend.example.com; script-src *",
     ];
-    // Control: the table holds hosts of both kinds.
-    expect(hosts.map(derivedBackendHost)).toEqual(expect.arrayContaining([null, "aim-backend"]));
-
     for (const host of hosts) {
       const served = await servedHeaders("/dashboard", host);
-      const derived = derivedBackendHost(host);
-      expect(connectSources(served["content-security-policy"]), host).toEqual(derived ? [...base, derived] : base);
+      expect(served["content-security-policy"], host).toBe(headerContentSecurityPolicy());
+      expect(connectSources(served["content-security-policy"]), host).toEqual(["'self'", "http:", "https:"]);
     }
   });
 
@@ -156,13 +134,13 @@ describe("dashboard Content-Security-Policy", () => {
     try {
       vi.stubEnv("NODE_ENV", "development");
       const development = await scriptSources();
-      expect(development).toHaveLength(2);
+      expect(development).toHaveLength(1);
       for (const sources of development) expect(sources).toContain("'unsafe-eval'");
 
       for (const mode of ["production", "test"]) {
         vi.stubEnv("NODE_ENV", mode);
         const served = await scriptSources();
-        expect(served).toHaveLength(2);
+        expect(served).toHaveLength(1);
         for (const sources of served) expect(sources, mode).not.toContain("'unsafe-eval'");
       }
     } finally {

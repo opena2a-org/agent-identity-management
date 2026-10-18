@@ -75,7 +75,7 @@ const getApiUrl = (): string => {
   const { protocol, hostname } = window.location;
 
   // 'aim-frontend', 'aim-dev-frontend' or any hostname the rule in lib/backend-host.ts
-  // covers. The Content-Security-Policy header lists the backend for the same hostnames.
+  // covers. The page's connect-src policy lists the backend for the same hostnames.
   const backendHost = derivedBackendHost(hostname);
   if (backendHost) {
     const detectedUrl = `${protocol}//${backendHost}`;

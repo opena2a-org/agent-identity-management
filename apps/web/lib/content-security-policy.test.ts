@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DERIVED_BACKEND_SOURCE, FRONTEND_HOST } from "./backend-host";
-import { contentSecurityPolicy, dashboardSecurityHeaders } from "./content-security-policy";
+import { connectSourcePolicy, dashboardHeaderRules, headerContentSecurityPolicy } from "./content-security-policy";
 
 function directives(policy: string): Record<string, string[]> {
   return Object.fromEntries(
@@ -11,15 +10,15 @@ function directives(policy: string): Record<string, string[]> {
   );
 }
 
-describe("contentSecurityPolicy", () => {
+describe("headerContentSecurityPolicy", () => {
   it("pins the production policy", () => {
-    expect(contentSecurityPolicy({ apiUrl: "https://api.example.com/v1/" })).toBe(
+    expect(headerContentSecurityPolicy()).toBe(
       "default-src 'self'; " +
         "script-src 'self' 'unsafe-inline'; " +
         "style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data: blob: https:; " +
         "font-src 'self'; " +
-        "connect-src 'self' https://api.example.com; " +
+        "connect-src 'self' http: https:; " +
         "object-src 'none'; " +
         "base-uri 'self'; " +
         "form-action 'self'; " +
@@ -28,45 +27,41 @@ describe("contentSecurityPolicy", () => {
   });
 
   it("allows eval only under next dev", () => {
-    expect(directives(contentSecurityPolicy({ development: true }))["script-src"]).toContain("'unsafe-eval'");
-    expect(directives(contentSecurityPolicy())["script-src"]).not.toContain("'unsafe-eval'");
-  });
-
-  it("allows the API URL's origin, port included, and nothing for a relative or non-HTTP URL", () => {
-    expect(directives(contentSecurityPolicy({ apiUrl: "http://localhost:8080" }))["connect-src"]).toEqual([
-      "'self'",
-      "http://localhost:8080",
-    ]);
-    for (const apiUrl of ["/", "", "javascript:alert(1)", "not a url"]) {
-      expect(directives(contentSecurityPolicy({ apiUrl }))["connect-src"]).toEqual(["'self'"]);
-    }
+    expect(directives(headerContentSecurityPolicy({ development: true }))["script-src"]).toContain("'unsafe-eval'");
+    expect(directives(headerContentSecurityPolicy())["script-src"]).not.toContain("'unsafe-eval'");
   });
 });
 
-describe("dashboardSecurityHeaders", () => {
-  it("captures the halves of a Host around its first -frontend", () => {
-    const rule = dashboardSecurityHeaders().find((r) => r.has);
-    const pattern = new RegExp(`^${rule!.has![0].value}$`);
-
-    expect("aim-frontend.blue-1.eastus.azurecontainerapps.io".match(pattern)?.groups).toEqual({
-      frontendHostPrefix: "aim",
-      frontendHostSuffix: ".blue-1.eastus.azurecontainerapps.io",
-    });
-    expect("a-frontend-frontend.example.com".match(pattern)?.groups).toEqual({
-      frontendHostPrefix: "a",
-      frontendHostSuffix: "-frontend.example.com",
-    });
-    expect("dashboard.example.com".match(pattern)).toBeNull();
-    // A Host carrying policy syntax does not match, so it never reaches the value.
-    expect("x-frontend.example.com; script-src *".match(pattern)).toBeNull();
-    // Nothing before -frontend: no backend is derived, by the header or by the client.
-    expect("-frontend.example.com".match(pattern)).toBeNull();
-    expect("my_app-frontend.test".match(pattern)).toBeNull();
+describe("connectSourcePolicy", () => {
+  it("allows the API URL's origin, port included", () => {
+    expect(connectSourcePolicy({ apiUrl: "http://localhost:8080" })).toBe("connect-src 'self' http://localhost:8080");
+    expect(connectSourcePolicy({ apiUrl: "https://api.example.com/v1/" })).toBe("connect-src 'self' https://api.example.com");
   });
 
-  it("reads the Host pattern the client derives its backend with", () => {
-    const rule = dashboardSecurityHeaders().find((r) => r.has);
-    expect(rule!.has).toEqual([{ type: "host", value: FRONTEND_HOST }]);
-    expect(directives(rule!.headers[0].value)["connect-src"]).toContain(DERIVED_BACKEND_SOURCE);
+  it("allows nothing more than 'self' for a relative or non-HTTP URL", () => {
+    for (const apiUrl of ["/", "", "javascript:alert(1)", "not a url", undefined]) {
+      expect(connectSourcePolicy({ apiUrl }), String(apiUrl)).toBe("connect-src 'self'");
+    }
+  });
+
+  it("appends the extra sources after the API origin", () => {
+    expect(connectSourcePolicy({ apiUrl: "https://api.example.com", extraConnectSources: ["aim-backend.example.com"] })).toBe(
+      "connect-src 'self' https://api.example.com aim-backend.example.com",
+    );
+  });
+
+  it("holds connect-src only", () => {
+    expect(Object.keys(directives(connectSourcePolicy({ apiUrl: "https://api.example.com" })))).toEqual(["connect-src"]);
+  });
+});
+
+describe("dashboardHeaderRules", () => {
+  it("sets the header's policy on every path, with no condition on the request", () => {
+    expect(dashboardHeaderRules()).toEqual([
+      { source: "/(.*)", headers: [{ key: "Content-Security-Policy", value: headerContentSecurityPolicy() }] },
+    ]);
+    expect(dashboardHeaderRules({ development: true })[0].headers[0].value).toBe(
+      headerContentSecurityPolicy({ development: true }),
+    );
   });
 });
