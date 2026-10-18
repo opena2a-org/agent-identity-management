@@ -124,7 +124,10 @@ export class BudgetController {
     this.saveState();
   }
 
-  /** Get current budget status. `spent` counts each call in flight at its estimate. */
+  /**
+   * Get current budget status. `spent` counts each call in flight at its estimate, and
+   * `callsThisHour` starts again from zero once the hour is over, as it does in `reserve`.
+   */
   getStatus(): {
     spent: number;
     budget: number;
@@ -135,6 +138,7 @@ export class BudgetController {
     totalCalls: number;
   } {
     this.rolloverIfNeeded();
+    this.rolloverHourIfNeeded();
     const spent = this.state.totalSpentUsd + this.heldUsd();
     return {
       spent: Math.round(spent * 10000) / 10000,
