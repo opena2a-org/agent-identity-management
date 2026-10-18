@@ -255,17 +255,44 @@ export interface ScanResult {
   };
 }
 
+/** What an argument was, for scanText's argument errors. */
+function describeArgument(value: unknown): string {
+  if (value === null) return 'null';
+  return Array.isArray(value) ? 'an array' : typeof value;
+}
+
 /**
  * Scan text against a set of threat patterns.
  * Returns all matches (not just first) for comprehensive reporting.
  * Input is truncated to MAX_SCAN_LENGTH to prevent ReDoS.
  * The result's `scope` lists the ids of `patterns` under `set`.
+ * Throws a TypeError naming the parameter when `text` is not a string or
+ * `patterns` is not an array of ThreatPattern, so a wrong argument is never
+ * returned as a scan that found nothing.
  */
 export function scanText(
   text: string,
   patterns: readonly ThreatPattern[],
   set: NonNullable<ScanResult['scope']>['set'] = 'custom',
 ): ScanResult {
+  // Checked for untyped (JS) callers.
+  if (typeof text !== 'string') {
+    throw new TypeError(`scanText(text, patterns): text must be a string (received ${describeArgument(text)})`);
+  }
+  if (!Array.isArray(patterns)) {
+    throw new TypeError(
+      `scanText(text, patterns): patterns must be an array of ThreatPattern (received ${describeArgument(patterns)})`,
+    );
+  }
+  const notAPattern = patterns.findIndex(
+    (p: unknown) => typeof (p as { pattern?: { exec?: unknown } } | null)?.pattern?.exec !== 'function',
+  );
+  if (notAPattern !== -1) {
+    throw new TypeError(
+      `scanText(text, patterns): patterns must be an array of ThreatPattern (patterns[${notAPattern}] has no RegExp in pattern)`,
+    );
+  }
+
   const truncated = text.length > MAX_SCAN_LENGTH;
   const scannable = truncated ? text.slice(0, MAX_SCAN_LENGTH) : text;
   const matches: ScanResult['matches'] = [];
