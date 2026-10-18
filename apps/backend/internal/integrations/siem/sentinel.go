@@ -229,12 +229,23 @@ func (s *SentinelAdapter) accessToken(ctx context.Context) (string, error) {
 		ExpiresIn   json.Number `json:"expires_in"`
 		AccessToken string      `json:"access_token"`
 	}
+	// A 2xx answer without a usable token is a StatusError with that 2xx
+	// status, which is not retried; the answer itself is not kept, since it
+	// may carry a token.
 	if err := json.Unmarshal(raw, &answer); err != nil || answer.AccessToken == "" || !strings.EqualFold(answer.TokenType, "Bearer") {
-		return "", fmt.Errorf("Sentinel token answer %d carries no bearer access token", resp.StatusCode)
+		return "", &StatusError{
+			Service:    sentinelService + " token request",
+			StatusCode: resp.StatusCode,
+			Body:       "the answer carries no bearer access token",
+		}
 	}
 	expiresIn, err := answer.ExpiresIn.Int64()
 	if err != nil || expiresIn <= 0 {
-		return "", fmt.Errorf("Sentinel token answer %d carries no expires_in", resp.StatusCode)
+		return "", &StatusError{
+			Service:    sentinelService + " token request",
+			StatusCode: resp.StatusCode,
+			Body:       "the answer carries no positive expires_in",
+		}
 	}
 
 	s.token = answer.AccessToken
