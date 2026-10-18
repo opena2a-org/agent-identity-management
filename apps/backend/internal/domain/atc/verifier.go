@@ -1,6 +1,7 @@
 package atc
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -100,13 +101,31 @@ func (c *ATCClaims) HasCapability(required string) bool {
 // Implementation: RealATCVerifier (CBOR-encoded ATCs, spec v1).
 type ATCVerifier interface {
 	// Verify validates a raw ATC token and returns the extracted claims.
-	// Returns an error if the token is invalid, expired, or revoked.
+	// Returns an error if the token is invalid, expired, or revoked, and an
+	// ErrCodeRevocationUnknown error when its revocation state cannot be read.
+	// Each call reads the revocation state once, a call answered from a cache
+	// of verified tokens included, so a caller makes no revocation check of
+	// its own.
 	Verify(rawToken string) (*ATCClaims, error)
-
-	// IsRevoked checks whether an ATC has been revoked via CRL.
-	// Returns true if the ATC is on the revocation list.
-	IsRevoked(atcID string) (bool, error)
 }
+
+// RevocationSource tells whether the agent an ATC names may still present it.
+// The verifier reads it once for each Verify call.
+type RevocationSource interface {
+	// AgentRevoked reports whether agentID is revoked, so that its ATCs are
+	// refused. An error means the state could not be read, which the verifier
+	// answers as ErrCodeRevocationUnknown, not as not revoked.
+	AgentRevoked(ctx context.Context, agentID uuid.UUID) (bool, error)
+}
+
+// RevocationUnknownRetryAfter is the Retry-After an ErrCodeRevocationUnknown
+// answer carries.
+const RevocationUnknownRetryAfter = 5 * time.Second
+
+// RevocationUnknownMessage is the message of an ErrCodeRevocationUnknown
+// answer, for a header ATC and a body atcId alike. The cause of the failed
+// read goes to the server log only.
+const RevocationUnknownMessage = "the revocation state of this ATC could not be read"
 
 // ATCIssuer issues Agent Trust Certificates.
 type ATCIssuer interface {
@@ -158,6 +177,9 @@ const (
 	ErrCodeSignatureInvalid   = "atc_signature_invalid"
 	ErrCodePQCSigInvalid      = "atc_pqc_signature_invalid"
 	ErrCodeRevoked            = "atc_revoked"
+	// ErrCodeRevocationUnknown: the revocation state could not be read, so the
+	// ATC is not accepted. Answered with 503 and Retry-After.
+	ErrCodeRevocationUnknown  = "atc_revocation_unknown"
 	ErrCodeChainInvalid       = "atc_chain_invalid"
 	ErrCodeInsufficientScope  = "atc_insufficient_scope"
 )

@@ -1,7 +1,8 @@
 # AIM Platform 1.1.0 release notes
 
 Draft notes for the `platform-v1.1.0` tag of the AIM platform (backend and dashboard). They are written from
-`CHANGELOG.md`, section `[Unreleased]`, at commit `c694174a`; an entry added after that commit is not in these notes.
+`CHANGELOG.md`, section `[Unreleased]`, at commit `c694174a`; an entry added after that commit is not in these notes,
+except a Security heading, which the security table cites.
 Each item names the [CHANGELOG.md](../../CHANGELOG.md) heading that carries its detail, written as
 its kind, a colon and its text; the changelog itself separates the kind from the text with a dash.
 
@@ -208,6 +209,7 @@ this line when it is published.
 
 | `CHANGELOG.md` heading | Fixed in |
 |------------------------|----------|
+| Security: an ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with `Retry-After` | 1.1.0 |
 | Security: the API server listens on 127.0.0.1 outside a container unless `HOST` is set (#757) | 1.1.0 |
 | Security: the startup refusal for a missing `KEYVAULT_MASTER_KEY` names only the key | 1.1.0 |
 | Security: `POST /api/v1/a2a/verify` reports a request from an agent in hybrid mode signed with Ed25519 alone invalid (#748) | 1.1.0 |

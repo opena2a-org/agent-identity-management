@@ -362,6 +362,21 @@ func (r *AgentRepository) GetByID(id uuid.UUID) (*domain.Agent, error) {
 	return agent, nil
 }
 
+// AgentStatus reads the status of the agent with id, under ctx: the one read an
+// ATC's revocation check makes. found is false when no agent has id; a NULL
+// status is read as the empty status.
+func (r *AgentRepository) AgentStatus(ctx context.Context, id uuid.UUID) (domain.AgentStatus, bool, error) {
+	var status sql.NullString
+	err := r.db.QueryRowContext(ctx, `SELECT status FROM agents WHERE id = $1`, id).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("read agent status: %w", err)
+	}
+	return domain.AgentStatus(status.String), true, nil
+}
+
 // GetByOrganization retrieves all agents in an organization
 func (r *AgentRepository) GetByOrganization(orgID uuid.UUID) ([]*domain.Agent, error) {
 	agents, _, err := r.GetByOrganizationPaged(orgID, 0, 0)

@@ -1,9 +1,11 @@
 package atc
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -20,31 +22,40 @@ type realCacheEntry struct {
 	expiresAt time.Time
 }
 
+// revocationReadTimeout bounds the one revocation read each Verify call makes.
+const revocationReadTimeout = 2 * time.Second
+
 // RealATCVerifier verifies CBOR-encoded Agent Trust Certificates per spec v1.
 // Implements atcdomain.ATCVerifier.
 type RealATCVerifier struct {
-	trustedIssuers map[string]*atcdomain.TrustedIssuer // keyed by issuer URI
-	crlClient      *CachedCRLClient
+	trustedIssuers    map[string]*atcdomain.TrustedIssuer // keyed by issuer URI
+	revocation        atcdomain.RevocationSource
+	revocationTimeout time.Duration
 
 	cache    sync.Map
 	cacheTTL time.Duration
 }
 
-// NewRealATCVerifier creates a verifier with the given trusted issuers and CRL client.
-func NewRealATCVerifier(issuers []atcdomain.TrustedIssuer, crlClient *CachedCRLClient) *RealATCVerifier {
+// NewRealATCVerifier creates a verifier with the given trusted issuers and
+// revocation source. With a nil source no revocation state can be read, so an
+// ATC that passes the other steps is answered atc_revocation_unknown.
+func NewRealATCVerifier(issuers []atcdomain.TrustedIssuer, revocation atcdomain.RevocationSource) *RealATCVerifier {
 	issuerMap := make(map[string]*atcdomain.TrustedIssuer, len(issuers))
 	for i := range issuers {
 		issuerMap[issuers[i].URI] = &issuers[i]
 	}
 	return &RealATCVerifier{
-		trustedIssuers: issuerMap,
-		crlClient:      crlClient,
-		cacheTTL:       5 * time.Minute,
+		trustedIssuers:    issuerMap,
+		revocation:        revocation,
+		revocationTimeout: revocationReadTimeout,
+		cacheTTL:          5 * time.Minute,
 	}
 }
 
 // Verify validates a base64url-encoded ATC token and returns extracted claims.
 // Implements the 10-step verification algorithm from spec v1 Section 4.1.
+// Step 8 reads the revocation state once per call, a call for a cached token
+// included.
 func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) {
 	// Check cache first (CR-007: avoid re-parsing)
 	if entry, ok := v.cache.Load(rawToken); ok {
@@ -53,6 +64,11 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 			if ce.claims == nil {
 				// Negative cache entry — previously failed verification
 				return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeMalformed, Message: "previously rejected ATC"}
+			}
+			// The cache holds the outcome of the other steps; the revocation
+			// state is read again.
+			if err := v.checkRevocation(ce.claims.AgentID, ce.claims.ATCID); err != nil {
+				return nil, err
 			}
 			return ce.claims, nil
 		}
@@ -163,15 +179,13 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 		}
 	}
 
-	// Step 8: CRL — check revocation
-	if v.crlClient != nil {
-		revoked, err := v.crlClient.IsRevoked(payload.ATCID)
-		if err != nil {
-			return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeRevoked, Message: "CRL check failed: " + err.Error()}
-		}
-		if revoked {
-			return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeRevoked, Message: fmt.Sprintf("ATC %s has been revoked", payload.ATCID)}
-		}
+	// Step 8: REVOCATION, the state of the agent the ATC names, read once
+	agentID, err := uuid.Parse(payload.AgentID)
+	if err != nil {
+		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeMalformed, Message: "invalid agent ID: " + err.Error()}
+	}
+	if err := v.checkRevocation(agentID, payload.ATCID); err != nil {
+		return nil, err
 	}
 
 	// Step 9: CHAIN — verify delegation chain if present
@@ -182,11 +196,6 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 	}
 
 	// Build claims (Step 10: CAPABILITY is checked by caller)
-	agentID, err := uuid.Parse(payload.AgentID)
-	if err != nil {
-		return nil, &atcdomain.ATCError{Code: atcdomain.ErrCodeMalformed, Message: "invalid agent ID: " + err.Error()}
-	}
-
 	claims := &atcdomain.ATCClaims{
 		AgentID:         agentID,
 		Issuer:          payload.Issuer,
@@ -219,12 +228,25 @@ func (v *RealATCVerifier) Verify(rawToken string) (*atcdomain.ATCClaims, error) 
 	return claims, nil
 }
 
-// IsRevoked checks whether an ATC has been revoked via CRL.
-func (v *RealATCVerifier) IsRevoked(atcID string) (bool, error) {
-	if v.crlClient == nil {
-		return false, nil
+// checkRevocation reads the revocation state of agentID once, within
+// revocationTimeout. A state that cannot be read is atc_revocation_unknown,
+// never an accepted ATC; its cause goes to the server log only.
+func (v *RealATCVerifier) checkRevocation(agentID uuid.UUID, atcID string) *atcdomain.ATCError {
+	if v.revocation == nil {
+		log.Printf("ATC %s refused: no revocation source is configured", atcID)
+		return &atcdomain.ATCError{Code: atcdomain.ErrCodeRevocationUnknown, Message: atcdomain.RevocationUnknownMessage}
 	}
-	return v.crlClient.IsRevoked(atcID)
+	ctx, cancel := context.WithTimeout(context.Background(), v.revocationTimeout)
+	defer cancel()
+	revoked, err := v.revocation.AgentRevoked(ctx, agentID)
+	if err != nil {
+		log.Printf("ATC %s refused: the revocation state of agent %s could not be read: %v", atcID, agentID, err)
+		return &atcdomain.ATCError{Code: atcdomain.ErrCodeRevocationUnknown, Message: atcdomain.RevocationUnknownMessage}
+	}
+	if revoked {
+		return &atcdomain.ATCError{Code: atcdomain.ErrCodeRevoked, Message: fmt.Sprintf("ATC %s has been revoked", atcID)}
+	}
+	return nil
 }
 
 // canonicalSignedPayload encodes fields 1-7 as deterministic CBOR.

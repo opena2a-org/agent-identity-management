@@ -11,8 +11,9 @@ import (
 // It accepts CBOR-encoded ATCs from one trusted issuer, issuerURI, signed with
 // issuerKey or with one of retiredKeys, the issuer's earlier keys. issuerKey is
 // the server's ATC issuer key, which signs nothing else. Any other token format
-// is refused as malformed.
-func NewServerATCVerifier(issuerURI string, issuerKey ed25519.PrivateKey, crlClient *CachedCRLClient, retiredKeys ...ed25519.PublicKey) (*RealATCVerifier, error) {
+// is refused as malformed. revocation is read once for each ATC verified; the
+// server passes an AgentStatusRevocation over its own agent store.
+func NewServerATCVerifier(issuerURI string, issuerKey ed25519.PrivateKey, revocation atcdomain.RevocationSource, retiredKeys ...ed25519.PublicKey) (*RealATCVerifier, error) {
 	if len(issuerKey) != ed25519.PrivateKeySize {
 		return nil, fmt.Errorf("ATC issuer key is not a valid Ed25519 key")
 	}
@@ -32,5 +33,5 @@ func NewServerATCVerifier(issuerURI string, issuerKey ed25519.PrivateKey, crlCli
 	}
 	return NewRealATCVerifier([]atcdomain.TrustedIssuer{
 		{URI: issuerURI, PublicKey: issuerPubKeyCopy, RetiredPublicKeys: retired},
-	}, crlClient), nil
+	}, revocation), nil
 }

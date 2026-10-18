@@ -1107,14 +1107,12 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 
 	// Secrets management: ATC verifier (CBOR ATCs only) + backends + service
 	issuerURI := cfg.Registry.ATCIssuerURI
-	crlEndpoint := cfg.Registry.ATCCRLEndpoint
-	crlClient, err := infraatc.NewCachedCRLClient(crlEndpoint)
-	if err != nil {
-		log.Fatalf("invalid CRL endpoint: %v", err)
-	}
+	// An ATC this server verifies is revoked through the status of the agent
+	// it names, read from this server's store once per request.
+	atcRevocation := infraatc.NewAgentStatusRevocation(repos.Agent)
 	// The ATC issuer key is its own key: a card-attestation signature never
 	// verifies as an ATC from this issuer.
-	atcVerifier, err := infraatc.NewServerATCVerifier(issuerURI, signingKeys.Key(crypto.PurposeATCIssuer).PrivateKey(), crlClient, signingKeys.RetiredPublicKeys(crypto.PurposeATCIssuer)...)
+	atcVerifier, err := infraatc.NewServerATCVerifier(issuerURI, signingKeys.Key(crypto.PurposeATCIssuer).PrivateKey(), atcRevocation, signingKeys.RetiredPublicKeys(crypto.PurposeATCIssuer)...)
 	if err != nil {
 		log.Fatalf("%v", err)
 	}

@@ -55,7 +55,7 @@ func TestServerATCVerifier_RefusesJWTFormatToken(t *testing.T) {
 func TestServerATCVerifier_AcceptsATCSignedWithServerKey(t *testing.T) {
 	_, serverKey := testIssuerKey()
 	issuerURI := "https://aim.test.opena2a.org"
-	verifier, err := NewServerATCVerifier(issuerURI, serverKey, nil)
+	verifier, err := NewServerATCVerifier(issuerURI, serverKey, notRevoked())
 	if err != nil {
 		t.Fatalf("NewServerATCVerifier: %v", err)
 	}
