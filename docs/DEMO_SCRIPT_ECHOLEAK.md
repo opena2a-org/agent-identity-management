@@ -35,8 +35,8 @@ Expected response:
 ### **4. Download and Install SDK**
 
 ```bash
-# In Dashboard: Settings → SDK Download → Download Python SDK
-unzip ~/Downloads/aim-sdk-python.zip
+# In the dashboard: Developers → SDK & docs (/dashboard/sdk), click "Download Python SDK"
+unzip ~/Downloads/aim-sdk-python-v*.zip
 cd aim-sdk-python
 pip install -e .
 ```

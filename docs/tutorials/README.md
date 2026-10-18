@@ -7,10 +7,10 @@ Get started with AIM quickly. Each tutorial is designed to deliver value in unde
 ## Fastest Way to See AIM in Action (60 seconds!)
 
 ```bash
-# 1. Download SDK from AIM dashboard (Settings → SDK Download)
+# 1. Download the SDK from the AIM dashboard: Developers → SDK & docs (/dashboard/sdk), "Download Python SDK"
 # 2. Extract and run:
 cd ~/projects
-unzip ~/Downloads/aim-sdk-python.zip
+unzip ~/Downloads/aim-sdk-python-v*.zip
 cd aim-sdk-python
 pip install -e .
 python demo_agent.py
@@ -64,7 +64,7 @@ Before starting any tutorial, ensure:
    - Email: `admin@opena2a.org`
    - Password: printed by the quickstart script (change on first login)
 
-3. **Download the SDK** - Settings → SDK Download
+3. **Download the SDK** - Developers → SDK & docs (`/dashboard/sdk`), "Download Python SDK"
 
 ## Tutorial Goals
 

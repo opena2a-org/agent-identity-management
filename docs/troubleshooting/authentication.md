@@ -124,10 +124,12 @@ To fix this issue:
 open http://localhost:3000/auth/login
 
 # Step 2: Download fresh SDK
-# Click "Download SDK" in dashboard
+# In the dashboard: Developers → SDK & docs (http://localhost:3000/dashboard/sdk), click "Download Python SDK"
 
-# Step 3: Extract and copy credentials
-unzip aim-sdk-python.zip
+# Step 3: Extract the newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can
+# still be there) and copy credentials
+cd ~/Downloads
+unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
 cp -r aim-sdk-python/.aim ~/.aim/
 
 # Step 4: Verify credentials structure

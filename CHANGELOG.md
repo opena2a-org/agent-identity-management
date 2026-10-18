@@ -99,6 +99,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   second and requires no change, that no password or token is printed, and that a refused sign-in, a refused change
   and an account that still requires a change each stop the run.
 
+### Fixed — the SDK install guides name the dashboard's SDK page, its download buttons and the archive the server sends (#799)
+
+- `docs/sdk/python.md`, `docs/sdk/java.md`, `docs/DEMO_SCRIPT_ECHOLEAK.md` and `docs/tutorials/README.md` sent the reader
+  to Settings → SDK Download, and `docs/security/token-rotation.md` and `docs/troubleshooting/README.md` to Dashboard →
+  SDK Download. The dashboard's navigation has no Settings entry, and no page or tab of the dashboard is named SDK
+  Download. Those two guides and `docs/troubleshooting/authentication.md` said to click "Download SDK", the label of a
+  button the Credentials page shows when its SDK token list is empty, which opens the SDK page. Five of the guides ran
+  `unzip` on `aim-sdk-python.zip`; the server names the archive `aim-sdk-<type>-v<version>.zip`, from this tree
+  `aim-sdk-python-v2.0.3.zip` and `aim-sdk-java-v1.0.0.zip`.
+- Each guide now names Developers → SDK & docs (`/dashboard/sdk`), the button "Download Python SDK" or "Download Java
+  SDK", and the archive as the server names it. `docs/sdk/python.md` and `docs/sdk/java.md` name the folder the archive
+  unpacks into, `aim-sdk-python` or `aim-sdk-java`. The demo script and the tutorials index run
+  `unzip ~/Downloads/aim-sdk-python-v*.zip`, as `docs/quick-start.md` does.
+- The four steps that copy credentials out of a downloaded SDK, in `docs/security/token-rotation.md`,
+  `docs/troubleshooting/README.md` (two) and `docs/troubleshooting/authentication.md`, change to `~/Downloads` and
+  extract the newest match, `unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"`, before
+  `cp -r aim-sdk-python/.aim ~/.aim/`; the one under Missing Credentials File had no extract command. With an earlier
+  `aim-sdk-python-v2.0.3.zip` beside a newer `aim-sdk-python-v2.0.3 (1).zip`, a glob such as
+  `unzip ~/Downloads/aim-sdk-python-v*.zip` hands `unzip` both names, and it exits 11 and extracts nothing; the
+  newest-match command extracts the newer archive.
+- Tests: `apps/backend/internal/interfaces/http/handlers/sdk_install_guides_docs_test.go` reads the Developers entry
+  from `apps/web/lib/navigation.ts`, its SDK & docs tab from `apps/web/lib/hub-tabs.ts` and the download buttons'
+  labels from `apps/web/app/dashboard/sdk/page.tsx`, downloads the Python and Java SDKs through the download handler
+  to read the archive name it sends and the folder its entries sit in, and checks the seven guides against them. On
+  the previous guides all seven failed.
+
 ### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)
 
 - A server can end an answer cleanly once it sees the client cancel the request, and the client can read that end

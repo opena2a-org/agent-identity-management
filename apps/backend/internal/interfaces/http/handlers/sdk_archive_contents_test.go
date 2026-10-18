@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
@@ -40,6 +41,13 @@ func sdkSourceTree(t *testing.T) string {
 // built from the repository's sdk/ tree, and returns the status and body.
 func fetchSDKArchive(t *testing.T, sdk string) (int, []byte) {
 	t.Helper()
+	status, _, body := fetchSDKDownload(t, sdk)
+	return status, body
+}
+
+// fetchSDKDownload is fetchSDKArchive with the answer's headers, which name the archive.
+func fetchSDKDownload(t *testing.T, sdk string) (int, http.Header, []byte) {
+	t.Helper()
 	t.Setenv("SDK_BASE_DIR", sdkSourceTree(t))
 	t.Setenv("AIM_PUBLIC_URL", "https://api.aim.example.org")
 	f := newMintFixture(t, &rotationStore{}, false)
@@ -51,7 +59,7 @@ func fetchSDKArchive(t *testing.T, sdk string) (int, []byte) {
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	return resp.StatusCode, body
+	return resp.StatusCode, resp.Header, body
 }
 
 // The download is for using an SDK, so it leaves out the SDK's own tests and the tooling used

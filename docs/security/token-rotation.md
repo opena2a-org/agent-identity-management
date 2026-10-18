@@ -153,14 +153,15 @@ no notification is sent.
    Or your production URL: `https://aim.yourdomain.com/auth/login`
 
 2. **Download Fresh SDK**
-   - Navigate to: Dashboard → SDK Download
+   - Navigate to: Developers → SDK & docs
    - Or direct link: `http://localhost:3000/dashboard/sdk`
-   - Click "Download SDK" for your language (Python, Go, etc.)
+   - Click "Download Python SDK"
 
 3. **Copy New Credentials**
    ```bash
-   # Extract downloaded SDK
-   unzip aim-sdk-python.zip
+   # Extract the newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there)
+   cd ~/Downloads
+   unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
 
    # Copy credentials to your project
    cp -r aim-sdk-python/.aim ~/.aim/
