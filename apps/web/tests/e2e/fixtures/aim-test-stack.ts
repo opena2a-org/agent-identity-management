@@ -1,8 +1,13 @@
 import { test as base, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
+import { seededAdminFromEnv } from './seeded-admin-session';
 
-export const ADMIN_EMAIL = process.env.AIM_TEST_ADMIN_EMAIL ?? 'admin@opena2a.org';
-const ADMIN_PASSWORD = process.env.AIM_TEST_ADMIN_PASSWORD ?? process.env.DEFAULT_ADMIN_PASSWORD ?? '';
+// The seeded admin's required password change is completed once before the
+// workers start (tests/e2e/global-setup.ts), and the seeded password set back;
+// the sign-ins below use that password and get sessions the API admits.
+const SEEDED_ADMIN = seededAdminFromEnv();
+export const ADMIN_EMAIL = SEEDED_ADMIN.email;
+const ADMIN_PASSWORD = SEEDED_ADMIN.seededPassword;
 
 type Resource = { id: string; name: string };
 
@@ -39,6 +44,13 @@ async function login(request: APIRequestContext): Promise<{ accessToken: string;
     throw new Error(`login/local failed: ${res.status()} ${await res.text()}`);
   }
   const body = await res.json();
+  if (body.user?.forcePasswordChange === true) {
+    throw new Error(
+      'The seeded admin still requires a password change, so the API admits its session only to ' +
+        'GET /api/v1/auth/me and POST /api/v1/auth/change-password; tests/e2e/global-setup.ts completes ' +
+        'that change before the workers start.',
+    );
+  }
   return { accessToken: body.accessToken, refreshToken: body.refreshToken };
 }
 

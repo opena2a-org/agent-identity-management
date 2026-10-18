@@ -19,6 +19,10 @@ export default defineConfig({
     '**/delete-agent.spec.ts',
     '**/token-refresh-tabs.spec.ts',
   ],
+  // Before the workers start, the seeded admin's required password change is
+  // completed, and the seeded password set back; without it the API answers
+  // the admin's session 403 passwordChangeRequired on every route the tests use.
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
