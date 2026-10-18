@@ -35,7 +35,7 @@ This specification defines:
 |------|-----------|
 | **ATC** | Agent Trust Certificate. A signed, time-bounded, capability-scoped identity assertion. |
 | **Issuer** | The AIM instance that issued the ATC. Identified by its public key and issuer URI. |
-| **CRL** | Certificate Revocation List. Cached locally, refreshed every 5 minutes. |
+| **CRL** | Certificate Revocation List. The signed list of the agents an authority revokes (Section 5). |
 | **Capability** | A string scope (e.g., `secrets:resolve`, `scan:read`) that the ATC grants. |
 
 ---
@@ -183,46 +183,154 @@ All ATC verification errors return a JSON body:
 
 ## 5. Certificate Revocation List (CRL)
 
+An authority publishes the agents it revokes as a signed JSON list at the address its discovery document names. This
+section gives the contract the AIM backend's list client (`apps/backend/internal/infrastructure/atc/crl_client.go`)
+reads: where it finds the list (Section 5.1), the form it accepts (Section 5.2), the signatures (Section 5.3) and
+bounds (Section 5.4) it checks, and how long it answers from a list it holds (Section 5.5).
+
+The list revokes agents, not single ATCs: each entry names an agent by its DID in `agentDid`, and the client reads no
+ATC identifier from an entry. For step 8, an ATC is revoked when the list names its agent. The DID AIM gives an agent
+is `did:aip:aim_` followed by the agent's id, the `agentId` of its ATCs (Section 2).
+
+With `REGISTRY_URL` set, the AIM backend reads the list in the background (Section 5.5), and no request it answers reads
+the list it holds: its ATC verifier reads step 8 from its own store (Section 9.4).
+
 ### 5.1 CRL Endpoint
 
-```
-GET https://registry.opena2a.org/api/v1/crl/latest
-```
+The client has no fixed list address. It reads the authority's discovery document at `GET /.well-known/atp`, or at
+`GET /.well-known/opena2a` when the first answers `404`, on the scheme, host and port of the authority's base URL
+(`REGISTRY_URL` in the AIM backend) and not under a path that URL carries. It reads two members of that document:
 
-Response:
+- `endpoints.revocations`: the list address, resolved against the address the document was read at. It must give an
+  `https` address with a host, and the document must set it unless an override replaces it (below).
+- `publicKeys`: the keys a list may be signed with, each an object with `keyId`, `algorithm` and `publicKeyHex`. The
+  client uses a key that has a `keyId`, an `algorithm` of `Ed25519` or `ML-DSA-65`, and a `publicKeyHex` that is the
+  hex of a raw public key of that algorithm's size: 32 bytes for `Ed25519`, 1,952 bytes for `ML-DSA-65`. It uses no
+  key written otherwise, and a `keyId` listed twice refuses the document.
+
+A discovery document of this form, with a placeholder in place of its key:
 
 ```json
 {
-  "version": 42,
-  "generatedAt": "2026-04-13T05:00:00Z",
-  "expiresAt": "2026-04-13T05:05:00Z",
-  "revokedATCs": [
+  "endpoints": {
+    "revocations": "/api/v1/trust/revocations"
+  },
+  "publicKeys": [
     {
-      "atcId": "550e8400-e29b-41d4-a716-446655440000",
-      "revokedAt": "2026-04-13T04:58:00Z",
-      "reason": "agent_compromised"
+      "keyId": "did:web:registry.example.com#list-1",
+      "algorithm": "Ed25519",
+      "publicKeyHex": "<hex of the 32-byte Ed25519 public key>"
     }
   ]
 }
 ```
 
-### 5.2 Caching
+The client reads the list with `GET` at that address. When the list it holds was read from the same address with an
+`ETag`, the request carries that `ETag` in `If-None-Match`, and a `304` answer counts as a read of the list held. It
+follows no redirect to an address that is not `https`. In the AIM backend, `ATC_CRL_ENDPOINT`, read only when
+`REGISTRY_URL` is set, replaces the address `endpoints.revocations` names, and the keys still come from the discovery
+document.
+
+### 5.2 List Form
+
+The list is a JSON object in valid UTF-8, with nothing but white space after it, in which no object names a member
+twice:
+
+| Member | Form |
+|--------|------|
+| `revocations` | Required. An array of entries |
+| `entryCount` | Required. The number of entries in `revocations`, an integer written without a fraction or an exponent |
+| `thisUpdate` | Required. An RFC 3339 time (Section 5.4) |
+| `nextUpdate` | Required. An RFC 3339 time (Section 5.4) |
+| `signatures` | Required. An array of objects with string `keyId`, `algorithm` and `value` (Section 5.3) |
+
+Other members are allowed, and the signatures cover them. An entry is an object:
+
+| Member | Form |
+|--------|------|
+| `agentDid` | Required. The DID of the revoked agent, a string of 1 to 512 bytes |
+| `revokedAt` | Required. An RFC 3339 time in UTC, written with `Z` |
+| `reason` | Optional. A string (Section 5.6) |
+| `revokedByKeyId` | Optional. A string of at most 576 bytes |
+| `transparencyLogIndex` | Optional. An integer from 0 to 2^63-1 |
+
+The client reads no other member of an entry. A list of this form that revokes one agent, with a placeholder in place of
+its signature:
+
+```json
+{
+  "revocations": [
+    {
+      "agentDid": "did:aip:aim_550e8400-e29b-41d4-a716-446655440000",
+      "revokedAt": "2026-10-18T04:58:00Z",
+      "reason": "compromised",
+      "revokedByKeyId": "did:web:registry.example.com#operator-1",
+      "transparencyLogIndex": 42
+    }
+  ],
+  "entryCount": 1,
+  "thisUpdate": "2026-10-18T05:00:00Z",
+  "nextUpdate": "2026-10-18T05:05:00Z",
+  "signatures": [
+    {
+      "keyId": "did:web:registry.example.com#list-1",
+      "algorithm": "Ed25519",
+      "value": "<base64 of the Ed25519 signature>"
+    }
+  ]
+}
+```
+
+### 5.3 Signatures
+
+The signatures cover the RFC 8785 (JSON Canonicalization Scheme) form of the list without its `signatures` member.
+The client passes over a signature whose `keyId` is not a key it uses from the discovery document (Section 5.1). A
+signature by a key it uses refuses the list when its `algorithm` is not the key's, when its `value` is not standard
+base64, with or without padding, or when it does not verify. At least one `Ed25519` signature by a key the client uses
+must verify: an `ML-DSA-65` signature is verified when present, and is not enough alone.
+
+### 5.4 Bounds
+
+| Bound | Value |
+|-------|-------|
+| Discovery document | At most 65,536 bytes |
+| List body | At most 12,645,536 bytes, and a longer body is refused without being read whole |
+| Members other than `revocations`, `signatures` included | At most 65,536 bytes in canonical form |
+| Entries in `revocations` | At most 10,000 |
+| One entry | At most 1,258 bytes in canonical form |
+| Arrays and objects in the list | Nested at most 16 levels deep, the list's own object included |
+
+The list body bound is 65,536 bytes for the members other than `revocations`, plus 1,258 bytes for each of 10,000
+entries.
+
+The client refuses a list whose `thisUpdate` is more than 60 seconds after its clock, whose `nextUpdate` is not after
+its `thisUpdate`, whose `nextUpdate` passed more than 60 seconds ago, or whose `thisUpdate` is before that of the list
+it holds.
+
+### 5.5 Caching
+
+The client answers from the list it holds, and reads no address to answer. A refresh reads the discovery document and
+the list, and the client holds the list when it passes Sections 5.2 to 5.4. A refresh that fails, or whose list is
+refused, leaves the list held as it was.
 
 | Parameter | Value |
 |-----------|-------|
-| Cache TTL | 5 minutes |
-| Refresh strategy | Background refresh at 4 minutes (before expiry) |
-| Stale-while-revalidate | Serve stale CRL for up to 1 minute if refresh fails |
-| Maximum stale age | 6 minutes (hard limit, fail closed after) |
+| Answered from | The list held, until 5 minutes after its last read and until 60 seconds after its `nextUpdate`, whichever comes first |
+| No list to answer from | The revocation state is unknown, which is never an answer of not revoked (step 8: `503`, `atc_revocation_unknown`) |
 
-### 5.3 Revocation Reasons
+With `REGISTRY_URL` set, the AIM backend refreshes the list in the background, first when the server starts:
 
-| Reason | Meaning |
-|--------|---------|
-| `agent_compromised` | Agent's private key may be exposed |
-| `agent_deregistered` | Agent has been removed from AIM |
-| `issuer_rotated` | Issuer key rotated, all outstanding ATCs invalid |
-| `manual_revocation` | Administrative revocation |
+| Parameter | Value |
+|-----------|-------|
+| Next refresh, after one that holds a list or reads the list held again | 4 minutes later, or 60 seconds before the `nextUpdate` of the list held when that is sooner |
+| Next refresh, after one that fails or whose list is refused, or that would start in less than 1 second | After a wait drawn at random from 1 to 30 seconds |
+| One refresh | Ended after 30 seconds |
+| One request | Ended after 10 seconds, the timeout of the HTTP client the list client builds for itself when it is given none, as in the AIM backend |
+
+### 5.6 Revocation Reasons
+
+An entry's `reason`, when present, is a string. The client checks its type and does not read its value: an agent is
+revoked when the list names it, whatever its entry's `reason`.
 
 ---
 
@@ -289,16 +397,17 @@ Services MAY implement additional replay protection by tracking recently-seen AT
 
 A stolen ATC is usable until expiry or CRL update (up to 5 minutes). Mitigations:
 - Short TTL (5 minutes for secrets)
-- CRL refresh every 5 minutes
+- CRL refresh per Section 5.5
 - Agents should request new ATCs per-operation, not reuse
 
 ### 8.3 Issuer Compromise
 
 If an issuer's private key is compromised:
-1. Issue `issuer_rotated` CRL entry for all outstanding ATCs
-2. Rotate issuer key pair
-3. Update trusted issuer configuration on all services
-4. Re-issue ATCs for all active agents with new key
+1. Rotate issuer key pair
+2. Update trusted issuer configuration on all services
+3. Re-issue ATCs for all active agents with new key
+
+The revocation list (Section 5) has no entry for this: its entries revoke agents, not ATCs or issuer keys.
 
 ### 8.4 Quantum Resistance
 
@@ -365,6 +474,6 @@ A service is ATC-v1 conformant if it:
 1. Accepts `Authorization: ATC` headers
 2. Implements all 10 verification steps from Section 4.1
 3. Returns standardized error codes from Section 4.2
-4. Caches CRL per Section 5.2
+4. Caches CRL per Section 5.5
 5. Emits `X-ATC-Supported: true` and `X-ATC-Version: 1.0` headers
 6. Fails closed on any verification error
