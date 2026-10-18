@@ -337,11 +337,34 @@ func TestSentinelAdapter_TokenAnswersWithoutABearer(t *testing.T) {
 			adapter := stubs.adapter(stubSecret)
 			adapter.config.AuthorityHost = token.URL
 			err := adapter.Send(context.Background(), sentinelEvent(EventSignInFailed))
-			require.Error(t, err)
+			var status *StatusError
+			require.True(t, errors.As(err, &status), "got %v", err)
+			assert.Equal(t, http.StatusOK, status.StatusCode)
+			assert.False(t, status.Retryable())
 			assert.NotContains(t, err.Error(), "abc")
 			assert.Equal(t, 0, stubs.ingestion.Requests())
 		})
 	}
+}
+
+// A forwarder does not retry a 2xx token answer that carries no bearer token,
+// and counts the batch failed.
+func TestSentinelAdapter_ForwarderCountsATokenAnswerWithoutABearerOnce(t *testing.T) {
+	stubs := newSentinelStubs(t)
+	token, seen := plainServer(t, []int{http.StatusOK, http.StatusOK, http.StatusOK}, `{}`)
+	adapter := stubs.adapter(stubSecret)
+	adapter.config.AuthorityHost = token.URL
+	f := NewForwarder([]BatchAdapter{adapter}, ForwarderConfig{RetryBackoff: time.Millisecond}, nil)
+	t.Cleanup(func() { _ = f.Close(context.Background()) })
+
+	require.True(t, f.Enqueue(sentinelEvent(EventSignInFailed)))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, f.Flush(ctx))
+
+	assert.Len(t, seen(), 1, "not retried")
+	assert.Equal(t, 0, stubs.ingestion.Requests())
+	assert.Equal(t, []AdapterStats{{Adapter: "sentinel", Sent: 0, Failed: 1}}, f.AdapterStats())
 }
 
 // Each record carries the eight columns, each named as the Logs Ingestion API

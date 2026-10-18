@@ -574,8 +574,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `https://monitor.azure.com/.default`, keeps it until 60 seconds before its `expires_in` runs out, and posts the batch
   as one JSON array to `{endpoint}/dataCollectionRules/{dcrImmutableId}/streams/{streamName}?api-version=2023-01-01`.
   Any 2xx answer is delivery. A token request or upload that cannot reach its host, or is answered 408, 429 or 5xx, is
-  retried as for Splunk. Any other answer is not, such as a refused token (`invalid_client`) or an upload answered 401
-  or 403, and after a 401 or 403 the next batch asks for a new token. A redirect is not followed. No error or log line carries the client secret or a token: an answer that echoes either is redacted.
+  retried as for Splunk. Any other answer is not, such as a refused token (`invalid_client`), a 2xx token answer
+  without a bearer `access_token` or a positive `expires_in` (#767), or an upload answered 401 or 403, and after a 401 or 403 the next batch asks for a new token. A redirect is not followed. No error or log line carries the client secret or a token: an answer that echoes either is redacted.
 - Each record has the columns `TimeGenerated` (the event's time, RFC 3339 in UTC), `EventType`, `Severity`,
   `AgentId`, `Capability`, `Outcome`, `Source` (`opena2a-aim`) and `Details` (an object).
 - The readiness entry `dependencies.siem` and the counters `aim_siem_events_sent_total{adapter="sentinel"}` and

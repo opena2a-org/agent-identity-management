@@ -59,7 +59,8 @@ type BatchAdapter interface {
 }
 
 // StatusError is a SIEM endpoint's refusal of a request: an HTTP status of
-// 400 or above. Body is the start of the endpoint's answer.
+// 400 or above, a redirect, or a 2xx token answer that carries no usable
+// token. Body is the start of the endpoint's answer, or a description of it.
 type StatusError struct {
 	Service    string
 	StatusCode int
