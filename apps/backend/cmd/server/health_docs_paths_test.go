@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gofiber/fiber/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +22,9 @@ var (
 	servedHealthRoute = regexp.MustCompile(`app\.Get\("(/health[^"]*)"`)
 	docURL            = regexp.MustCompile("https?://[^\\s\"'`()<>\\[\\]]+")
 	jsonFence         = regexp.MustCompile("(?s)```json\n(.*?)```")
+	// summaryReadinessRow captures the description cell of the API endpoint
+	// summary's GET /health/ready row.
+	summaryReadinessRow = regexp.MustCompile("^\\| GET \\| `/health/ready` \\|([^|]*)\\|")
 )
 
 // docsWalkSkip names the directories that hold no documentation of this
@@ -141,4 +145,65 @@ func TestSetupGuideHealthOutputIsTheHandlers(t *testing.T) {
 	assert.Equal(t, servedKeys, documentedKeys, "the documented response has the fields the server returns")
 	assert.Equal(t, "healthy", documented["status"])
 	assert.Equal(t, "agent-identity-management", documented["service"])
+}
+
+// readinessDependencies returns each dependency GET /health/ready reports,
+// with its "required" value, read from the handler's body with no optional
+// dependency set up and with every one set up.
+func readinessDependencies(t *testing.T) map[string]bool {
+	t.Helper()
+	required := map[string]bool{}
+	for _, handler := range []fiber.Handler{
+		newHealthReadyHandler(aim07CheckOK, nil, nil, nil),
+		newHealthReadyHandler(aim07CheckOK, aim07CheckOK, func() error { return nil }, func() (bool, string) { return true, "" }),
+	} {
+		app := fiber.New()
+		app.Get("/health/ready", handler)
+		_, _, body := aim07Get(t, app)
+		deps, ok := aim07TopLevel(t, body)["dependencies"].(map[string]any)
+		require.True(t, ok, "dependencies must be an object: %s", body)
+		for name, raw := range deps {
+			entry, ok := raw.(map[string]any)
+			require.True(t, ok, "dependency %q must be an object: %s", name, body)
+			flag, ok := entry["required"].(bool)
+			require.True(t, ok, "dependency %q must carry a boolean required: %s", name, body)
+			required[name] = flag
+		}
+	}
+	return required
+}
+
+// TestEndpointSummaryReadinessRowNamesTheReportedDependencies pins the API
+// endpoint summary's GET /health/ready row to the dependencies the readiness
+// handler reports: the row names each one, and writes "`<name>` (required"
+// for each one the body reports as required and for no other. The row read
+// "Readiness check (database + redis)" while the body also reported siem and
+// revocationState.
+func TestEndpointSummaryReadinessRowNamesTheReportedDependencies(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
+	const summary = "docs/guides/API_ENDPOINT_SUMMARY.md"
+	var rows []string
+	for _, line := range strings.Split(aim03ReadRepoFile(t, summary), "\n") {
+		if m := summaryReadinessRow.FindStringSubmatch(line); m != nil {
+			rows = append(rows, m[1])
+		}
+	}
+	require.Len(t, rows, 1, "%s lists GET /health/ready in one table row", summary)
+	row := rows[0]
+
+	deps := readinessDependencies(t)
+	require.Contains(t, deps, "database", "the handler reported no database; the body read is broken, not the summary")
+	names := make([]string, 0, len(deps))
+	for name := range deps {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		assert.Regexp(t, `\b`+regexp.QuoteMeta(name)+`\b`, row,
+			"the %s row names the %s dependency the body reports", summary, name)
+		assert.Equal(t, deps[name], strings.Contains(row, "`"+name+"` (required"),
+			"the body reports %s with \"required\": %t; the row writes \"`%s` (required\" exactly when it is required",
+			name, deps[name], name)
+	}
 }

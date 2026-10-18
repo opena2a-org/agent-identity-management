@@ -221,10 +221,10 @@ The audit log export is `GET /api/v1/admin/audit-logs/export`. The compliance ex
 | Method | Endpoint | Description | Authentication |
 |--------|----------|-------------|----------------|
 | GET | `/health` | Basic health check | None |
-| GET | `/health/ready` | Readiness check (database + redis) | None |
+| GET | `/health/ready` | Readiness check. Its `dependencies` object reports `database` (required: 200 when its ping succeeds within 2 s, 503 otherwise) and `redis`, `siem` and `revocationState` (optional: an `unavailable` one sets `degraded` to `true` without changing the status) | None |
 | GET | `/api/v1/admin/dashboard/stats` | Dashboard statistics | JWT Required (Admin) |
 
-**Implementation**: `apps/backend/cmd/server/main.go:112-144`
+**Implementation**: `apps/backend/cmd/server/main.go` registers the three routes; `apps/backend/cmd/server/health_ready.go` builds the `/health/ready` body, whose contract is `apps/backend/contracts/health-ready.schema.json`
 
 ---
 
