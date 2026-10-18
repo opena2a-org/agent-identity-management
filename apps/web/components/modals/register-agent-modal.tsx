@@ -21,6 +21,7 @@ import {
   Search,
 } from "lucide-react";
 import { api, Agent, AgentType, CapabilityDefinition, ListCapabilitiesResponse } from "@/lib/api";
+import { apiBaseUrl } from "@/lib/api-base-url";
 import { toast } from "sonner";
 import { LoadingOverlay } from "@/components/ui/loading-overlay";
 import { useMemo, useCallback } from "react";
@@ -1071,7 +1072,7 @@ print(f"Result: {result}")
                               </div>
                               <div className="relative">
                                 <pre className="glass-contrast p-3 text-ink-code text-xs font-mono rounded-inset overflow-x-auto whitespace-pre-wrap break-all">
-{`curl -X POST "${typeof window !== 'undefined' ? window.location.origin.replace('-frontend', '-backend').replace(':3000', ':8080') : 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/verify-capability" \\
+{`curl -X POST "${apiBaseUrl()}/api/v1/agents/${createdAgent.id}/verify-capability" \\
   -H "Authorization: Bearer ${createdApiKey.key}" \\
   -H "Content-Type: application/json" \\
   -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`}
@@ -1079,7 +1080,7 @@ print(f"Result: {result}")
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const curlCmd = `curl -X POST "${typeof window !== 'undefined' ? window.location.origin.replace('-frontend', '-backend').replace(':3000', ':8080') : 'http://localhost:8080'}/api/v1/agents/${createdAgent.id}/verify-capability" \\\n  -H "Authorization: Bearer ${createdApiKey.key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`;
+                                    const curlCmd = `curl -X POST "${apiBaseUrl()}/api/v1/agents/${createdAgent.id}/verify-capability" \\\n  -H "Authorization: Bearer ${createdApiKey.key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`;
                                     copyToClipboard(curlCmd, "curl_cmd");
                                   }}
                                   className="absolute top-2 right-2 px-2 py-1 rounded-pill bg-glass-code text-ink-inverse hover:bg-track text-xs transition-colors flex items-center gap-1"

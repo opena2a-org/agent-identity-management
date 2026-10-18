@@ -11,6 +11,40 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the MCP server setup guide and the register-agent dialog's verification command name the API the dashboard signs in to
+
+- The setup guide on the Integration tab of an MCP server's page wrote its cURL commands for an address of its own:
+  port 8080 on the dashboard's host name when that name is `localhost` or `127.0.0.1`, and the dashboard's origin
+  otherwise. After an agent is registered with a capability, the register-agent dialog's manual integration step
+  showed, and copied, a cURL command for the dashboard's origin with the first `-frontend` replaced by `-backend` and
+  the first `:3000` by `:8080`. Evaluated from the previous code, on a dashboard opened at `http://localhost:3001`, the
+  second stack's port in `docs/DEPLOYMENT.md`, the guide named `http://localhost:8080` and the dialog named
+  `http://localhost:3001`; on one opened at `https://aim.example.com`, both named `https://aim.example.com`. The SDK
+  setup guide component, which no page renders, wrote the `api_url` of its example with the guide's rule.
+- The guide, the dialog and the SDK setup guide take the address from `apiBaseUrl()` in
+  `apps/web/lib/api-base-url.ts`: the address the API client resolved, which is the URL the page hands the browser
+  when `NEXT_PUBLIC_API_URL` is set in the dashboard's environment.
+- Tests: `mcp-setup-guide.api-url.test.tsx`, `sdk-setup-guide.api-url.test.tsx` and
+  `register-agent-modal.api-url.test.tsx` open each on `http://localhost:3001` with the page handing the browser
+  `http://localhost:8081`, and on `https://aim.example.com` with `https://api.example.com`. The dialog test registers
+  an agent with a capability and checks the command shown and the text the copy button copies. On the previous code,
+  the 6 tests fail.
+- Measured in Chromium on an `aim-dashboard` image built from this tree with
+  `--build-arg NEXT_PUBLIC_API_URL=http://localhost:8080`, and two stacks started from `docker-compose.quickstart.yml`
+  with the published `aim-server` image (revision `3ab8285e`) and every port bound to `127.0.0.1`, the second with
+  `AIM_BACKEND_PORT=8081` and `AIM_FRONTEND_PORT=3001`. Accounts were registered through each dashboard's register
+  page and approved through `AIM_PLATFORM_ADMINS`; sign-in was typed and clicked with keyboard and mouse input. On
+  the second stack's dashboard, registration and sign-in went to `http://localhost:8081` (201, then 200), the MCP
+  server guide named `http://localhost:8081`, and the dialog showed and copied a command for
+  `http://localhost:8081`. On the first stack's dashboard, sign-in went to `http://localhost:8080` (200), and the
+  guide and the dialog named `http://localhost:8080`. The second stack was then started again with
+  `FRONTEND_API_URL=http://api.aim.example.test:18888`, and `FRONTEND_URL` and `ALLOWED_ORIGINS` set to
+  `http://aim.example.test:18888`, behind a reverse proxy on `127.0.0.1:18888` that passes each host name to the
+  stack's loopback port; the browser resolved both names to `127.0.0.1` and treated both origins as secure, as TLS
+  would. Opened at `http://aim.example.test:18888`, the dashboard signed in at `http://api.aim.example.test:18888`
+  (200), and the guide and the dialog named that address. In each run on that image, every request to an `/api/v1/`
+  path went to that stack's API address, and the browser logged no CORS or Content-Security-Policy refusal.
+
 ### Fixed: revoking an agent asks the Registry to revoke the trust credentials it issued for the agent
 
 - `POST /api/v1/agents/:id/revoke` revoked the agent in OpenA2A AIM (Agent Identity Management) only. The Registry

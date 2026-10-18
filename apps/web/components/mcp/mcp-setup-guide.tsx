@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Code2, Copy, CheckCircle2, Shield, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useClipboard } from '@/hooks/use-clipboard';
+import { apiBaseUrl } from '@/lib/api-base-url';
 
 interface MCPSetupGuideProps {
   mcpServerId: string;
@@ -18,14 +19,9 @@ export function MCPSetupGuide({ mcpServerId, mcpServerName, mcpServerUrl }: MCPS
   const advancedClipboard = useClipboard();
   const curlClipboard = useClipboard();
 
-  // Backend API URL - dynamic based on deployment
-  // In production: same domain (reverse proxy handles routing)
-  // In development: localhost:8080
-  const apiUrl = typeof window !== 'undefined'
-    ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? `${window.location.protocol}//${window.location.hostname}:8080`
-      : `${window.location.protocol}//${window.location.host}`
-    : 'http://localhost:8080';
+  // The API the dashboard signs in to (lib/api-base-url.ts). Browser only: the MCP
+  // server page renders this guide once it has loaded the server.
+  const apiUrl = apiBaseUrl();
 
   // Quick attestation example (Python only - the only SDK available)
   const quickStartCode = `from aim_sdk import secure
