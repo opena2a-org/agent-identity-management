@@ -5,8 +5,14 @@ organization and makes your dashboard come alive.
 Run it from the installed SDK:
 
     pip install aim-sdk
-    aim-sdk login
     aim-sdk demo
+
+With no sign-in stored on this machine, a run other than --cleanup first
+signs it in, with the function secure() uses: the device grant `aim-sdk
+login` uses, to --url or https://aim.opena2a.org. It does so under the rule
+secure() applies (the CI variable unset or empty, and standard input a
+terminal or an IPython kernel) and without --ci; otherwise it prints that it
+needs `aim-sdk login` first and exits 1 before any request.
 
 The default run is a bounded, non-interactive pass: it registers (or
 reconnects to) a demo agent, performs a short scripted sequence of actions,
@@ -201,19 +207,62 @@ def _build_actions(agent) -> dict:
     }
 
 
-def _setup(url_override: Optional[str], interactive: bool, delay: float) -> Optional["_DemoContext"]:
-    """Load credentials and register (or reconnect to) the demo agent."""
+def _sign_in(url_override: Optional[str]) -> Optional[dict]:
+    """
+    Sign this machine in for the demo with the function secure() uses when it
+    finds no credentials, to `url_override` or the default server, with the
+    lines on standard output, where the rest of the demo prints.
+
+    Returns the stored credentials, or None once the lines that say why the
+    sign-in did not complete are printed; nothing is stored then.
+    """
+    from .cli import DEFAULT_AIM_URL, invalid_server_url_reason, sign_in_inline
+    from .exceptions import AuthenticationError, ConfigurationError
+
+    aim_url = url_override or DEFAULT_AIM_URL
+    url_problem = invalid_server_url_reason(aim_url)
+    if url_problem:
+        # The lines `aim-sdk login` prints for such an address. sign_in_inline
+        # would name it aim_url, the secure() argument.
+        print(f"Error: {url_problem}.")
+        print("Pass the server's http(s) address, for example:")
+        print("  aim-sdk demo --url https://aim.example.com")
+        print(f"or omit --url to use {DEFAULT_AIM_URL}.")
+        return None
+    try:
+        return sign_in_inline(aim_url, agent_name=DEMO_AGENT_NAME, out=sys.stdout)
+    except (AuthenticationError, ConfigurationError) as e:
+        print(e)
+        return None
+    except KeyboardInterrupt:
+        # What `aim-sdk login` prints for Ctrl+C during the wait.
+        print("\n\nLogin cancelled.")
+        return None
+
+
+def _setup(url_override: Optional[str], interactive: bool, delay: float,
+           ci: bool = False) -> Optional["_DemoContext"]:
+    """
+    Load credentials, or sign this machine in when it has none and a person
+    can approve the code (not with `ci`), and register (or reconnect to)
+    the demo agent.
+    """
+    from .client import _a_person_can_approve_a_sign_in
     from .credentials import load_sdk_credentials
     from .strict_mode import strict_mode_override
 
     creds = load_sdk_credentials()
-    if not creds:
+    if not creds and (ci or not _a_person_can_approve_a_sign_in()):
         print("Not authenticated. The demo registers an agent in your own")
         print("organization, so it needs a login first:")
         print()
         print("    aim-sdk login")
         print("    aim-sdk demo")
         return None
+    if not creds:
+        creds = _sign_in(url_override)
+        if not creds:
+            return None
 
     aim_url = (url_override or creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
     dashboard_url = dashboard_url_for(aim_url)
@@ -940,7 +989,7 @@ def run(interactive: bool = False, ci: bool = False, cleanup: bool = False, url:
     if cleanup:
         return _cleanup(url)
     delay = 0.0 if ci else 0.3
-    ctx = _setup(url, interactive=interactive and not ci, delay=delay)
+    ctx = _setup(url, interactive=interactive and not ci, delay=delay, ci=ci)
     if ctx is None:
         return 1
     if ctx.interactive:
@@ -949,6 +998,8 @@ def run(interactive: bool = False, ci: bool = False, cleanup: bool = False, url:
 
 
 def main(argv=None) -> int:
+    from .cli import DEMO_URL_HELP
+
     parser = argparse.ArgumentParser(
         prog="aim-sdk demo",
         description="Register a demo agent in your organization and watch the dashboard come alive.",
@@ -956,7 +1007,7 @@ def main(argv=None) -> int:
     parser.add_argument("--interactive", action="store_true", help="Open the full interactive menu (security demos, JIT, MCP)")
     parser.add_argument("--ci", action="store_true", help="Non-interactive, no delays (for scripted runs)")
     parser.add_argument("--cleanup", action="store_true", help="Delete the demo agent again")
-    parser.add_argument("--url", default=None, help="AIM server URL (default: the URL you logged in to)")
+    parser.add_argument("--url", default=None, help=DEMO_URL_HELP)
     args = parser.parse_args(argv)
     return run(interactive=args.interactive, ci=args.ci, cleanup=args.cleanup, url=args.url)
 
