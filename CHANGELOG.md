@@ -11,6 +11,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: revoking an agent asks the Registry to revoke the trust credentials it issued for the agent
+
+- `POST /api/v1/agents/:id/revoke` revoked the agent in OpenA2A AIM (Agent Identity Management) only. The Registry
+  signs the Agent Trust Credentials `POST /api/v1/agents/:id/atc` issues, and no request asked it to revoke the ones
+  it had issued for the revoked agent.
+- Once the revocation is stored, AIM now sends `POST /internal/atc/<agent id>/revoke` to the Registry at
+  `REGISTRY_BRIDGE_URL` (default `https://api.oa2a.org`), with the `REGISTRY_ATC_TOKEN` bearer issuance uses and the
+  body `{"reason":"revoked"}`. `revoked` is the reason every entry of AIM's own revocation list,
+  `GET /api/v1/revocations`, carries. The request runs on its own goroutine: the revoke route answers without waiting
+  for the Registry, and a Registry that refuses or cannot be reached leaves the agent revoked in AIM.
+- A failed connection, a timeout, a `408`, a `429` or a `5xx` answer is followed by another request after 5 seconds,
+  30 seconds, 2 minutes, 10 minutes and 30 minutes in turn, six requests at most; any other answer that is not `2xx`
+  ends the attempts. Each failed request is logged with the agent ID. A request still waiting when the server stops
+  is not sent. With `REGISTRY_ATC_TOKEN` unset no request is sent, as no credential is issued without it.
+- Tests: `apps/backend/internal/infrastructure/registry/atc_client_test.go` (the request's method, path, bearer and
+  body, an agent ID holding a slash sent as one path segment, no request without a token or an agent ID, and which
+  answers are retried) and `apps/backend/internal/application/agent_registry_revocation_test.go` (a revocation reaches
+  a local Registry through the client the server wires, `RevokeAgent` returns before the Registry answers and leaves
+  the agent revoked when the Registry fails, nothing is sent for a revocation that is refused or not stored, and the
+  retry and stop rules).
+
 ### Changed: the `aim-dashboard` image takes no `NEXT_PUBLIC_API_URL` build argument, and its browser code holds no `http://localhost:8080`
 
 - `infrastructure/docker/Dockerfile.frontend` declared `ARG NEXT_PUBLIC_API_URL` and set `ENV NEXT_PUBLIC_API_URL`
