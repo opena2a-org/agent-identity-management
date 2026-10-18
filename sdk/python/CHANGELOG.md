@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated — `A2AClient.revoke_attestation` sends no request: the server mounts no route that revokes an A2A skill attestation (#773)
+
+- `A2AClient.revoke_attestation` posted to `POST /api/v1/a2a/attestations/{attestation_id}/revoke`, a route the
+  server's router does not register. It now sends no request and raises `A2AAttestationRevocationUnsupported`, a
+  subclass of `A2AError` whose `status_code` is `None`. The error carries `attestation_id` and names the two routes
+  the server mounts under `/api/v1/a2a/attestations`: `POST /api/v1/a2a/attestations` (`attest_skill`) and
+  `GET /api/v1/a2a/attestations/:agentId/:skillId`. The method is removed at the next major version.
+- The server's `POST /api/v1/attestations/:attestation_id/revoke` revokes an MCP attestation, not an A2A skill
+  attestation.
+- Test: `tests/test_a2a_request_bodies.py` checks that the call sends nothing. It also reads the routes
+  `apps/backend/cmd/server/main.go` mounts under `/api/v1/a2a/attestations` on the `a2a`, `a2aBound`, `a2aHeld` and
+  `v1` groups, and fails when they are not the two the error names.
+
 ### Fixed — `A2AClient.list_skills` requests the route the server registers for an agent's skills (#772)
 
 - `A2AClient.list_skills()` requests `GET /api/v1/a2a/agents/{agentId}/skills` with the client's own agent ID, the

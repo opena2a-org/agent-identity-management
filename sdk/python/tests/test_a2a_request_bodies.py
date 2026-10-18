@@ -7,12 +7,14 @@ refused before any request, in the server's words.
   /api/v1/a2a/trust/:id`` with 405 because the A2A trust score has no write.
 - ``register_skill`` sends ``inputModes`` and ``outputModes``; the
   ``input_schema`` and ``output_schema`` arguments warn and are not sent.
+- ``revoke_attestation`` sends nothing: the server mounts no route that
+  revokes an A2A skill attestation.
 
 ``update_agent_card`` and the card route are tested in
 test_a2a_update_agent_card_document.py.
 
-The members each handler binds, and the server's messages, are read from the
-backend source, so a change on either side fails here.
+The members each handler binds, the server's messages and the A2A attestation
+routes are read from the backend source, so a change on either side fails here.
 """
 
 import json
@@ -26,6 +28,7 @@ import responses
 
 from aim_sdk.a2a import (
     A2A_TRUST_SCORE_NOT_ASSERTED,
+    A2AAttestationRevocationUnsupported,
     A2AClient,
     A2AError,
     A2ATrustScoreWriteRefused,
@@ -37,10 +40,13 @@ AGENT_ID = "550e8400-e29b-41d4-a716-446655440000"
 PEER_ID = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
 SKILL_ROUTE = "/api/v1/a2a/skills"
 
-HANDLERS_DIR = Path(__file__).resolve().parents[3] / "apps/backend/internal/interfaces/http/handlers"
+BACKEND_DIR = Path(__file__).resolve().parents[3] / "apps/backend"
+HANDLERS_DIR = BACKEND_DIR / "internal/interfaces/http/handlers"
 HANDLER_SOURCE = HANDLERS_DIR / "a2a_handler.go"
 # The status and reason of every A2A failure the handlers answer.
 FAILURES_SOURCE = HANDLERS_DIR / "a2a_failures.go"
+# The server's route table.
+ROUTES_SOURCE = BACKEND_DIR / "cmd/server/main.go"
 
 _REQUEST_TYPE = re.compile(r"var req struct \{(.*?)\n\t\}", re.S)
 _BOUND_MEMBER = re.compile(r'^\s*\w+\s+(\S+)\s+`json:"([^",`]+)', re.M)
@@ -149,6 +155,62 @@ def test_update_trust_score_raises_the_server_refusal_without_a_request(client, 
     assert f'"record": "{error.record_route}"' in refusal
     for part in (A2A_TRUST_SCORE_NOT_ASSERTED, error.read_route, error.record_route, PEER_ID):
         assert part in str(error)
+
+
+# ---------------------------------------------------------------------------
+# revoke_attestation
+# ---------------------------------------------------------------------------
+
+# The groups main.go mounts the A2A routes on: a2a is v1.Group("/a2a"), and
+# a2aBound and a2aHeld wrap it.
+_A2A_GROUP_DECLARATIONS = (
+    'a2a := v1.Group("/a2a")',
+    "a2aBound := bindAgentRoutes(a2a)",
+    "a2aHeld := holdAgentRoutes(a2a)",
+)
+_A2A_GROUP_ROUTE = re.compile(r'^\t(?:a2a|a2aBound|a2aHeld)\.(Get|Post|Put|Patch|Delete|All)\("([^"]*)"', re.M)
+_V1_ROUTE = re.compile(r'^\tv1\.(Get|Post|Put|Patch|Delete|All)\("(/a2a[^"]*)"', re.M)
+
+
+def _a2a_attestation_routes():
+    """The routes main.go mounts under /api/v1/a2a/attestations, as
+    "METHOD /path"."""
+    source = _backend_source(ROUTES_SOURCE)
+    for declaration in _A2A_GROUP_DECLARATIONS:
+        assert declaration in source, f"{ROUTES_SOURCE} no longer declares {declaration!r}"
+    routes = [(method.upper(), "/api/v1/a2a" + path) for method, path in _A2A_GROUP_ROUTE.findall(source)]
+    routes += [(method.upper(), "/api/v1" + path) for method, path in _V1_ROUTE.findall(source)]
+    assert ("POST", "/api/v1/a2a/attestations") in routes, (
+        f"the A2A routes were not read from {ROUTES_SOURCE}: the reader is broken"
+    )
+    return {
+        f"{method} {path}"
+        for method, path in routes
+        if path == "/api/v1/a2a/attestations" or path.startswith("/api/v1/a2a/attestations/")
+    }
+
+
+def test_revoke_attestation_raises_without_a_request(client, fake):
+    with pytest.raises(A2AAttestationRevocationUnsupported) as raised:
+        client.revoke_attestation("attest-123", "No longer valid")
+
+    assert fake.requests == []
+    error = raised.value
+    assert isinstance(error, A2AError)
+    assert error.status_code is None
+    assert error.attestation_id == "attest-123"
+    for part in ("attest-123", "no request was sent", *error.served_routes):
+        assert part in str(error)
+
+
+def test_the_server_mounts_no_route_that_revokes_an_a2a_skill_attestation():
+    routes = _a2a_attestation_routes()
+
+    assert not [route for route in routes if "revoke" in route], (
+        "the server now mounts a route that revokes an A2A skill attestation: "
+        "make revoke_attestation call it"
+    )
+    assert routes == set(A2AAttestationRevocationUnsupported.served_routes)
 
 
 # ---------------------------------------------------------------------------

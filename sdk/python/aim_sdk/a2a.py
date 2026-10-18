@@ -429,20 +429,22 @@ class A2AClient:
 
     def revoke_attestation(self, attestation_id: str, reason: str) -> Dict[str, Any]:
         """
-        Revoke a previously made attestation.
+        Deprecated, and removed at the next major version: the AIM server
+        mounts no route that revokes an A2A skill attestation. Its routes under
+        /api/v1/a2a/attestations are POST /api/v1/a2a/attestations
+        (attest_skill) and GET /api/v1/a2a/attestations/:agentId/:skillId.
+        The method sends nothing and raises
+        A2AAttestationRevocationUnsupported, which names those routes. Kept
+        until then so existing code still imports.
 
         Args:
-            attestation_id: ID of the attestation to revoke
-            reason: Reason for revocation
+            attestation_id: ID of the attestation the caller meant to revoke
+            reason: Ignored
 
-        Returns:
-            The revoked attestation record
+        Raises:
+            A2AAttestationRevocationUnsupported: always. No request is sent.
         """
-        return self._make_request(
-            "POST",
-            f"/api/v1/a2a/attestations/{attestation_id}/revoke",
-            data={"reason": reason}
-        )
+        raise A2AAttestationRevocationUnsupported(attestation_id)
 
     # =========================================================================
     # Request Signing
@@ -1680,6 +1682,29 @@ class A2ATrustScoreWriteRefused(A2AError):
             status_code=405,
         )
         self.target_agent_id = target_agent_id
+
+
+class A2AAttestationRevocationUnsupported(A2AError):
+    """
+    Raised by revoke_attestation without a request: the server mounts no
+    route that revokes an A2A skill attestation. served_routes are the routes
+    it mounts under /api/v1/a2a/attestations. status_code is None, because no
+    request was sent.
+    """
+
+    served_routes = (
+        "POST /api/v1/a2a/attestations",
+        "GET /api/v1/a2a/attestations/:agentId/:skillId",
+    )
+
+    def __init__(self, attestation_id: str):
+        super().__init__(
+            "revoke_attestation is not supported: the AIM server mounts no route that "
+            "revokes an A2A skill attestation; its routes under /api/v1/a2a/attestations "
+            f"are {self.served_routes[0]} and {self.served_routes[1]}. "
+            f"{attestation_id} was not revoked, and no request was sent."
+        )
+        self.attestation_id = attestation_id
 
 
 def _parse_datetime(value: Optional[str]) -> Optional[datetime]:
