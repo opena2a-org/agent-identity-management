@@ -603,20 +603,18 @@ def test_classifiers_cover_every_minor_python_requires_admits():
 
 
 # ---------------------------------------------------------------------------
-# AC8 -- the login banner is rectangular
+# AC8 -- the login banner is rectangular. The banner is gone: `aim-sdk login`
+# opens with the sign-in block secure() prints
+# (tests/test_cli_login_prints_the_sign_in_block.py), so no box can misalign.
 # ---------------------------------------------------------------------------
 
-def test_banner_lines_all_share_one_display_width(capsys):
-    from aim_sdk.cli import print_banner
+def test_the_cli_prints_no_box_banner():
+    import aim_sdk.cli as cli_module
 
-    print_banner()
-    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
-    assert lines, "the banner prints something"
-    widths = {len(line) for line in lines}
-    assert len(widths) == 1, (
-        f"every banner line must be the same width so the right border is a "
-        f"single column; got widths {sorted(widths)} over {lines!r}"
-    )
+    assert not hasattr(cli_module, "print_banner")
+    source = Path(cli_module.__file__).read_text(encoding="utf-8")
+    box = set("╔╗╚╝║═") & set(source)
+    assert not box, f"box-drawing characters in the CLI source: {sorted(box)}"
 
 
 # ---------------------------------------------------------------------------
