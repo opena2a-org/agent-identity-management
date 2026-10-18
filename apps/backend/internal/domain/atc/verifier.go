@@ -144,28 +144,18 @@ type TrustedIssuer struct {
 	RetiredPublicKeys [][]byte `json:"retiredPublicKeys,omitempty"`
 }
 
-// CRLEntry represents a single revoked ATC in the CRL.
-type CRLEntry struct {
-	ATCID     string    `json:"atcId"`
-	RevokedAt time.Time `json:"revokedAt"`
-	Reason    string    `json:"reason"`
-}
-
-// CRLResponse is the response from the CRL endpoint.
-type CRLResponse struct {
-	Version     int        `json:"version"`
-	GeneratedAt time.Time  `json:"generatedAt"`
-	ExpiresAt   time.Time  `json:"expiresAt"`
-	RevokedATCs []CRLEntry `json:"revokedATCs"`
-}
-
-// CRLClient fetches and caches the certificate revocation list.
+// CRLClient holds an authority's signed revocation list, whose entries name
+// agents by agentDid. The ATCs this server verifies are not checked against
+// it: their revocation source is a RevocationSource.
 type CRLClient interface {
-	// IsRevoked checks whether the given ATC ID is on the CRL.
-	IsRevoked(atcID string) (bool, error)
+	// IsRevoked reports whether the list held names agentDID. It reads only
+	// the list already held. An error means no list fit to answer from is
+	// held, and is never an answer of not revoked.
+	IsRevoked(agentDID string) (bool, error)
 
-	// Refresh forces a CRL refresh from the endpoint.
-	Refresh() error
+	// Refresh reads the list again, and holds it when it passes the client's
+	// checks.
+	Refresh(ctx context.Context) error
 }
 
 // ATC error codes from spec v1 Section 4.2.
