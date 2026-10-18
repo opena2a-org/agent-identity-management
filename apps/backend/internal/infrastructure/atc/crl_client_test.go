@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -1138,13 +1139,16 @@ func TestCRLClient_RefusesAListAnsweredWithAnotherStatusThan200(t *testing.T) {
 // A read that has not ended by its deadline is refused as timeout: the
 // deadline of the refresh's context and the timeout of the HTTP client, while
 // the authority sends no answer, and while it sends a list body that stops.
+// Each case runs again with a client whose socket closes 100 ms after its
+// close_notify, so the authority sees the client leave while the client still
+// reads.
 func TestCRLClient_RefusesAReadThatOutlivesItsDeadlineAsTimeout(t *testing.T) {
 	discovery, err := json.Marshal(map[string]any{"endpoints": map[string]any{"revocations": testListPath}, "publicKeys": []any{}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	silent := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
+		abortOnceTheClientLeaves(r)
 	}))
 	t.Cleanup(silent.Close)
 	mux := http.NewServeMux()
@@ -1155,7 +1159,7 @@ func TestCRLClient_RefusesAReadThatOutlivesItsDeadlineAsTimeout(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"entryCount":0,`))
 		w.(http.Flusher).Flush()
-		<-r.Context().Done()
+		abortOnceTheClientLeaves(r)
 	})
 	stopping := httptest.NewTLSServer(mux)
 	t.Cleanup(stopping.Close)
@@ -1177,8 +1181,8 @@ func TestCRLClient_RefusesAReadThatOutlivesItsDeadlineAsTimeout(t *testing.T) {
 		{"a list body that stops within the HTTP client's timeout", stopping, withTimeout(stopping), 0},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			c, err := NewCachedCRLClient(tc.srv.URL, "", tc.client)
+		refresh := func(t *testing.T, client *http.Client) {
+			c, err := NewCachedCRLClient(tc.srv.URL, "", client)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1189,8 +1193,57 @@ func TestCRLClient_RefusesAReadThatOutlivesItsDeadlineAsTimeout(t *testing.T) {
 				defer cancel()
 			}
 			requireRefreshOutcome(t, c.Refresh(ctx), CRLOutcomeTimeout)
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			refresh(t, tc.client)
+		})
+		t.Run(tc.name+", the client's socket closing 100 ms after its close_notify", func(t *testing.T) {
+			refresh(t, closingSlowly(t, tc.client, 100*time.Millisecond))
 		})
 	}
+}
+
+// abortOnceTheClientLeaves waits until the client closes its connection and
+// then aborts the answer: the server closes the connection and does not
+// complete the answer. A handler that returned instead would let the server
+// complete a list body that stops, and a client still reading would read that
+// body to EOF and refuse the list as parse, not timeout.
+func abortOnceTheClientLeaves(r *http.Request) {
+	<-r.Context().Done()
+	panic(http.ErrAbortHandler)
+}
+
+// closingSlowly returns a copy of client, on a transport of its own, whose
+// connections wait for hold before they close their socket when the client
+// closes them. The TLS layer sends close_notify before it closes the socket,
+// so the server learns that the client has left while the client still reads
+// what the server sends.
+func closingSlowly(t *testing.T, client *http.Client, hold time.Duration) *http.Client {
+	t.Helper()
+	transport := client.Transport.(*http.Transport).Clone()
+	var dialer net.Dialer
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &slowClosingConn{Conn: conn, hold: hold}, nil
+	}
+	t.Cleanup(transport.CloseIdleConnections)
+	copied := *client
+	copied.Transport = transport
+	return &copied
+}
+
+// slowClosingConn waits for hold when Close is called, then closes its socket.
+type slowClosingConn struct {
+	net.Conn
+	hold time.Duration
+}
+
+func (c *slowClosingConn) Close() error {
+	time.Sleep(c.hold)
+	return c.Conn.Close()
 }
 
 // Both addresses must be https URLs with a host, and the client needs the base.
