@@ -577,6 +577,15 @@ they stay in scope if one ever grows an observational side-channel.
 - Breaking change for code that calls `BudgetController` directly: `canAfford()` is removed, and `record()` takes the
   reservation `reserve()` returned as its first argument. Called as `record(costUsd, tokens)`, it throws.
 
+### Fixed — ARP's `getStatus()` counts the L2 calls of the current hour (#798)
+
+- `BudgetController.getStatus()`, which `AgentRuntimeProtection.getStatus().budget` returns, starts `callsThisHour`
+  again from zero once more than an hour has passed since the count began, as `reserve()` does. Measured before this
+  change: with one call reserved and recorded at 10:00 and the clock at 11:01, the controller that made the call
+  reported `callsThisHour: 1`; with a `budget.json` saved 61 minutes earlier with one call in the hour, a new
+  controller and `AgentRuntimeProtection.getStatus().budget` reported 1 as well. Each now reports 0, the count a
+  `reserve()` at that moment starts from.
+
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.

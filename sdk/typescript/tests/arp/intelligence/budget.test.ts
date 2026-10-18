@@ -61,6 +61,22 @@ describe('BudgetController', () => {
     expect(budget.reserve(0.001)).toBeNull();
   });
 
+  it('getStatus counts the calls of the current hour once the hour they were counted in is over', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 2, 10, 10, 0));
+    const budget = new BudgetController(tmpDir);
+    budget.record(reserveOrFail(budget, 0.01), 0.01, 10);
+    expect(budget.getStatus().callsThisHour).toBe(1);
+
+    vi.setSystemTime(new Date(2026, 2, 10, 11, 1));
+
+    expect(budget.getStatus().callsThisHour).toBe(0);
+    // A process that makes no call, such as a status command, reads the count from budget.json.
+    expect(new BudgetController(tmpDir).getStatus().callsThisHour).toBe(0);
+    reserveOrFail(budget, 0.01);
+    expect(budget.getStatus().callsThisHour).toBe(1);
+  });
+
   it('persists state to disk', () => {
     const budget1 = new BudgetController(tmpDir);
     budget1.record(reserveOrFail(budget1, 0.05), 0.05, 1000);
@@ -247,6 +263,19 @@ describe('BudgetController', () => {
       expect(budget.getStatus().callsThisHour).toBe(1);
       expect(budget.reserve(0.01)).not.toBeNull();
       expect(budget.reserve(0.01)).toBeNull();
+    });
+
+    it('a release after getStatus starts the hour again does not take the count below zero', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 2, 10, 10, 0));
+      const budget = new BudgetController(tmpDir);
+      const fromPreviousHour = reserveOrFail(budget, 0.01);
+
+      vi.setSystemTime(new Date(2026, 2, 10, 11, 1));
+      expect(budget.getStatus().callsThisHour).toBe(0);
+      budget.release(fromPreviousHour);
+
+      expect(budget.getStatus().callsThisHour).toBe(0);
     });
 
     it('a call in flight when the month changes is charged to the month it is recorded in', () => {
