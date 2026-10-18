@@ -166,18 +166,31 @@ All ATC verification errors return a JSON body:
 }
 ```
 
-| Error Code | HTTP Status | Meaning |
-|-----------|------------|---------|
-| `atc_malformed` | 401 | Cannot decode or parse ATC |
-| `atc_oversized` | 401 | ATC exceeds 8 KiB |
-| `atc_expired` | 401 | ATC is expired or not yet valid |
-| `atc_untrusted_issuer` | 401 | Issuer not in trusted list |
-| `atc_signature_invalid` | 401 | Ed25519 signature verification failed |
-| `atc_pqc_signature_invalid` | 401 | ML-DSA signature verification failed |
-| `atc_revoked` | 401 | ATC is revoked (Section 5; the AIM backend, Section 9.4) |
-| `atc_revocation_unknown` | 503 | The revocation state could not be read, so the ATC is not accepted. The response carries `Retry-After` |
-| `atc_chain_invalid` | 401 | Delegation chain verification failed |
-| `atc_insufficient_scope` | 403 | ATC lacks required capability |
+A `503` answer carries `Retry-After`, the number of seconds after which to send the request again. The AIM backend
+answers an ATC whose revocation state it cannot read (Section 9.4) with:
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json; charset=utf-8
+Retry-After: 5
+X-ATC-Supported: true
+X-ATC-Version: 1.0
+
+{"error":"atc_revocation_unknown","message":"the revocation state of this ATC could not be read"}
+```
+
+| Error Code | HTTP Status | Meaning | Next step |
+|-----------|------------|---------|-----------|
+| `atc_malformed` | 401 | Cannot decode or parse ATC | Send the ATC as Sections 2 and 3.1 define it: a CBOR map, base64url encoded without padding |
+| `atc_oversized` | 401 | ATC exceeds 8 KiB | Request an ATC of at most 8 KiB, with fewer capabilities or a shorter delegation chain |
+| `atc_expired` | 401 | ATC is expired or not yet valid | Request a new ATC from the issuer. If the ATC is not yet valid, compare the clocks of the issuer and the service |
+| `atc_untrusted_issuer` | 401 | Issuer not in trusted list | Present an ATC from an issuer the service trusts (Section 7), or ask the service's operator to add the issuer |
+| `atc_signature_invalid` | 401 | Ed25519 signature verification failed | Request a new ATC from the issuer and send it unchanged |
+| `atc_pqc_signature_invalid` | 401 | ML-DSA signature verification failed | Request a new ATC from the issuer and send it unchanged |
+| `atc_revoked` | 401 | ATC is revoked (Section 5; the AIM backend, Section 9.4) | Do not send the ATC again. A new ATC for the same agent is refused as well while the agent stays revoked |
+| `atc_revocation_unknown` | 503 | The revocation state could not be read, so the ATC is not accepted. The response carries `Retry-After` | Send the request again after the `Retry-After` seconds, with the same ATC while it is valid. The ATC was not judged, so a new ATC does not help |
+| `atc_chain_invalid` | 401 | Delegation chain verification failed | Request an ATC whose delegation chain verifies link by link up to an issuer the service trusts |
+| `atc_insufficient_scope` | 403 | ATC lacks required capability | Request an ATC that grants the capability the operation needs (Section 6) |
 
 ---
 

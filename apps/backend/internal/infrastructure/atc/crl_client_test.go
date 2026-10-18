@@ -483,6 +483,25 @@ func TestCRLClient_VerifiesTheMLDSA65SignatureOfAListedKey(t *testing.T) {
 	}
 }
 
+// A signature whose keyId the discovery document does not list is not read:
+// beside a verified Ed25519 signature by a listed key, a signature by another
+// key whose value does not verify leaves the list held.
+func TestCRLClient_ReadsNoSignatureByAKeyTheDiscoveryDocumentDoesNotList(t *testing.T) {
+	listed := newEd25519Signer(t, testListKeyID)
+	unlisted := newEd25519Signer(t, "did:web:registry.example#list-unlisted")
+	now := time.Now()
+	body := editList(t, signList(t, testList(now, revokedDID), listed, unlisted), func(doc map[string]any) {
+		signatureAt(doc, 1)["value"] = base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
+	})
+	a := newCRLAuthority(t, discoveryFor(listed))
+	a.setList(body)
+	c := newTestCRLClient(t, a, "", &now)
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+}
+
 // A list that breaks the form of the list contract is refused as shape, and a
 // body that is not an I-JSON text (RFC 7493) as parse, even when a listed key
 // signed it.
@@ -1067,6 +1086,7 @@ func TestCRLClient_ClassifiesADiscoveryDocumentItCannotRead(t *testing.T) {
 		{"a document cut short", http.StatusOK, `{"endpoints":{"revocations":`, CRLOutcomeParse},
 		{"an array where the document belongs", http.StatusOK, `[]`, CRLOutcomeShape},
 		{"an endpoints member that is a string", http.StatusOK, `{"endpoints":"` + testListPath + `"}`, CRLOutcomeShape},
+		{"a document longer than its bound", http.StatusOK, `{"endpoints":{"revocations":"` + testListPath + `"}}` + strings.Repeat(" ", maxDiscoveryBytes), CRLOutcomeShape},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
