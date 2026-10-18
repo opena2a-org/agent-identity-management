@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -150,21 +151,30 @@ func discoveryFor(signers ...crlSigner) map[string]any {
 
 // crlAuthority is a TLS stub of an authority listening on 127.0.0.1. It
 // serves a discovery document at /.well-known/atp and /.well-known/opena2a,
-// and the list at testListPath and testOverridePath. When an ETag is set, a
-// request whose If-None-Match carries it is answered 304.
+// and the list at testListPath and testOverridePath. When an ETag is set for
+// the list (etag) or the discovery document (discoveryETag), a request for it
+// whose If-None-Match carries that ETag is answered 304.
 type crlAuthority struct {
 	srv *httptest.Server
 
-	mu          sync.Mutex
-	discovery   []byte
-	atpServed   bool
-	aliasServed bool
-	list        []byte
-	listStatus  int
-	etag        string
-	redirect    string
-	listPaths   []string
-	ifNoneMatch []string
+	mu             sync.Mutex
+	discovery      []byte
+	discoveryETag  string
+	discoveryReads []discoveryRead
+	atpServed      bool
+	aliasServed    bool
+	list           []byte
+	listStatus     int
+	etag           string
+	redirect       string
+	listPaths      []string
+	ifNoneMatch    []string
+}
+
+// discoveryRead is a request for the discovery document: its path and the
+// If-None-Match it carried.
+type discoveryRead struct {
+	path, ifNoneMatch string
 }
 
 func newCRLAuthority(t *testing.T, discovery map[string]any) *crlAuthority {
@@ -174,11 +184,19 @@ func newCRLAuthority(t *testing.T, discovery map[string]any) *crlAuthority {
 	serveDiscovery := func(served *bool) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			a.mu.Lock()
-			ok, body := *served, a.discovery
+			a.discoveryReads = append(a.discoveryReads, discoveryRead{path: r.URL.Path, ifNoneMatch: r.Header.Get("If-None-Match")})
+			ok, body, etag := *served, a.discovery, a.discoveryETag
 			a.mu.Unlock()
 			if !ok {
 				http.NotFound(w, r)
 				return
+			}
+			if etag != "" {
+				if r.Header.Get("If-None-Match") == etag {
+					w.WriteHeader(http.StatusNotModified)
+					return
+				}
+				w.Header().Set("ETag", etag)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write(body)
@@ -241,6 +259,12 @@ func (a *crlAuthority) requests() (paths, ifNoneMatch []string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return append([]string(nil), a.listPaths...), append([]string(nil), a.ifNoneMatch...)
+}
+
+func (a *crlAuthority) discoveryRequests() []discoveryRead {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]discoveryRead(nil), a.discoveryReads...)
 }
 
 // newTestCRLClient returns a client of a whose clock reads *clock.
@@ -835,6 +859,145 @@ func TestCRLClient_ANotModifiedAnswerCountsAsAReadOfTheListHeld(t *testing.T) {
 	requireUnknown(t, c, revokedDID)
 }
 
+// A refresh sends the ETag of the discovery document read before as
+// If-None-Match, and a 304 answer reuses the list address and the keys read
+// from that document: the document the authority would send in full now names
+// another list address and lists no key, and the list is still read at the
+// address and checked under the key read before.
+func TestCRLClient_ANotModifiedDiscoveryDocumentIsTheDocumentReadBefore(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	start := time.Now().UTC().Truncate(time.Second)
+	now := start
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.set(func(a *crlAuthority) { a.discoveryETag = `"discovery-1"` })
+	a.setList(signList(t, testList(now, otherDID), signer))
+	c := newTestCRLClient(t, a, "", &now)
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+
+	a.setDiscovery(t, map[string]any{"endpoints": map[string]any{"revocations": testOverridePath}, "publicKeys": []any{}})
+	now = start.Add(4 * time.Minute)
+	a.setList(signList(t, testList(now, revokedDID), signer))
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh with the discovery document answered 304: %v", err)
+	}
+	requireAnswer(t, c, revokedDID, true)
+	want := []discoveryRead{{"/.well-known/atp", ""}, {"/.well-known/atp", `"discovery-1"`}}
+	if got := a.discoveryRequests(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("discovery requests (path, If-None-Match): %q, want %q", got, want)
+	}
+	if paths, _ := a.requests(); !reflect.DeepEqual(paths, []string{testListPath, testListPath}) {
+		t.Fatalf("the list was read at %v, want twice at %s", paths, testListPath)
+	}
+}
+
+// The ETag of a discovery document is sent only to the address that answered
+// with it: read at the alias while /.well-known/atp answers 404, it is sent to
+// the alias; once /.well-known/atp serves the document, the first request
+// there carries none, and the next carries the ETag that address answered.
+func TestCRLClient_SendsADiscoveryETagOnlyToTheAddressThatAnsweredWithIt(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	now := time.Now()
+	a := newCRLAuthority(t, discoveryFor(signer))
+	a.set(func(a *crlAuthority) {
+		a.atpServed = false
+		a.discoveryETag = `"discovery-1"`
+	})
+	a.setList(signList(t, testList(now, revokedDID), signer))
+	c := newTestCRLClient(t, a, "", &now)
+	refresh := func() {
+		t.Helper()
+		if err := c.Refresh(context.Background()); err != nil {
+			t.Fatalf("Refresh: %v", err)
+		}
+	}
+	refresh()
+	refresh()
+	a.set(func(a *crlAuthority) { a.atpServed = true })
+	refresh()
+	refresh()
+
+	want := []discoveryRead{
+		{"/.well-known/atp", ""}, {"/.well-known/opena2a", ""},
+		{"/.well-known/atp", ""}, {"/.well-known/opena2a", `"discovery-1"`},
+		{"/.well-known/atp", ""},
+		{"/.well-known/atp", `"discovery-1"`},
+	}
+	if got := a.discoveryRequests(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("discovery requests (path, If-None-Match):\n got %q\nwant %q", got, want)
+	}
+	requireAnswer(t, c, revokedDID, true)
+}
+
+// The list is read with the ETag of the list held only while the discovery
+// document lists the keys that list was checked under. When they change, the
+// list is read in full and checked under the keys listed now: a list whose
+// key was withdrawn, or is listed under its keyId with another public key, is
+// refused as signature, the list held is answered from until five minutes
+// after its last read, and a list signed by the key listed now is held; a
+// list whose key is still listed, beside another, is held again.
+func TestCRLClient_ReadsTheListInFullWhenTheDiscoveryDocumentsKeysChange(t *testing.T) {
+	signer := newEd25519Signer(t, testListKeyID)
+	successor := newEd25519Signer(t, "did:web:registry.example#list-2")
+	rekeyed := newEd25519Signer(t, testListKeyID)
+	cases := []struct {
+		name    string
+		keys    []crlSigner
+		outcome string // empty for a list held again
+	}{
+		{"the key that signed the list held is withdrawn", []crlSigner{successor}, CRLOutcomeSignature},
+		{"its keyId is listed with another public key", []crlSigner{rekeyed}, CRLOutcomeSignature},
+		{"another key is listed beside it", []crlSigner{signer, successor}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now().UTC().Truncate(time.Second)
+			now := start
+			doc := testList(now, revokedDID)
+			doc["nextUpdate"] = now.Add(time.Hour).Format(time.RFC3339)
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(signList(t, doc, signer))
+			a.set(func(a *crlAuthority) { a.etag = `"list-1"` })
+			c := newTestCRLClient(t, a, "", &now)
+			if err := c.Refresh(context.Background()); err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+
+			a.setDiscovery(t, discoveryFor(tc.keys...))
+			now = start.Add(4 * time.Minute)
+			err := c.Refresh(context.Background())
+			if tc.outcome != "" {
+				requireRefreshOutcome(t, err, tc.outcome)
+			} else if err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+			if _, ifNoneMatch := a.requests(); !reflect.DeepEqual(ifNoneMatch, []string{"", ""}) {
+				t.Fatalf("If-None-Match of the list requests: %q, want two requests without it", ifNoneMatch)
+			}
+			if tc.outcome == "" {
+				now = start.Add(4*time.Minute + crlMaxStaleAge)
+				requireAnswer(t, c, revokedDID, true)
+				return
+			}
+
+			now = start.Add(crlMaxStaleAge)
+			requireAnswer(t, c, revokedDID, true)
+			now = start.Add(crlMaxStaleAge + time.Second)
+			requireUnknown(t, c, revokedDID)
+
+			// A list the authority signs under the key it lists now is held.
+			a.setList(signList(t, testList(now, otherDID), tc.keys[0]))
+			a.set(func(a *crlAuthority) { a.etag = `"list-2"` })
+			if err := c.Refresh(context.Background()); err != nil {
+				t.Fatalf("Refresh of a list signed by the key listed now: %v", err)
+			}
+			requireAnswer(t, c, otherDID, true)
+			requireAnswer(t, c, revokedDID, false)
+		})
+	}
+}
+
 // A discovery document the client cannot use refuses the refresh.
 func TestCRLClient_RefusesADiscoveryDocumentItCannotUse(t *testing.T) {
 	signer := newEd25519Signer(t, testListKeyID)
@@ -886,9 +1049,10 @@ func TestCRLClient_FollowsNoRedirectAwayFromHTTPS(t *testing.T) {
 	}
 }
 
-// A discovery document answered with another status than 200 is refused as
-// status, one that is not a JSON text as parse, and a JSON text that is not of
-// the document's form as shape. The list is not read.
+// A discovery document answered with another status than 200, or with 304 to
+// a request that carried no If-None-Match, is refused as status, one that is
+// not a JSON text as parse, and a JSON text that is not of the document's form
+// as shape. The list is not read.
 func TestCRLClient_ClassifiesADiscoveryDocumentItCannotRead(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -898,6 +1062,7 @@ func TestCRLClient_ClassifiesADiscoveryDocumentItCannotRead(t *testing.T) {
 	}{
 		{"an answer of 500", http.StatusInternalServerError, "", CRLOutcomeStatus},
 		{"an answer of 503", http.StatusServiceUnavailable, "", CRLOutcomeStatus},
+		{"an answer of 304 to a request without If-None-Match", http.StatusNotModified, "", CRLOutcomeStatus},
 		{"a body that is not JSON", http.StatusOK, `<html><body>Service Unavailable</body></html>`, CRLOutcomeParse},
 		{"a document cut short", http.StatusOK, `{"endpoints":{"revocations":`, CRLOutcomeParse},
 		{"an array where the document belongs", http.StatusOK, `[]`, CRLOutcomeShape},
