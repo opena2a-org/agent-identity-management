@@ -77,6 +77,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   of the six bodies was answered `500`, and on the previous reference entry the example was refused.
   `apps/web/lib/api-documentation.test.ts` checks the entry's required members and the members its example sends.
 
+### Fixed — the deployment guide's From source section creates the first administrator and says how to sign in (#791)
+
+- The From source section of `docs/DEPLOYMENT.md` had the reader write `.env` with `scripts/gen-dev-secrets.sh`, start
+  `postgres`, `redis`, `backend` and `frontend` and check `GET /health`, then went on to the Python SDK: it ran no step
+  that creates an account and named no email and no password, so a reader who built the stack from source had nothing
+  to sign in with. The section now runs `docker compose run --rm bootstrap` after the health check and says to sign in
+  at `http://localhost:3000` as `admin@opena2a.org` with the `DEFAULT_ADMIN_PASSWORD` value in `.env`: the script
+  writes that variable, the `bootstrap` service passes it to that one run and prints no password it was given, and when
+  the variable is unset bootstrap generates a password and prints it once. The section also says that bootstrap marks
+  the account for a password change, which the dashboard asks for at the first sign-in, and that the `bootstrap`
+  profile keeps the service out of `docker compose up`.
+- The command the report quotes, `docker compose up -d aim-postgres aim-redis aim-backend aim-frontend`, is the one the
+  README of `platform-v1.0.0` carries. Compose 5.5.1 answers it with `no such service: aim-postgres`; the section on
+  `main` already read `docker compose up -d postgres redis backend frontend`, and the README links to the section
+  instead of carrying it. `apps/backend/cmd/server/compose_docs_names_test.go` checks the service names in the
+  documented `docker compose` commands against the compose files.
+- Test: `apps/backend/cmd/server/from_source_sign_in_docs_test.go` reads the service whose entrypoint runs
+  `aim-bootstrap` from `docker-compose.yml`, the variables `scripts/gen-dev-secrets.sh` writes and the administrator
+  email from `apps/backend/cmd/bootstrap/main.go`, and fails when the section does not run that service after a
+  `docker compose up` that starts the services it depends on, omits the email or the dashboard URL, or names a password
+  variable the script does not write.
+
 ### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
 
 - After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"

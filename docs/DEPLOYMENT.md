@@ -1063,12 +1063,17 @@ docker compose up -d postgres redis backend frontend
 # Health check
 curl -fsS localhost:8080/health
 
+# Create the first administrator once the backend is healthy (a later run changes nothing)
+docker compose run --rm bootstrap
+
 # Python SDK editable for examples
 pip install -e sdk/python
 
 # Try the flight-search-agent demo
 cd examples/flight-search-agent && python3 flight_agent.py
 ```
+
+Sign in at the dashboard, `http://localhost:3000`, as `admin@opena2a.org` with the `DEFAULT_ADMIN_PASSWORD` value in `.env`: `scripts/gen-dev-secrets.sh` writes that variable, and the `bootstrap` service passes it to this one run and prints no password it was given. If `.env` sets no `DEFAULT_ADMIN_PASSWORD`, bootstrap generates a password and prints it once. Bootstrap marks the account for a password change, which the dashboard asks for at the first sign-in. The `bootstrap` service is behind the `bootstrap` profile, so `docker compose up` does not start it.
 
 The full `docker-compose.yml` also brings up Elasticsearch, MinIO, NATS, Prometheus, Grafana, and Loki. Skip those services with the minimal command above.
 
