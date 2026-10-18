@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `SecretsClient.get_audit_log` and `list_namespaces` encode their query values, so a `since` with a positive UTC offset reaches the server as passed (#771)
+
+- `get_audit_log` and `list_namespaces` write their query with `urllib.parse.urlencode`, as `AIMClient.list_agents`
+  does. `get_audit_log` put `since` in the path as passed, so `since="2026-10-16T10:00:00+02:00"` was sent as
+  `since=2026-10-16T10:00:00+02:00`. The server reads a `+` in a query as a space: the backend's
+  `GET /api/v1/secrets/audit` handler reads that `since` as `2026-10-16T10:00:00 02:00` and answers `400` with
+  `{"error": "since must be an RFC 3339 time such as 2026-10-17T09:30:00Z"}`. The request now carries
+  `since=2026-10-16T10%3A00%3A00%2B02%3A00`, which the handler reads as 08:00 UTC. A `since` in UTC (`Z`) is now
+  sent as `since=2026-10-16T10%3A00%3A00Z`. For a UUID agent ID and these two `since` values, the query is the one
+  the TypeScript `SecretsClient` builds.
+- Both methods write `agent_id` as one value of `agentId`: an `agent_id` holding `&`, `#`, `+`, `%` or a space adds
+  no parameter, and decoding the query as a form is decoded gives back the `agent_id` passed.
+- Tests: `tests/test_secrets.py` decodes the request path as a form is decoded and gets back each `since` and
+  `agent_id` passed, and checks that a `since` with a `+02:00` offset is sent in the form the backend's
+  `TestSecretsHandler_GetAuditLog_PassesTheFiltersItReadsToTheRepository` sends to the handler.
+  `test_get_audit_log_with_params` expects `since=2026-04-12T00%3A00%3A00Z` in place of `since=2026-04-12T00:00:00Z`.
+
 ### Changed: `aim-sdk demo` signs this machine in when no sign-in is stored and a person can approve the code
 
 - With no SDK credentials stored, `aim-sdk demo` and `aim-sdk demo --interactive` now run the sign-in `secure()`

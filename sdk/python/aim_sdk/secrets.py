@@ -26,6 +26,7 @@ import os
 import time
 import warnings
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from nacl.signing import SigningKey
@@ -231,7 +232,8 @@ class SecretsClient:
 
     def list_namespaces(self, agent_id: str) -> List[Dict[str, Any]]:
         """List all secret namespaces for an agent."""
-        result = self._client._make_request("GET", f"/api/v1/secrets/namespaces?agentId={agent_id}")
+        query_string = urlencode({"agentId": agent_id})
+        result = self._client._make_request("GET", f"/api/v1/secrets/namespaces?{query_string}")
         return result.get("namespaces") or []
 
     def get_namespace(self, namespace_id: str) -> Dict[str, Any]:
@@ -312,8 +314,11 @@ class SecretsClient:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """Get audit log entries for an agent's secrets operations."""
-        params = f"agentId={agent_id}&limit={limit}&offset={offset}"
+        # urlencode writes each value as one value. The server decodes the
+        # query, so a "+" sent as is in since (a time with a positive UTC
+        # offset, such as 2026-10-16T10:00:00+02:00) would reach it as a space.
+        params = {"agentId": agent_id, "limit": limit, "offset": offset}
         if since:
-            params += f"&since={since}"
-        result = self._client._make_request("GET", f"/api/v1/secrets/audit?{params}")
+            params["since"] = since
+        result = self._client._make_request("GET", f"/api/v1/secrets/audit?{urlencode(params)}")
         return result.get("entries") or []

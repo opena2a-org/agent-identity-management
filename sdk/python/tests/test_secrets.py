@@ -14,6 +14,7 @@ import base64
 import hashlib
 import os
 from unittest.mock import patch
+from urllib.parse import parse_qsl, urlsplit
 
 import pytest
 from nacl.signing import SigningKey
@@ -448,6 +449,7 @@ class TestAuditLog:
 
         assert len(result) == 1
         assert result[0]["result"] == "granted"
+        mock_req.assert_called_once_with("GET", "/api/v1/secrets/audit?agentId=agent-1&limit=50&offset=0")
 
     def test_get_audit_log_empty(self):
         client, _ = make_test_client()
@@ -465,7 +467,88 @@ class TestAuditLog:
         with patch.object(client, "_make_request", return_value=mock_resp) as mock_req:
             client.secrets.get_audit_log("agent-1", since="2026-04-12T00:00:00Z", limit=10, offset=5)
 
-        url = mock_req.call_args[0][1]
-        assert "limit=10" in url
-        assert "offset=5" in url
-        assert "since=2026-04-12T00:00:00Z" in url
+        mock_req.assert_called_once_with(
+            "GET",
+            "/api/v1/secrets/audit?agentId=agent-1&limit=10&offset=5&since=2026-04-12T00%3A00%3A00Z",
+        )
+
+    # The server decodes the query as a form is decoded, so a "+" sent as is
+    # reads as a space: the audit handler reads since=2026-10-16T10:00:00+02:00
+    # as "2026-10-16T10:00:00 02:00", which its RFC 3339 parse refuses, and
+    # answers 400. Decoding the path the same way gives back the since passed.
+    @pytest.mark.parametrize(
+        "since",
+        [
+            "2026-10-16T10:00:00+02:00",
+            "2026-10-16T10:00:00.250+05:30",
+            "2026-10-16T10:00:00-03:00",
+            "2026-10-16T10:00:00Z",
+        ],
+    )
+    def test_get_audit_log_sends_since_as_passed(self, since):
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request", return_value={"entries": []}) as mock_req:
+            client.secrets.get_audit_log("agent-1", since=since)
+
+        method, path = mock_req.call_args.args
+        parts = urlsplit(path)
+        assert method == "GET"
+        assert parts.path == "/api/v1/secrets/audit"
+        assert parse_qsl(parts.query, strict_parsing=True) == [
+            ("agentId", "agent-1"),
+            ("limit", "50"),
+            ("offset", "0"),
+            ("since", since),
+        ]
+
+    def test_get_audit_log_sends_a_positive_offset_in_the_form_the_handler_reads(self):
+        # The backend's TestSecretsHandler_GetAuditLog_PassesTheFiltersItReadsToTheRepository
+        # sends since=2026-10-16T10%3A00%3A00%2B02%3A00 to the audit handler,
+        # which reads it as 08:00 UTC.
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request", return_value={"entries": []}) as mock_req:
+            client.secrets.get_audit_log("agent-1", since="2026-10-16T10:00:00+02:00")
+
+        mock_req.assert_called_once_with(
+            "GET",
+            "/api/v1/secrets/audit?agentId=agent-1&limit=50&offset=0&since=2026-10-16T10%3A00%3A00%2B02%3A00",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: Query values
+# ---------------------------------------------------------------------------
+
+class TestQueryValues:
+    """A character that is syntax in a query string is data in a value: it
+    adds no parameter, ends no query and changes no other value."""
+
+    AGENT_IDS = ["a1&limit=1#x y", "a+b", "a%2Bb"]
+
+    @pytest.mark.parametrize("agent_id", AGENT_IDS)
+    def test_get_audit_log_writes_the_agent_id_as_one_value(self, agent_id):
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request", return_value={"entries": []}) as mock_req:
+            client.secrets.get_audit_log(agent_id, limit=7, offset=3)
+
+        parts = urlsplit(mock_req.call_args.args[1])
+        assert parts.path == "/api/v1/secrets/audit"
+        assert parse_qsl(parts.query, strict_parsing=True) == [
+            ("agentId", agent_id),
+            ("limit", "7"),
+            ("offset", "3"),
+        ]
+
+    @pytest.mark.parametrize("agent_id", AGENT_IDS)
+    def test_list_namespaces_writes_the_agent_id_as_one_value(self, agent_id):
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request", return_value={"namespaces": []}) as mock_req:
+            client.secrets.list_namespaces(agent_id)
+
+        parts = urlsplit(mock_req.call_args.args[1])
+        assert parts.path == "/api/v1/secrets/namespaces"
+        assert parse_qsl(parts.query, strict_parsing=True) == [("agentId", agent_id)]
