@@ -125,6 +125,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   to read the archive name it sends and the folder its entries sit in, and checks the seven guides against them. On
   the previous guides all seven failed.
 
+### Fixed — the SDK tabs link pages that continue the hosted flow, the TypeScript tab says where its API key comes from, and the Python example declares the README's capability
+
+- The Python and TypeScript SDK tabs (`apps/web/lib/sdk-tabs.ts`, shown on the dashboard and on the get-started page
+  of aim.opena2a.org) linked `https://opena2a.org/docs/tutorials/sdk-quickstart`. That address redirects to a
+  self-hosted tutorial that starts from AIM running at `http://localhost:3000` and a Python SDK downloaded from the
+  dashboard, with no `aim-sdk login` and no TypeScript content. The TypeScript example reads its key from
+  `AIM_API_KEY`, and the tab did not say where the key comes from. The Python example called
+  `secure("my-first-agent")`, where the README registers the agent with `capabilities=["db:read"]`.
+- The Python tab links the AIM quick start (`https://opena2a.org/docs/aim/quick-start`), whose cloud section installs
+  the SDK and signs in with `aim-sdk login` against aim.opena2a.org, and its example is the README's
+  `secure("my-first-agent", capabilities=["db:read"])`.
+- The TypeScript tab links the TypeScript SDK's reference (`sdk/typescript` in this repository). Its new note says
+  that the client sends an API key, read from `AIM_API_KEY`, in the `X-API-Key` header; that the key is created under
+  Developers, then Credentials (`/dashboard/credentials`), for an agent that already exists, because every API key
+  belongs to one agent and an agent registered with the key joins the key's organization; and that the key alone is
+  not an agent identity, because `registerAgent()` generates the new agent's own Ed25519 key pair.
+- The Java tab's note no longer calls the SDK page's download "the Java SDK". It names the page (Developers, then SDK
+  & docs, `/dashboard/sdk`) and states what the credential step needs from the archive: it holds
+  `.aim/sdk_credentials.json`, which the SDK copies to `~/.aim/` the first time it runs from the unzipped folder.
+- Tests: `apps/web/lib/sdk-tabs.test.ts` checks the Python tab's link and capability, the TypeScript tab's link and the
+  key source and header its note names, that no tab links the self-hosted tutorial, and that the Java note does not
+  call the download the Java SDK. The four cases failed on the previous table.
+
 ### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)
 
 - A server can end an answer cleanly once it sees the client cancel the request, and the client can read that end

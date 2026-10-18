@@ -30,13 +30,13 @@ export const SDK_TABS: readonly SdkTab[] = [
     key: "python",
     label: "Python",
     install: (origin) => (origin ? `pip install aim-sdk && aim-sdk login --url ${origin}` : "pip install aim-sdk && aim-sdk login"),
-    docsHref: "https://opena2a.org/docs/tutorials/sdk-quickstart",
-    docsLabel: "SDK quickstart",
+    docsHref: "https://opena2a.org/docs/aim/quick-start",
+    docsLabel: "Quick start",
     note:
       "The SDK creates an Ed25519 keypair on your machine, registers the agent under your account and stores the credentials in ~/.aim/. The private key never leaves your machine.",
     code: () => `from aim_sdk import secure
 
-agent = secure("my-first-agent")
+agent = secure("my-first-agent", capabilities=["db:read"])
 
 @agent.perform_action(capability="db:read")
 def get_customer(customer_id):
@@ -52,8 +52,12 @@ def get_customer(customer_id):
     key: "typescript",
     label: "TypeScript",
     install: () => "npm install @opena2a/aim-sdk",
-    docsHref: "https://opena2a.org/docs/tutorials/sdk-quickstart",
-    docsLabel: "SDK quickstart",
+    docsHref: "https://github.com/opena2a-org/agent-identity-management/tree/main/sdk/typescript",
+    docsLabel: "TypeScript SDK reference",
+    // registerAgent() sends the key; an api_keys row always references an agent, and an
+    // API-key registration lands in the key's organization (middleware/api_key.go).
+    note:
+      "The client authenticates with an API key, read from AIM_API_KEY and sent in the X-API-Key header. Create the key under Developers, then Credentials (/dashboard/credentials), for an agent that already exists: every API key belongs to one agent, and registerAgent() registers the new agent in the key's organization. An API key alone does not give the client an agent identity: registerAgent() generates the new agent's own Ed25519 key pair in your process and sends AIM only its public key.",
     code: (origin) => `import { AIMClient, AgentType } from "@opena2a/aim-sdk";
 
 const client = new AIMClient({
@@ -81,7 +85,7 @@ const result = await client.verifyAction({
     docsLabel: "Java SDK reference",
     // AIMClient.secure() throws "No SDK credentials found" without one of these, and a clone carries neither.
     note:
-      "The Java SDK is not published to Maven Central. The commands above build it from source and install org.opena2a:aim-sdk:1.0.0 in your local Maven repository, where your pom.xml can depend on it. AIMClient.secure() reads its credentials from the AIM_REFRESH_TOKEN environment variable or ~/.aim/sdk_credentials.json, and a clone of the repository carries neither. Download the Java SDK from the SDK page: the archive includes .aim/sdk_credentials.json, and the SDK copies it to ~/.aim/ the first time it runs from the unzipped folder.",
+      "The Java SDK is not published to Maven Central. The commands above build it from source and install org.opena2a:aim-sdk:1.0.0 in your local Maven repository, where your pom.xml can depend on it. AIMClient.secure() reads its credentials from the AIM_REFRESH_TOKEN environment variable or ~/.aim/sdk_credentials.json, and a clone of the repository carries neither. Download an SDK archive from Developers, then SDK & docs (/dashboard/sdk): the archive includes .aim/sdk_credentials.json, and the SDK copies it to ~/.aim/ the first time it runs from the unzipped folder.",
     code: () => `import org.opena2a.aim.client.AIMClient;
 
 AIMClient agent = AIMClient.secure("my-first-agent");
