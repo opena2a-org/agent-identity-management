@@ -2,6 +2,8 @@
 AIM SDK Exception Classes
 """
 
+import re
+
 
 class AIMError(Exception):
     """Base exception for all AIM SDK errors"""
@@ -86,6 +88,79 @@ class VerificationUnavailableError(_CarriesDecision, AIMError):
     developer they had been denied when AIM was merely down.
     """
     pass
+
+
+# A word of an answer's revocationState or reason that the SDK keeps: a short
+# token. Any other value is server-chosen text and is kept out of the message.
+_REVOCATION_WORD = re.compile(r'[A-Za-z][A-Za-z0-9_-]{0,31}')
+
+
+def _revocation_word(value):
+    """`value` when it is a string _REVOCATION_WORD matches, otherwise None."""
+    if isinstance(value, str) and _REVOCATION_WORD.fullmatch(value):
+        return value
+    return None
+
+
+class RevocationUnknownError(VerificationUnavailableError):
+    """Raised when AIM answered ``503`` with ``atc_revocation_unknown``: it
+    could not read the revocation state of the ATC the request presented.
+    ``client.secrets.resolve()`` raises it.
+
+    AIM did not decide. The ATC was neither accepted nor judged revoked, so
+    the same request can be sent again with the same ATC, while it is valid,
+    after ``retry_after`` seconds. A new ATC does not help.
+
+    One of the did-not-decide family: it subclasses
+    :class:`VerificationUnavailableError`, so a handler for that class catches
+    this one too, and a handler for this class goes first. The client raises
+    it at the first such answer and does not send the request again itself,
+    whatever ``auto_retry`` is.
+
+    Attributes:
+        code: ``"atc_revocation_unknown"``, the answer's ``error``.
+        status: ``503``.
+        retry_after: The answer's ``Retry-After`` in whole seconds, or None
+            when it is absent or not a whole number of seconds.
+        revocation_state: The answer's ``revocationState`` when it is a short
+            token, otherwise None.
+        reason: The answer's ``reason`` when it is a short token, otherwise
+            None.
+    """
+
+    code = "atc_revocation_unknown"
+    status = 503
+
+    def __init__(self, retry_after=None, revocation_state=None, reason=None):
+        if isinstance(retry_after, bool) or not isinstance(retry_after, int) or retry_after < 0:
+            retry_after = None
+        self.retry_after = retry_after
+        self.revocation_state = _revocation_word(revocation_state)
+        self.reason = _revocation_word(reason)
+        super().__init__(self._message())
+
+    def __reduce__(self):
+        return (type(self), (self.retry_after, self.revocation_state, self.reason))
+
+    def _message(self):
+        if self.retry_after is None:
+            when = "later"
+        elif self.retry_after == 0:
+            when = "now"
+        else:
+            when = f"in {self.retry_after} second{'' if self.retry_after == 1 else 's'}"
+        message = (
+            f"AIM did not decide: it could not read the revocation state of the ATC "
+            f"(HTTP {self.status}, {self.code}). The ATC was neither accepted nor judged "
+            f"revoked. Send the request again {when} with the same ATC while it is valid; "
+            f"a new ATC does not help."
+        )
+        if self.revocation_state is not None:
+            message += f" Revocation state: {self.revocation_state}"
+            message += f", reason {self.reason}." if self.reason is not None else "."
+        elif self.reason is not None:
+            message += f" Reason: {self.reason}."
+        return message
 
 
 class ConfigurationError(AIMError):

@@ -27,6 +27,7 @@ from .exceptions import (
     VerificationError,
     ActionDeniedError,
     VerificationUnavailableError,
+    RevocationUnknownError,
     ConfigurationError,
     StaleCredentialsError,
 )
@@ -373,6 +374,33 @@ def _render_error(exc: BaseException, aim_url: str) -> str:
     if isinstance(exc, requests.exceptions.RequestException):
         return _request_failure_message(exc, aim_url)
     return str(exc)
+
+
+def _revocation_unknown(response) -> Optional[RevocationUnknownError]:
+    """
+    The RevocationUnknownError of an answer of 503 whose JSON body's `error`
+    is `atc_revocation_unknown`, or None for any other answer.
+
+    Its `retry_after` is `Retry-After` when that is a whole number of seconds
+    of at most nine digits, and None otherwise: no wait is made up.
+    """
+    if response.status_code != RevocationUnknownError.status:
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict) or body.get("error") != RevocationUnknownError.code:
+        return None
+    raw = response.headers.get("Retry-After")
+    retry_after = None
+    if isinstance(raw, str) and re.fullmatch(r"[0-9]{1,9}", raw.strip()):
+        retry_after = int(raw.strip())
+    return RevocationUnknownError(
+        retry_after=retry_after,
+        revocation_state=body.get("revocationState"),
+        reason=body.get("reason"),
+    )
 
 
 # Capability format validation pattern (namespace:action)
@@ -878,6 +906,8 @@ class AIMClient:
 
         Raises:
             AuthenticationError: If authentication fails
+            RevocationUnknownError: At the first answer of 503 with
+                ``atc_revocation_unknown``, which is not retried
             VerificationError: If request fails after retries
         """
         url = f"{self.aim_url}{endpoint}"
@@ -984,6 +1014,13 @@ class AIMClient:
             # Handle forbidden errors
             if response.status_code == 403:
                 raise AuthenticationError("Forbidden - insufficient permissions")
+
+            # AIM could not read the revocation state of the request's ATC and
+            # did not decide. Raised before the retry below: the answer names
+            # its wait in Retry-After, which the backoff would not keep.
+            revocation_unknown = _revocation_unknown(response)
+            if revocation_unknown is not None:
+                raise revocation_unknown
 
             # Retry on server errors if enabled
             if response.status_code >= 500 and self.auto_retry and retry_count < self.max_retries:

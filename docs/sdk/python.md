@@ -560,6 +560,7 @@ from aim_sdk.exceptions import (
     AuthenticationError,            # Credentials rejected
     ActionDeniedError,              # AIM ANSWERED and refused the action
     VerificationUnavailableError,   # No decision obtained (2.0.0+)
+    RevocationUnknownError,         # No decision: an ATC's revocation state could not be read
     VerificationError,              # Verification request failed
     ConfigurationError,             # SDK is misconfigured
 )
@@ -575,6 +576,16 @@ must never be confused, and the class hierarchy enforces it:
   `VerificationError`, `ActionDeniedError` or `PermissionError`. A handler written
   for "AIM said no" must not silently absorb "AIM was never asked".
 - Both subclass `AIMError`, which is the broadest compatible catch.
+- `RevocationUnknownError` subclasses `VerificationUnavailableError`, so a handler
+  for that class catches it too; put a handler for `RevocationUnknownError` first.
+  `client.secrets.resolve()` raises it when AIM answers `503` with `error`
+  `atc_revocation_unknown`: AIM could not read the revocation state of the ATC the
+  request presented, so it neither accepted the ATC nor judged it revoked. It
+  carries `code`, `status` (503), `retry_after` (the answer's `Retry-After` in whole
+  seconds, or `None`), `revocation_state` and `reason`. The client raises it at the
+  first such answer and does not wait or send the request again itself. Send it
+  again after `retry_after` seconds with the same ATC while it is valid; a new ATC
+  does not help.
 
 ### Example Error Handling
 
