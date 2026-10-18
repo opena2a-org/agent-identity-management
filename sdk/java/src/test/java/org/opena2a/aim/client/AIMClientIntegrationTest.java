@@ -2,6 +2,7 @@ package org.opena2a.aim.client;
 
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.opena2a.aim.LiveAim;
 import org.opena2a.aim.credentials.CredentialManager;
 import org.opena2a.aim.exceptions.ActionDeniedException;
 import org.opena2a.aim.exceptions.AIMException;
@@ -84,12 +85,11 @@ class AIMClientIntegrationTest {
         assertTrue(hasOAuth || hasLegacy, "Should have OAuth or legacy credentials");
 
         if (hasOAuth) {
-            String tokenId = creds.get("sdkTokenId");
             System.out.println("✅ Loaded OAuth credentials with tokenId: " +
-                    (tokenId != null ? tokenId.substring(0, 8) + "..." : "n/a"));
+                    LiveAim.head(creds.get("sdkTokenId")));
         } else {
             System.out.println("✅ Loaded legacy credentials with clientId: " +
-                    creds.get("clientId").substring(0, 8) + "...");
+                    LiveAim.head(creds.get("clientId")));
         }
     }
 

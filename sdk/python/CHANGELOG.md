@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the README gives `db:read` the risk level `detect_risk_level` returns, low (#792)
+
+- The Capability decorators section of `README.md` gave the `db:read` example the level medium (`db:` medium,
+  `:read` low, the higher wins). `detect_risk_level("db:read")` returns `low`: it reads `SPECIFIC_CAPABILITY_MAP`
+  before the namespace and action tables, and that map lists `db:read` as low. The section now says the map is read
+  before the tables, and that the higher of the namespace and action levels wins for a capability the map does not
+  list (for example `payment:read`, critical).
+- Test: `tests/test_readme_risk_levels.py` holds the level of each `@agent.perform_action` example in the README,
+  and each level the rule sentence names, to `detect_risk_level`; on the previous README the `db:read` example fails.
+
 ### Added: `RevocationUnknownError` for AIM's `503` `atc_revocation_unknown` answer, and `aim-sdk login` names an ATC error code
 
 - `client.secrets.resolve()` raises `aim_sdk.RevocationUnknownError` when AIM answers `503` with a JSON body whose

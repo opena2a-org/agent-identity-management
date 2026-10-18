@@ -218,7 +218,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Query Parameters:**
-- `limit` (optional): Page size. When omitted, all agents are returned.
+- `limit` (optional): Page size. When omitted, all agents are returned. A `limit` that is not a positive integer (for example `0`, `-5` or `abc`) is answered `400 Bad Request` with `{"error": "limit must be a positive integer"}`.
 - `offset` (optional): Number of agents to skip (default: 0). Only applied when `limit` is set.
 - `status` (optional): Keep the agents whose status is exactly this value (`pending`, `verified`, `suspended` or `revoked`).
 - `agentType` (optional): Keep the agents whose type is exactly this value (for example `ai_agent` or `langchain`). The server reads `agent_type` when `agentType` is absent or empty.

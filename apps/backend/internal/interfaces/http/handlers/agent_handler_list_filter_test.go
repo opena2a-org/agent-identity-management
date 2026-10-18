@@ -209,6 +209,32 @@ func TestListAgents_FilterValueThatIsNotUTF8TextIsABadRequest(t *testing.T) {
 	}
 }
 
+// A limit that is not a positive integer is answered 400 and no statement
+// reaches the database. The repository reads a limit of 0 as no paging, and
+// the handler read each of these limits as 0, so the request listed every
+// agent of the organization with no LIMIT clause.
+func TestListAgents_LimitThatIsNotAPositiveIntegerIsABadRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		query string
+	}{
+		{name: "zero", query: "?limit=0"},
+		{name: "negative", query: "?limit=-5"},
+		{name: "not a number", query: "?limit=abc"},
+		{name: "a fraction", query: "?limit=1.5"},
+		{name: "larger than an int", query: "?limit=99999999999999999999"},
+		{name: "zero with an offset", query: "?limit=0&offset=20"},
+		{name: "zero with a status filter", query: "?limit=0&status=verified"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			status, body := listAgentsOverSQL(t, uuid.New(), "/agents"+tc.query, func(sqlmock.Sqlmock) {})
+
+			assert.Equal(t, fiber.StatusBadRequest, status)
+			assert.Equal(t, "limit must be a positive integer", body["error"])
+		})
+	}
+}
+
 // A value that is valid UTF-8 outside ASCII is a predicate like any other.
 func TestListAgents_FilterValueOutsideASCIIIsAPredicate(t *testing.T) {
 	orgID := uuid.New()

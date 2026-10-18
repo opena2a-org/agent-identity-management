@@ -131,6 +131,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Two tests that `mvn install` runs failed on a machine whose stored SDK credential (`~/.aim/sdk_credentials.json`)
+  held an empty `sdkTokenId` and named an AIM server that was not running. Run with such a credential (`aimUrl`
+  `http://127.0.0.1:18471`, nothing listening there), `AIMClientIntegrationTest.loadCredentials` threw
+  `StringIndexOutOfBoundsException` (`Range [0, 8) out of bounds for length 0`) taking the token ID's first 8
+  characters, and `RealWorldIntegrationTest.testAIMClientLive` called that server and failed (`Failed to connect to
+  /127.0.0.1:18471`): `RealWorldIntegrationTest` took the server as available whenever a credential was found. A
+  token ID or client ID of 8 characters or fewer is now printed whole, and the two live tests of
+  `RealWorldIntegrationTest` run only when the credential holds a refresh token, or a client ID and a client secret,
+  none of them blank, and its server answers `GET /health` with `200` within two seconds; otherwise they are
+  skipped. With that credential the two classes ran 18 tests with 2 errors before this change, and run 18 with no
+  error and 8 skipped after it (#792).
+- Test: `src/test/java/org/opena2a/aim/LiveAimTest.java` (#792).
 - `listAgents` documents the four agent statuses the server defines, `pending`, `verified`, `suspended` and
   `revoked`, as the values of its `status` filter. It listed `denied`, which no agent holds (#716).
 - A client built with a client ID and secret and no refresh token throws `AuthenticationException` when it

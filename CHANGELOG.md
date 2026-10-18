@@ -119,6 +119,33 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   name, folder and sign-in path from the server's download handler, and compares them with the README and the install
   steps.
 
+### Fixed — `GET /api/v1/agents` answers `400` to a `limit` that is not a positive integer (#792)
+
+- An authenticated `GET /api/v1/agents` with `limit=0`, `limit=-5`, `limit=abc`, `limit=1.5` or
+  `limit=99999999999999999999` is answered `400 Bad Request` with `{"error": "limit must be a positive integer"}`,
+  and no statement reaches the database. Run against the server's handler, agent service and agent repository over a sqlmock connection, each of
+  these requests was answered `200` by the previous handler, with every agent of the organization from a statement
+  with no `LIMIT` clause, and no `limit` in the answer: the handler read such a limit as `0`, which the repository
+  reads as no paging. A request without `limit` still lists every agent, and an `offset` that is negative or not a
+  number still reads as `0`.
+- The Python SDK's `list_agents` and the Java SDK's `listAgents` send the limit they are given, capped at 100, so a
+  limit of 0 or less from either is now answered `400` where it listed every agent.
+- `docs/API.md` and `docs/guides/API_REFERENCE.md` give the `400` answer under the `limit` parameter.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_handler_list_filter_test.go` sends each of these
+  limits, and a limit of 0 with an offset and with a status filter, through the server's handler, service and
+  repository over sqlmock; on the previous handler all 7 cases fail. `TestAgentHandler_ListAgents_InvalidPagingParams`
+  holds an offset of `-5` or `abc` at `0`, now beside a limit of 20.
+
+### Fixed — the flight-search example's command loop returns when its standard input ends (#792)
+
+- `examples/flight-search-agent/flight_agent.py` caught the `EOFError` that `input()` raises once standard input
+  has ended as any other error: it printed `Error: EOF when reading a line` and asked for the next command. Run with
+  standard input closed (`< /dev/null`), the previous loop printed that line 100 times, asking for a command before
+  each, until the run was stopped. The loop now prints its goodbye line and returns at the first `EOFError`, with no
+  error line.
+- Test: `sdk/python/tests/test_flight_search_example_verification.py` gives the loop an `input()` that raises
+  `EOFError` and fails if the loop asks again; on the previous example it fails.
+
 ### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
 
 - After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"

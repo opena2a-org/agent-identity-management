@@ -3490,45 +3490,51 @@ func TestAgentHandler_ListAgents_Pagination(t *testing.T) {
 	assert.Equal(t, float64(20), result["offset"])
 }
 
-// Invalid or negative paging params fall back to the unpaged path instead
-// of erroring.
+// A negative or non-numeric offset reads as 0 instead of erroring. A limit
+// that is not a positive integer is answered 400 (see
+// TestListAgents_LimitThatIsNotAPositiveIntegerIsABadRequest), so these
+// requests send a valid limit.
 func TestAgentHandler_ListAgents_InvalidPagingParams(t *testing.T) {
-	orgID := uuid.New()
-	userID := uuid.New()
+	for _, query := range []string{"?limit=20&offset=-5", "?limit=20&offset=abc"} {
+		t.Run(query, func(t *testing.T) {
+			orgID := uuid.New()
+			userID := uuid.New()
 
-	var gotLimit, gotOffset int
-	mockAgentService := &MockAgentServiceImpl{
-		ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
-			gotLimit, gotOffset = limit, offset
-			return []*domain.Agent{}, 0, nil
-		},
+			var gotLimit, gotOffset int
+			mockAgentService := &MockAgentServiceImpl{
+				ListAgentsPagedFunc: func(ctx context.Context, id uuid.UUID, limit, offset int) ([]*domain.Agent, int, error) {
+					gotLimit, gotOffset = limit, offset
+					return []*domain.Agent{}, 0, nil
+				},
+			}
+
+			handler := NewAgentHandlerWithInterfaces(
+				mockAgentService,
+				&MockMCPServiceImpl{},
+				&MockAuditServiceImpl{},
+				&MockAPIKeyServiceImpl{},
+				nil,
+				&MockAlertServiceImpl{},
+				&MockVerificationEventServiceImpl{},
+				&MockCapabilityServiceImpl{},
+				&MockTagServiceImpl{},
+				&MockOrganizationRepository{},
+				&MockMCPAttestationServiceImpl{},
+			)
+
+			app := createTestAppWithAuth(handler, orgID, userID)
+			app.Get("/agents", handler.ListAgents)
+
+			req := httptest.NewRequest("GET", "/agents"+query, nil)
+			resp, err := app.Test(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+			assert.Equal(t, 20, gotLimit)
+			assert.Equal(t, 0, gotOffset)
+		})
 	}
-
-	handler := NewAgentHandlerWithInterfaces(
-		mockAgentService,
-		&MockMCPServiceImpl{},
-		&MockAuditServiceImpl{},
-		&MockAPIKeyServiceImpl{},
-		nil,
-		&MockAlertServiceImpl{},
-		&MockVerificationEventServiceImpl{},
-		&MockCapabilityServiceImpl{},
-		&MockTagServiceImpl{},
-		&MockOrganizationRepository{},
-		&MockMCPAttestationServiceImpl{},
-	)
-
-	app := createTestAppWithAuth(handler, orgID, userID)
-	app.Get("/agents", handler.ListAgents)
-
-	req := httptest.NewRequest("GET", "/agents?limit=abc&offset=-5", nil)
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
-	assert.Equal(t, 0, gotLimit)
-	assert.Equal(t, 0, gotOffset)
 }
 
 // Bulk enrichment failures degrade to empty capabilities/tags (the same

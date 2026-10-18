@@ -132,10 +132,10 @@ set_quiet(False)   # restore
 - **Namespace prefix** maps `payment:`, `admin:`, `system:`, `billing:`, `finance:` to critical; `email:`, `notification:`, `sms:`, `user:`, `auth:`, `secret:`, `credential:` to high; `db:`, `database:`, `file:`, `storage:`, `cache:` to medium; `api:`, `weather:`, `search:`, `geocode:`, `translate:`, `time:`, `math:`, `util:` to low.
 - **Action suffix** maps `:read`, `:fetch`, `:get`, `:list`, `:query`, `:view`, `:check`, `:validate` to low; `:write`, `:update`, `:create`, `:modify`, `:save`, `:upload` to medium; `:delete`, `:send`, `:execute`, `:run`, `:invoke`, `:export`, `:transfer` to high; `:process`, `:refund`, `:charge`, `:approve`, `:drop`, `:truncate`, `:wipe`, `:terminate` to critical.
 
-When namespace and action disagree the higher risk wins. `SPECIFIC_CAPABILITY_MAP` overrides both for known patterns (for example `user:delete` escalates to critical).
+`SPECIFIC_CAPABILITY_MAP` is read before both tables: a capability it lists takes the level it gives, whatever the tables say (for example `user:delete` is critical and `db:read` is low). For a capability it does not list, when namespace and action disagree the higher risk wins (for example `payment:read` is critical).
 
 ```python
-@agent.perform_action(capability="db:read")               # medium (db: medium, :read low → max = medium)
+@agent.perform_action(capability="db:read")               # low (SPECIFIC_CAPABILITY_MAP entry)
 def get_customer(customer_id): ...
 
 @agent.perform_action(capability="db:delete")             # high (SPECIFIC_CAPABILITY_MAP override)

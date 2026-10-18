@@ -212,3 +212,33 @@ def test_interactive_search_prints_a_refusal_once(
     assert out.count("Search refused") == 1
     assert "Error:" not in out
     assert "Proceeding without verification" not in out
+
+
+def test_interactive_mode_returns_when_input_ends(
+    flight_agent_module, monkeypatch, fake_aim, capsys
+):
+    # input() raises EOFError once standard input has ended. The loop caught it
+    # as any other error, printed "Error: EOF when reading a line" and asked
+    # again, without end.
+    aim = fake_aim({})
+    agent = _agent(flight_agent_module, monkeypatch, aim.url)
+    prompts = []
+
+    def ended_input(prompt=""):
+        prompts.append(prompt)
+        if len(prompts) > 1:
+            # Asked again after the end of input: stop the loop here, so the
+            # defect fails this test instead of hanging it.
+            raise KeyboardInterrupt
+        raise EOFError("EOF when reading a line")
+
+    monkeypatch.setattr("builtins.input", ended_input)
+    capsys.readouterr()
+
+    agent.interactive_mode()
+
+    out = capsys.readouterr().out
+    assert prompts == ["flightagent> "]
+    assert "Error:" not in out
+    assert "Goodbye" in out
+    assert aim.paths() == []

@@ -33,10 +33,11 @@ class RealWorldIntegrationTest {
 
     @BeforeAll
     static void setup() {
-        // Check backend availability
+        // The live tests need a stored credential to sign in with, and the AIM
+        // server it names answering GET /health: a credential left from a
+        // server that no longer runs skips them.
         try {
-            Map<String, String> creds = CredentialManager.loadSdkCredentials();
-            backendAvailable = !creds.isEmpty();
+            backendAvailable = LiveAim.canSignIn(CredentialManager.loadSdkCredentials());
         } catch (Exception e) {
             backendAvailable = false;
         }
