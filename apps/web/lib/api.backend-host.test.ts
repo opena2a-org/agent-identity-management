@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// The client derives its backend from the dashboard's hostname only where the
-// Content-Security-Policy header lists that backend (lib/backend-host.ts). For any
-// other hostname it calls the NEXT_PUBLIC_API_URL origin, which the header always
+// The client derives its backend from the dashboard's hostname only where the page's
+// connect-src policy lists that backend (lib/backend-host.ts, lib/runtime-config.ts).
+// For any other hostname it calls the NEXT_PUBLIC_API_URL origin, which that policy
 // lists, so the page never calls a host its own policy refuses.
 
 const API_URL = "https://api.example.com";
@@ -46,7 +46,7 @@ describe("the API origin the client resolves from the dashboard's hostname", () 
     expect(await apiOriginOn("a-frontend-frontend.example.com")).toBe("https://a-backend-frontend.example.com");
   });
 
-  it("is NEXT_PUBLIC_API_URL for a -frontend hostname the header derives no backend for", async () => {
+  it("is NEXT_PUBLIC_API_URL for a -frontend hostname the rule derives no backend for", async () => {
     // Control: the stubbed hostname is the one the client reads.
     expect(await apiOriginOn("dashboard.example.com")).toBe(API_URL);
 

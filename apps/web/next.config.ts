@@ -1,8 +1,10 @@
 import type { NextConfig } from 'next';
 import { dashboardRedirects } from './lib/redirects';
-import { dashboardSecurityHeaders } from './lib/content-security-policy';
+import { dashboardHeaderRules } from './lib/content-security-policy';
 
-// The API URL baked into the client bundle; the policy's connect-src allows its origin.
+// The API URL the build writes in where the code reads process.env.NEXT_PUBLIC_API_URL.
+// A page rendered with NEXT_PUBLIC_API_URL in the server's environment hands the
+// browser that value instead (lib/runtime-config.ts).
 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 const nextConfig: NextConfig = {
@@ -25,10 +27,10 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_NAME: process.env.NEXT_PUBLIC_APP_NAME || 'Agent Identity Management',
   },
   // Content-Security-Policy on every dashboard page. The policy lives in
-  // lib/content-security-policy.ts.
+  // lib/content-security-policy.ts; each page also carries its connect-src
+  // (app/layout.tsx).
   async headers() {
-    return dashboardSecurityHeaders({
-      apiUrl,
+    return dashboardHeaderRules({
       development: process.env.NODE_ENV === 'development',
     });
   },

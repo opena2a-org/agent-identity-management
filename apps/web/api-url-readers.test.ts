@@ -11,8 +11,10 @@ import ts from "typescript";
 // in to. Components read apiBaseUrl() from lib/api-base-url.ts instead. Root-level on
 // purpose: it walks the whole app.
 
-// The files allowed to read it: the resolver and the build configuration.
-const ALLOWED = ["lib/api.ts", "next.config.ts"];
+// The files allowed to read it: the resolver, the build configuration, and the module
+// that lists the build's origin in a page's connect-src when the server's environment
+// names no URL (lib/runtime-config.ts).
+const ALLOWED = ["lib/api.ts", "lib/runtime-config.ts", "next.config.ts"];
 
 const VARIABLE = "NEXT_PUBLIC_API_URL";
 
