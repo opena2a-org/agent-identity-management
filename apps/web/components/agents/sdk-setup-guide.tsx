@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Code2, Copy, CheckCircle2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useClipboard } from '@/hooks/use-clipboard';
+import { apiBaseUrl } from '@/lib/api-base-url';
 
 interface SDKSetupGuideProps {
   agentId: string;
@@ -17,14 +18,9 @@ export function SDKSetupGuide({ agentId, agentName, agentType }: SDKSetupGuidePr
   const quickClipboard = useClipboard();
   const advancedClipboard = useClipboard();
 
-  // Backend API URL - dynamic based on deployment
-  // In production: same domain (reverse proxy handles routing)
-  // In development: localhost:8080
-  const apiUrl = typeof window !== 'undefined'
-    ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? `${window.location.protocol}//${window.location.hostname}:8080`
-      : `${window.location.protocol}//${window.location.host}`
-    : 'http://localhost:8080';
+  // The API the dashboard signs in to (lib/api-base-url.ts). Browser only, like
+  // apiBaseUrl, which throws during server rendering.
+  const apiUrl = apiBaseUrl();
 
   // Zero-config registration (Python only)
   const quickStartCode = `from aim_sdk import secure
