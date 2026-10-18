@@ -313,6 +313,7 @@ func (h *AgentHandler) ListAgents(c fiber.Ctx) error {
 // error (500). Shared by the authenticated and public registration handlers so
 // both surfaces map identically.
 func registrationErrorStatus(err error) int {
+	var refusal *application.AgentRequestError
 	switch {
 	case errors.Is(err, application.ErrAgentNameExists):
 		return fiber.StatusConflict
@@ -320,15 +321,24 @@ func registrationErrorStatus(err error) int {
 		// Foreign-key violation: the org/user from the credential no longer
 		// exists (e.g. stale API key, deleted org). Client error, not 500.
 		return fiber.StatusBadRequest
+	case errors.As(err, &refusal):
+		// A required member left empty, or an agent type the service does
+		// not register.
+		return fiber.StatusBadRequest
 	default:
 		return fiber.StatusInternalServerError
 	}
 }
 
 // respondRegistrationError answers a CreateAgent failure at the status
-// registrationErrorStatus maps it to. A 4xx carries the stated line for its
+// registrationErrorStatus maps it to. A refused request carries the line that
+// names the members to change; another 4xx carries the stated line for its
 // sentinel; a server error carries ServerErrorMessage.
 func respondRegistrationError(c fiber.Ctx, err error) error {
+	var refusal *application.AgentRequestError
+	if errors.As(err, &refusal) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": refusal.Message()})
+	}
 	switch status := registrationErrorStatus(err); status {
 	case fiber.StatusConflict:
 		return c.Status(status).JSON(fiber.Map{"error": "an agent with this name already exists"})

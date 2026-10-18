@@ -52,6 +52,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   refusal. On the previous script the lower-case case failed, 11 of the 24 real `openssl` passwords failed the rule,
   and the three refusal cases exited 0.
 
+### Fixed — `POST /api/v1/agents` answers 400 naming the members a request leaves out, and the dashboard's API reference example registers an agent (#790)
+
+- A request to `POST /api/v1/agents` without `name`, `displayName` or `agentType`, or with an `agentType` the server
+  does not register, was answered `500` with `An internal error occurred. Please try again later.`, which names
+  nothing to change. Measured on the previous code with six bodies: the API reference's example, a body without
+  `displayName`, one without `agentType`, one without `name`, `{}`, and one with `"agentType": "automation_bot"`.
+- Such a request is now answered `400` with a line that names every required member it left out, under the names
+  the API reference documents: `displayName is required`, `displayName and agentType are required`,
+  `name, displayName and agentType are required`. An `agentType` the server does not register is answered `400` with
+  `agentType must be one of: ` and the 21 types it registers, in alphabetical order, without the value sent. A
+  refused request does not reach the agents table. The snake_case members `display_name` and `agent_type` are still
+  read.
+- The agent service returns these refusals as a declared error, `AgentRequestError`, and the registration handlers
+  match it with `errors.As` and answer the line it states.
+- The dashboard's API reference (`apps/web/lib/api-documentation.ts`) listed `name` and `type` as the required
+  members of `POST /api/v1/agents`, with an optional `tags`, and its example sent `name`, `type`, `description` and
+  `tags`. The request the handler binds has no `type` or `tags` member, and the example was answered `500`. The entry
+  now marks `name`, `displayName` and `agentType` as required and no longer lists `type` or `tags`. Its example sends
+  `name`, `displayName`, `agentType` and `description`, and registers an agent.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_create_required_members_test.go` posts the six bodies
+  to the server's handler and agent service and checks each `400` line, and posts the API reference's example and
+  checks that it is answered `201` and that the agent stored carries the members it sends. On the previous code each
+  of the six bodies was answered `500`, and on the previous reference entry the example was refused.
+  `apps/web/lib/api-documentation.test.ts` checks the entry's required members and the members its example sends.
+
 ### Fixed: the register-agent dialog's Copy key button stays inside the API key card at a 375px viewport (#780)
 
 - After an agent is registered, the register-agent dialog shows a card titled "Your API key (for manual integration)"

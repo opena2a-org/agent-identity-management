@@ -35,6 +35,36 @@ var (
 	ErrInvalidOrgOrUser = errors.New("invalid organization or user for this registration")
 )
 
+// AgentRequestError is returned by CreateAgent for a request the caller can
+// correct: one that leaves a required member empty, or names an agent type
+// the service does not register. It names members by the JSON names
+// CreateAgentRequest binds, and its text is written for the caller. Maps to
+// 400.
+type AgentRequestError struct {
+	// Missing lists the required members the request left empty, in the
+	// order name, displayName, agentType.
+	Missing []string
+	// UnknownAgentType is set when no required member is empty and agentType
+	// is not a type the service registers.
+	UnknownAgentType bool
+}
+
+func (e *AgentRequestError) Error() string { return e.Message() }
+
+// Message is the line a registration route answers with: the agent types the
+// service registers when UnknownAgentType is set, else the required members
+// the request left empty.
+func (e *AgentRequestError) Message() string {
+	if e.UnknownAgentType {
+		return "agentType must be one of: " + strings.Join(recognizedAgentTypeNames(), ", ")
+	}
+	if len(e.Missing) <= 1 {
+		return strings.Join(e.Missing, "") + " is required"
+	}
+	last := len(e.Missing) - 1
+	return strings.Join(e.Missing[:last], ", ") + " and " + e.Missing[last] + " are required"
+}
+
 // AgentService handles agent business logic
 type AgentService struct {
 	agentRepo                domain.AgentRepository
@@ -164,39 +194,52 @@ func NewAgentService(
 	}
 }
 
+// recognizedAgentTypes are the agent types CreateAgent registers.
+var recognizedAgentTypes = map[domain.AgentType]bool{
+	// LLM Providers
+	domain.AgentTypeClaude:  true,
+	domain.AgentTypeGPT:     true,
+	domain.AgentTypeGemini:  true,
+	domain.AgentTypeLlama:   true,
+	domain.AgentTypeMistral: true,
+	domain.AgentTypeCohere:  true,
+	// Frameworks
+	domain.AgentTypeLangChain:      true,
+	domain.AgentTypeLlamaIndex:     true,
+	domain.AgentTypeAutoGen:        true,
+	domain.AgentTypeCrewAI:         true,
+	domain.AgentTypeLangGraph:      true,
+	domain.AgentTypeHaystack:       true,
+	domain.AgentTypeSemanticKernel: true,
+	// Copilots & Assistants
+	domain.AgentTypeCopilot:   true,
+	domain.AgentTypeAssistant: true,
+	domain.AgentTypeChatbot:   true,
+	// Autonomous
+	domain.AgentTypeAutoGPT: true,
+	domain.AgentTypeBabyAGI: true,
+	// Generic
+	domain.AgentTypeCustom: true,
+	// Demo (registered by `aim-sdk demo`)
+	domain.AgentTypeDemo: true,
+	// Legacy support
+	domain.AgentTypeAI: true,
+}
+
 // isValidAgentType checks if the given agent type is valid
 func isValidAgentType(agentType domain.AgentType) bool {
-	validTypes := map[domain.AgentType]bool{
-		// LLM Providers
-		domain.AgentTypeClaude:  true,
-		domain.AgentTypeGPT:     true,
-		domain.AgentTypeGemini:  true,
-		domain.AgentTypeLlama:   true,
-		domain.AgentTypeMistral: true,
-		domain.AgentTypeCohere:  true,
-		// Frameworks
-		domain.AgentTypeLangChain:      true,
-		domain.AgentTypeLlamaIndex:     true,
-		domain.AgentTypeAutoGen:        true,
-		domain.AgentTypeCrewAI:         true,
-		domain.AgentTypeLangGraph:      true,
-		domain.AgentTypeHaystack:       true,
-		domain.AgentTypeSemanticKernel: true,
-		// Copilots & Assistants
-		domain.AgentTypeCopilot:   true,
-		domain.AgentTypeAssistant: true,
-		domain.AgentTypeChatbot:   true,
-		// Autonomous
-		domain.AgentTypeAutoGPT: true,
-		domain.AgentTypeBabyAGI: true,
-		// Generic
-		domain.AgentTypeCustom: true,
-		// Demo (registered by `aim-sdk demo`)
-		domain.AgentTypeDemo: true,
-		// Legacy support
-		domain.AgentTypeAI: true,
+	return recognizedAgentTypes[agentType]
+}
+
+// recognizedAgentTypeNames returns the agent types CreateAgent registers, in
+// alphabetical order.
+func recognizedAgentTypeNames() []string {
+	names := make([]string, 0, len(recognizedAgentTypes))
+	for agentType := range recognizedAgentTypes {
+		names = append(names, string(agentType))
 	}
-	return validTypes[agentType]
+	sort.Strings(names)
+	return names
 }
 
 // sanitizeTalksTo validates and cleans up TalksTo entries
@@ -270,13 +313,23 @@ type CreateAgentRequest struct {
 // userEmail is optional - used as fallback for audit trail if user lookup fails
 // This enables admins to easily revoke compromised SDK tokens or API keys
 func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest, orgID, userID uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID, userEmail string) (*domain.Agent, error) {
-	// Validate inputs
-	if req.Name == "" || req.DisplayName == "" {
-		return nil, fmt.Errorf("name and display_name are required")
+	// Validate inputs. A refusal names the members the caller has to change.
+	missing := make([]string, 0, 3)
+	if req.Name == "" {
+		missing = append(missing, "name")
+	}
+	if req.DisplayName == "" {
+		missing = append(missing, "displayName")
+	}
+	if req.AgentType == "" {
+		missing = append(missing, "agentType")
+	}
+	if len(missing) > 0 {
+		return nil, &AgentRequestError{Missing: missing}
 	}
 
 	if !isValidAgentType(req.AgentType) {
-		return nil, fmt.Errorf("invalid agent_type: %s", req.AgentType)
+		return nil, &AgentRequestError{UnknownAgentType: true}
 	}
 
 	// ✅ Validate and sanitize TalksTo entries
