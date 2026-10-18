@@ -319,13 +319,13 @@ export interface LLMResponse {
 // --- Budget Tracking ---
 
 export interface BudgetState {
-  /** Total spent in current period (USD) */
+  /** Total spent in current period (USD), with each call in flight at its estimated cost */
   totalSpentUsd: number;
   /** Period start (ISO timestamp) */
   periodStart: string;
-  /** Number of L2 calls made */
+  /** Number of L2 calls answered in the current period */
   totalCalls: number;
-  /** Calls in current hour */
+  /** Calls reserved in current hour, in flight or answered */
   callsThisHour: number;
   /** Hour start (ISO timestamp) */
   hourStart: string;

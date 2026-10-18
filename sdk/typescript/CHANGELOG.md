@@ -560,6 +560,23 @@ the caller asked them to — the AIM client, A2A, OAuth, secrets, CRL fetch, the
 ARP proxy forwarder — are listed with the reason rather than filtered out, so
 they stay in scope if one ever grows an observational side-channel.
 
+### Fixed — ARP's L2 budget and hourly call limit count the calls in flight
+
+- `BudgetController.reserve(estimatedCostUsd)` counts an L2 call and holds its estimated cost before the adapter is
+  called, so calls in flight count against `budgetUsd` and `maxCallsPerHour`. `record(reservation, costUsd, tokens)`
+  replaces the estimate with the cost of the answer, `release(reservation)` gives back the slot and the estimate of a
+  call that throws, and `budget.json` is saved at each of the three steps; a process that stops while a call is in
+  flight leaves that call's estimate in `totalSpentUsd`. A batch takes its reservation when it is sent, not when its
+  events are queued. Before, `canAfford()` checked the totals and `record()` counted a call only after it returned.
+  Measured with a stub adapter before this change, 50 critical events passed to `analyze()` together made 50 adapter
+  calls with `maxCallsPerHour: 20`, whether `budgetUsd` held 10 estimates or 20,000; they now make 10 and 20 calls
+  respectively. With `maxCallsPerHour: 2`, a batch queued before two critical events used the hour's two calls was
+  sent by `stop()`; it is now not sent. `getStatus().spent` and `totalSpentUsd` in `budget.json` count a call in
+  flight at its estimate. `reserve()` refuses an estimate that is NaN or negative, and an answered call is charged
+  at its estimate when its cost is NaN, infinite or negative, or when the adapter's `estimateCost` throws on it.
+- Breaking change for code that calls `BudgetController` directly: `canAfford()` is removed, and `record()` takes the
+  reservation `reserve()` returned as its first argument. Called as `record(costUsd, tokens)`, it throws.
+
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.

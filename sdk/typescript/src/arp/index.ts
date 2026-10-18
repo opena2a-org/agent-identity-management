@@ -87,7 +87,7 @@ export {
   arpEventToLoggedAction,
   type SequenceLogContext,
 } from './intelligence/sequence-log-writer';
-export { BudgetController } from './intelligence/budget';
+export { BudgetController, type BudgetReservation } from './intelligence/budget';
 export { AnomalyDetector } from './intelligence/anomaly';
 export { RuntimeTwin } from './intelligence/runtime-twin';
 export { AnthropicAdapter, OpenAIAdapter, OllamaAdapter, createAdapter, autoDetectAdapter } from './intelligence/adapters';
