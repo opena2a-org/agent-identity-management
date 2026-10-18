@@ -239,10 +239,12 @@ A discovery document of this form, with a placeholder in place of its key:
 ```
 
 The client reads the list with `GET` at that address. When the list it holds was read from the same address with an
-`ETag`, the request carries that `ETag` in `If-None-Match`, and a `304` answer counts as a read of the list held. It
-follows no redirect to an address that is not `https`. In the AIM backend, `ATC_CRL_ENDPOINT`, read only when
-`REGISTRY_URL` is set, replaces the address `endpoints.revocations` names, and the keys still come from the discovery
-document.
+`ETag`, under the keys the client uses from the discovery document now (the same `keyId`s, each with the same
+`algorithm` and public key), the request carries that `ETag` in `If-None-Match`, and a `304` answer counts as a read of
+the list held. When the address or the keys differ, the request carries no `If-None-Match`, and the list is read in
+full and checked under the keys used now. The client follows no redirect to an address that is not `https`. In the AIM
+backend, `ATC_CRL_ENDPOINT`, read only when `REGISTRY_URL` is set, replaces the address `endpoints.revocations` names,
+and the keys still come from the discovery document.
 
 ### 5.2 List Form
 

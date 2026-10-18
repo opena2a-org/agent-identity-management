@@ -2,6 +2,7 @@ package atc
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,8 +25,9 @@ import (
 // does not carry, and its form as revokedATCs entries keyed by atcId, a form
 // this client does not read (#778). The tests in this file hold section 5 to
 // the client: each JSON example in it passes the client's own checks, the
-// bounds and times it states are the client's constants, and each Registry
-// path it names is a GET route of the pinned table.
+// bounds and times it states are the client's constants, each Registry path
+// it names is a GET route of the pinned table, and the conditions it states
+// for the list request's If-None-Match are the ones the client sends it under.
 
 var (
 	// atcSpecPath is the specification, from this package's directory.
@@ -62,6 +65,21 @@ func atcSpecSection5(t *testing.T) string {
 		section = section[:end]
 	}
 	return section
+}
+
+// atcSpecSubsection returns the subsection of section 5 numbered number: its
+// heading and the lines up to the next third-level heading.
+func atcSpecSubsection(t *testing.T, section, number string) string {
+	t.Helper()
+	start := strings.Index(section, "\n### "+number+" ")
+	if start < 0 {
+		t.Fatalf("section 5 has no subsection %s", number)
+	}
+	part := section[start+1:]
+	if end := strings.Index(part, "\n### "); end >= 0 {
+		part = part[:end]
+	}
+	return part
 }
 
 // atcSpecWords returns text with each run of white space replaced by one
@@ -303,5 +321,78 @@ func TestATCSpecSection5_NamesOnlyRoutesOfThePinnedRegistryTable(t *testing.T) {
 	want := fmt.Sprintf("at `GET %s`, or at `GET %s` when the first answers `404`", discoveryPaths[0], discoveryPaths[1])
 	if !strings.Contains(atcSpecWords(section), want) {
 		t.Errorf("section 5 does not name the discovery paths the client reads: want %q", want)
+	}
+}
+
+// Section 5.1 named one of the two conditions under which the list request
+// carries the ETag of the list held in If-None-Match, the same address, and
+// left out the other: the keys the client uses from the discovery document are
+// the ones that list was checked under (#785). The second list request here
+// carries the ETag while the discovery document is unchanged or adds a key of
+// an algorithm the client does not use, and carries none once the document
+// lists another key the client uses, lists the key's keyId with another public
+// key, or names another list address. Section 5.1 states both conditions.
+func TestATCSpecSection5_StatesWhenTheListRequestCarriesIfNoneMatch(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+	signer := newEd25519Signer(t, testListKeyID)
+	successor := newEd25519Signer(t, "did:web:registry.example#list-2")
+	rekeyed := newEd25519Signer(t, testListKeyID)
+	unused := discoveryFor(signer)
+	unused["publicKeys"] = append(unused["publicKeys"].([]any), map[string]any{
+		"keyId": "did:web:registry.example#list-3", "algorithm": "ES256", "publicKeyHex": hex.EncodeToString(successor.public),
+	})
+	moved := discoveryFor(signer)
+	moved["endpoints"] = map[string]any{"revocations": testOverridePath}
+	cases := []struct {
+		name      string
+		discovery map[string]any // the discovery document at the second refresh
+		path      string         // the address of the second list request
+		etagSent  bool
+		outcome   string // the second refresh's refusal; empty when it holds a list or reads the list held again
+	}{
+		{"the discovery document is unchanged", discoveryFor(signer), testListPath, true, ""},
+		{"it adds a key of an algorithm the client does not use", unused, testListPath, true, ""},
+		{"it lists another key the client uses beside the key", discoveryFor(signer, successor), testListPath, false, ""},
+		{"it lists the key's keyId with another public key", discoveryFor(rekeyed), testListPath, false, CRLOutcomeSignature},
+		{"it names another list address", moved, testOverridePath, false, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now().UTC().Truncate(time.Second)
+			doc := testList(now, revokedDID)
+			doc["nextUpdate"] = now.Add(time.Hour).Format(time.RFC3339)
+			a := newCRLAuthority(t, discoveryFor(signer))
+			a.setList(signList(t, doc, signer))
+			a.set(func(a *crlAuthority) { a.etag = `"list-1"` })
+			c := newTestCRLClient(t, a, "", &now)
+			if err := c.Refresh(context.Background()); err != nil {
+				t.Fatalf("Refresh: %v", err)
+			}
+
+			a.setDiscovery(t, tc.discovery)
+			if err := c.Refresh(context.Background()); tc.outcome != "" {
+				requireRefreshOutcome(t, err, tc.outcome)
+			} else if err != nil {
+				t.Fatalf("Refresh with the discovery document changed: %v", err)
+			}
+			wantPaths, wantIfNoneMatch := []string{testListPath, tc.path}, []string{"", ""}
+			if tc.etagSent {
+				wantIfNoneMatch[1] = `"list-1"`
+			}
+			if paths, ifNoneMatch := a.requests(); !reflect.DeepEqual(paths, wantPaths) || !reflect.DeepEqual(ifNoneMatch, wantIfNoneMatch) {
+				t.Fatalf("list requests: paths %q, If-None-Match %q; want paths %q, If-None-Match %q",
+					paths, ifNoneMatch, wantPaths, wantIfNoneMatch)
+			}
+		})
+	}
+
+	part := atcSpecWords(atcSpecSubsection(t, atcSpecSection5(t), "5.1"))
+	for _, want := range []string{
+		"When the list it holds was read from the same address with an `ETag`, under the keys the client uses from the discovery document now (the same `keyId`s, each with the same `algorithm` and public key), the request carries that `ETag` in `If-None-Match`, and a `304` answer counts as a read of the list held.",
+		"When the address or the keys differ, the request carries no `If-None-Match`, and the list is read in full and checked under the keys used now.",
+	} {
+		if !strings.Contains(part, want) {
+			t.Errorf("section 5.1 does not say: %s", want)
+		}
 	}
 }
