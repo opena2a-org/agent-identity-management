@@ -52,7 +52,9 @@ rm -f "$DIR/docker-compose.quickstart.yml.bak"
 
 # Generate secrets; the project name and host ports go in the same .env so the
 # teardown command below addresses exactly this run's containers and volumes.
-admin_pass=$(openssl rand -base64 18)
+# ADMIN_PASSWORD ends in Aa1!, as quickstart.sh generates it, so the backend's
+# password rule accepts it as the first administrator's password.
+admin_pass="$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-28)Aa1!"
 (umask 077 && printf 'POSTGRES_PASSWORD=%s\nREDIS_PASSWORD=%s\nJWT_SECRET=%s\nKEYVAULT_MASTER_KEY=%s\nADMIN_EMAIL=admin@opena2a.org\nADMIN_PASSWORD=%s\nCOMPOSE_PROJECT_NAME=%s\nAIM_PROJECT=%s\nAIM_POSTGRES_PORT=%s\nAIM_REDIS_PORT=%s\nAIM_BACKEND_PORT=%s\nAIM_FRONTEND_PORT=%s\n' \
   "$(openssl rand -hex 16)" "$(openssl rand -hex 16)" "$(openssl rand -hex 32)" "$(openssl rand -base64 32)" "$admin_pass" \
   "$project" "$project" "$POSTGRES_PORT" "$REDIS_PORT" "$BACKEND_PORT" "$FRONTEND_PORT" > "$DIR/.env")
