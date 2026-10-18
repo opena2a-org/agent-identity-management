@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed: `aim-sdk demo` signs this machine in when no sign-in is stored and a person can approve the code
+
+- With no SDK credentials stored, `aim-sdk demo` and `aim-sdk demo --interactive` now run the sign-in `secure()`
+  runs, from the same function, when the `CI` environment variable is unset or empty, standard input is a terminal
+  or the code runs in an IPython kernel, and `--ci` is not passed. They then register the demo agent with the
+  credentials that sign-in stored. Before, the demo printed `Not authenticated. The demo registers an agent in your
+  own organization, so it needs a login first:` with `aim-sdk login` and `aim-sdk demo`, and exited 1, at a terminal
+  too.
+- The server is `--url`, or `https://aim.opena2a.org` when `--url` is not passed, and `aim-sdk demo --help` says so.
+  The lines print on standard output, before the demo's banner: `demo-agent needs an AIM sign-in on this machine.
+  Sign in once to continue.`, the server, the page to open, the code and the wait line, then after the approval
+  `Signed in as <email> on <server>.` and the credentials line. A browser opens on the page with the code filled in
+  only when standard output is a terminal, the rule `aim-sdk login` applies.
+- A denied or expired code, an unavailable server (an answer of 502, 503 or 504 to the device-code request, a 503
+  to a poll, or no HTTP answer to the device-code request) and an `http:` address on a host other than `localhost`,
+  `127.0.0.1` or `[::1]` end the demo with exit 1 after the message of the error `secure()` raises in that case.
+  Ctrl+C during the wait ends it with exit 1 after `Login cancelled.`, the line `aim-sdk login` prints. In these
+  cases nothing is stored and the demo agent is not registered. A `--url` that is not an http(s) URL is refused
+  before any request with the lines `aim-sdk login` prints for one, naming `aim-sdk demo`.
+- With `--ci`, with `CI` set, or with standard input that is not a terminal outside an IPython kernel, the demo
+  prints the `Not authenticated` lines and exits 1, as before, and sends no request. A stored sign-in does not start
+  another. `aim-sdk demo --cleanup` with no sign-in still prints `Not authenticated. Run: aim-sdk login` and exits 1.
+- Test: `tests/test_demo_signs_in_on_demand.py`.
+
 ### Changed: `aim-sdk login` prints the sign-in lines `secure()` prints, and no box banner
 
 - `aim-sdk login` no longer opens with the box banner and a `Server:` line. Once the server issues a code it prints

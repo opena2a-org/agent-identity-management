@@ -75,6 +75,11 @@ __version__ = _get_version()
 # Default AIM Cloud URL
 DEFAULT_AIM_URL = "https://aim.opena2a.org"
 
+# `aim-sdk demo --url`, in this parser and in aim_sdk.demo's. With no sign-in
+# stored, it is the address the demo signs this machine in to (demo._sign_in).
+DEMO_URL_HELP = (f"AIM server URL (default: the URL you logged in to, or {DEFAULT_AIM_URL} "
+                 f"when the demo signs this machine in)")
+
 # Bounds for `aim-sdk login`. The pre-flight probe keeps a dead --url from
 # opening a browser at all. The poll loop is bounded by the lifetime the server
 # gives the device code (expiresIn), capped locally at LOGIN_MAX_WAIT_SECONDS
@@ -1570,7 +1575,7 @@ def main():
     demo_parser.add_argument(
         '--url',
         default=None,
-        help='AIM server URL (default: the URL you logged in to)',
+        help=DEMO_URL_HELP,
     )
     demo_parser.set_defaults(func=demo)
 
