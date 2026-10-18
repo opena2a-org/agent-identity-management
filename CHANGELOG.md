@@ -40,6 +40,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   handler's body, with no optional dependency set up and with every one set up, and fails when the row does not name
   one of them, or does not write "`<name>` (required" for exactly the ones the body reports as required.
 
+### Added: the ATC verification specification gives a next step for each ATC error code, and shows the server's `503` answer with `Retry-After`
+
+- The error table of section 4.2 of `docs/specs/atc-verification-v1.md` gave each code a status and a meaning, and no
+  step to take. It has a Next step column, filled in each of its 10 rows. For `atc_revocation_unknown` the step is to
+  send the request again after the `Retry-After` seconds, with the same ATC while it is valid, since the ATC was not
+  judged; for `atc_revoked` it is not to send the ATC again.
+- Section 4.2 shows the server's `503` answer to an ATC whose revocation state cannot be read: its status line, its
+  `Content-Type`, `Retry-After: 5`, `X-ATC-Supported` and `X-ATC-Version` headers, and its body.
+- Tests: `apps/backend/cmd/server/atc_spec_test.go` compares the status of each code in the error table with the
+  status the server's ATC middleware answers for it, checks that the table's codes are the codes the ATC verifier
+  returns and that each row gives a next step, and compares the `503` answer section 4.2 shows with the middleware's
+  answer, through the server's verifier, to an ATC whose agent's status cannot be read. On the previous specification
+  both tests failed. `apps/backend/internal/infrastructure/atc/crl_client_test.go` gains a test and a case for two
+  behaviours of the revocation list client no test held: beside a verified signature by a listed key, a signature by
+  a key the discovery document does not list, whose value does not verify, leaves the list held; and a discovery
+  document longer than its 65,536 byte bound is refused as shape and the list is not requested.
+
 ### Fixed: a Registry credential revocation request waiting for a retry is sent after the server starts again
 
 - The request asking the Registry to revoke a revoked agent's credentials, `POST /internal/atc/<agent id>/revoke`,
