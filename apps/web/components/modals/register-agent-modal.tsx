@@ -1070,33 +1070,36 @@ print(f"Result: {result}")
                                   Verify your agent (ready to copy and paste)
                                 </label>
                               </div>
-                              <div className="relative">
-                                <pre className="glass-contrast p-3 text-ink-code text-xs font-mono rounded-inset overflow-x-auto whitespace-pre-wrap break-all">
+                              <div className="glass-contrast rounded-inset">
+                                {/* The copy button has a row of its own above the command, not a corner over its first line. */}
+                                <div className="flex justify-end px-2 pt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const curlCmd = `curl -X POST "${apiBaseUrl()}/api/v1/agents/${createdAgent.id}/verify-capability" \\\n  -H "Authorization: Bearer ${createdApiKey.key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`;
+                                      copyToClipboard(curlCmd, "curl_cmd");
+                                    }}
+                                    className="px-2 py-1 rounded-pill bg-glass-code text-ink-inverse hover:bg-track text-xs transition-colors flex items-center gap-1"
+                                  >
+                                    {copiedField === "curl_cmd" ? (
+                                      <>
+                                        <CheckCircle className="h-3 w-3" />
+                                        Copied
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="h-3 w-3" />
+                                        Copy
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                                <pre className="px-3 pb-3 pt-1 text-ink-code text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">
 {`curl -X POST "${apiBaseUrl()}/api/v1/agents/${createdAgent.id}/verify-capability" \\
   -H "Authorization: Bearer ${createdApiKey.key}" \\
   -H "Content-Type: application/json" \\
   -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`}
                                 </pre>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const curlCmd = `curl -X POST "${apiBaseUrl()}/api/v1/agents/${createdAgent.id}/verify-capability" \\\n  -H "Authorization: Bearer ${createdApiKey.key}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"capability": "${formData.capabilities[0]}", "resource": "test.resource"}'`;
-                                    copyToClipboard(curlCmd, "curl_cmd");
-                                  }}
-                                  className="absolute top-2 right-2 px-2 py-1 rounded-pill bg-glass-code text-ink-inverse hover:bg-track text-xs transition-colors flex items-center gap-1"
-                                >
-                                  {copiedField === "curl_cmd" ? (
-                                    <>
-                                      <CheckCircle className="h-3 w-3" />
-                                      Copied
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="h-3 w-3" />
-                                      Copy
-                                    </>
-                                  )}
-                                </button>
                               </div>
                               <p className="mt-2 text-xs text-ink-secondary">
                                 Run this command in your terminal to verify your agent can use the <code className="bg-brand-soft text-brand-text px-1.5 py-0.5 rounded font-semibold">{formData.capabilities[0]}</code> capability.
