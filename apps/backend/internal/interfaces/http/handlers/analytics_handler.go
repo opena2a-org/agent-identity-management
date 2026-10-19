@@ -658,9 +658,10 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	agentVerifiedCount := 0
 	agentPendingCount := 0
 	for _, agent := range agents {
-		if agent.Status == "verified" {
+		switch agent.Status {
+		case "verified":
 			agentVerifiedCount++
-		} else if agent.Status == "pending" {
+		case "pending":
 			agentPendingCount++
 		}
 	}
@@ -669,9 +670,10 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 	mcpVerifiedCount := 0
 	mcpPendingCount := 0
 	for _, mcp := range mcpServers {
-		if mcp.Status == "verified" {
+		switch mcp.Status {
+		case "verified":
 			mcpVerifiedCount++
-		} else if mcp.Status == "pending" {
+		case "pending":
 			mcpPendingCount++
 		}
 	}
@@ -749,10 +751,11 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 						"mcpVerified": 0, "mcpPending": 0,
 					}
 				}
-				if agent.Status == "verified" {
+				switch agent.Status {
+				case "verified":
 					monthlyData[monthKey]["verified"]++
 					monthlyData[monthKey]["agentsVerified"]++
-				} else if agent.Status == "pending" {
+				case "pending":
 					monthlyData[monthKey]["pending"]++
 					monthlyData[monthKey]["agentsPending"]++
 				}
@@ -770,10 +773,11 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 						"mcpVerified": 0, "mcpPending": 0,
 					}
 				}
-				if mcp.Status == "verified" {
+				switch mcp.Status {
+				case "verified":
 					monthlyData[monthKey]["verified"]++
 					monthlyData[monthKey]["mcpVerified"]++
-				} else if mcp.Status == "pending" {
+				case "pending":
 					monthlyData[monthKey]["pending"]++
 					monthlyData[monthKey]["mcpPending"]++
 				}
@@ -888,10 +892,11 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 						"mcpVerified": 0, "mcpPending": 0,
 					}
 				}
-				if agent.Status == "verified" {
+				switch agent.Status {
+				case "verified":
 					monthlyData[monthKey]["verified"]++
 					monthlyData[monthKey]["agentsVerified"]++
-				} else if agent.Status == "pending" {
+				case "pending":
 					monthlyData[monthKey]["pending"]++
 					monthlyData[monthKey]["agentsPending"]++
 				}
@@ -909,10 +914,11 @@ func (h *AnalyticsHandler) GetVerificationActivity(c fiber.Ctx) error {
 						"mcpVerified": 0, "mcpPending": 0,
 					}
 				}
-				if mcp.Status == "verified" {
+				switch mcp.Status {
+				case "verified":
 					monthlyData[monthKey]["verified"]++
 					monthlyData[monthKey]["mcpVerified"]++
-				} else if mcp.Status == "pending" {
+				case "pending":
 					monthlyData[monthKey]["pending"]++
 					monthlyData[monthKey]["mcpPending"]++
 				}
@@ -1204,9 +1210,10 @@ func (h *AnalyticsHandler) GetAgentActivity(c fiber.Ctx) error {
 		if !ok {
 			continue
 		}
-		if status == "success" {
+		switch status {
+		case "success":
 			successCount++
-		} else if status == "failure" || status == "failed" || status == "pending" {
+		case "failure", "failed", "pending":
 			failureCount++
 		}
 	}
@@ -1277,9 +1284,10 @@ func (h *AnalyticsHandler) GetDashboardStats(c fiber.Ctx) error {
 	totalTrustScore := 0.0
 
 	for _, agent := range agents {
-		if agent.Status == "verified" {
+		switch agent.Status {
+		case "verified":
 			verifiedAgents++
-		} else if agent.Status == "pending" {
+		case "pending":
 			pendingAgents++
 		}
 		totalTrustScore += agent.TrustScore

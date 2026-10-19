@@ -244,7 +244,7 @@ func (s *JWTService) RevokeFamily(ctx context.Context, claims *JWTClaims) (bool,
 	}
 	var lifetime time.Duration
 	if claims.ExpiresAt != nil && claims.IssuedAt != nil {
-		lifetime = claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+		lifetime = claims.ExpiresAt.Sub(claims.IssuedAt.Time)
 	}
 	return s.RevokeFamilyFor(ctx, claims.FamilyID(), lifetime)
 }
