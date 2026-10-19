@@ -191,9 +191,9 @@ func normalizeMethod(method string) string {
 }
 
 // unmatchedPathLabel is the path label for requests that reached no route
-// handler: unknown paths, and requests a group middleware refused before
-// routing reached a handler. One fixed value keeps callers from adding a
-// series per path they choose.
+// handler: unknown paths, a method the path does not accept, and requests a
+// group middleware refused before routing reached a handler. One fixed value
+// keeps callers from adding a series per path they choose.
 const unmatchedPathLabel = "unmatched"
 
 // PrometheusMiddleware collects HTTP metrics for all requests
@@ -223,16 +223,31 @@ func PrometheusMiddleware() fiber.Handler {
 		duration := time.Since(start).Seconds()
 		status := strconv.Itoa(c.Response().StatusCode())
 		method := normalizeMethod(c.Method())
-		path := unmatchedPathLabel
-		if c.Matched() {
-			path = normalizePath(c.Path())
-		}
+		path := routeLabel(c)
 
 		httpRequestsTotal.WithLabelValues(method, path, status).Inc()
 		httpRequestDuration.WithLabelValues(method, path, status).Observe(duration)
 
 		return nil
 	}
+}
+
+// routeLabel returns the matched route's template (e.g. /api/v1/agents/:id) as
+// the `path` label, bounding cardinality to the registered route set. It reads
+// the registered route, not the request path, so a value a caller puts in a
+// path parameter or a wildcard is not part of the label.
+//
+// c.Matched() reports whether a route handler matched; a Use middleware does
+// not count. Without one, c.Route() names the last Use middleware that ran:
+// Path "/" for a global middleware, which reads as a real root route, or the
+// group's prefix when a group middleware refused the request. Those requests
+// fold into the unmatched constant, so neither the raw request path nor a
+// path no route handler served becomes the label.
+func routeLabel(c fiber.Ctx) string {
+	if !c.Matched() {
+		return unmatchedPathLabel
+	}
+	return normalizePath(c.Route().Path)
 }
 
 // normalizePath normalizes request paths to prevent high cardinality in Prometheus
