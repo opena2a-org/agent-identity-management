@@ -62,7 +62,7 @@ type FGAEngine struct {
 	db             *sql.DB
 	agentSvc       *AgentService
 	daemonURL      string // NanoMind daemon URL
-	registryASCURL string // Registry ASC endpoint
+	registryASCURL string // Registry ASC endpoint, empty until SetRegistryASCURL sets one
 	logger         *slog.Logger
 
 	// OTel instruments. Captured in NewFGAEngine so they bind to the
@@ -299,20 +299,19 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	}
 
 	e := &FGAEngine{
-		db:             db,
-		agentSvc:       agentSvc,
-		daemonURL:      "http://127.0.0.1:47200",
-		registryASCURL: "https://api.oa2a.org",
-		logger:         logger,
-		tracer:         tracer,
-		decisions:      decisions,
-		latency:        latency,
-		asyncDropped:   asyncDropped,
-		intentChecks:   intentChecks,
-		intentSkipped:  intentSkipped,
-		contextStatus:  contextStatus,
-		asyncQueue:     make(chan asyncIntentJob, fgaAsyncQueueSize),
-		asyncDone:      make(chan struct{}),
+		db:            db,
+		agentSvc:      agentSvc,
+		daemonURL:     "http://127.0.0.1:47200",
+		logger:        logger,
+		tracer:        tracer,
+		decisions:     decisions,
+		latency:       latency,
+		asyncDropped:  asyncDropped,
+		intentChecks:  intentChecks,
+		intentSkipped: intentSkipped,
+		contextStatus: contextStatus,
+		asyncQueue:    make(chan asyncIntentJob, fgaAsyncQueueSize),
+		asyncDone:     make(chan struct{}),
 	}
 	e.startAsyncWorkers(fgaAsyncWorkers)
 	return e
@@ -423,7 +422,8 @@ func (e *FGAEngine) SetDaemonURL(url string) {
 	e.daemonURL = url
 }
 
-// SetRegistryASCURL configures the Registry ASC endpoint.
+// SetRegistryASCURL configures the Registry ASC endpoint. A new engine holds
+// none: the server sets one from FGA_REGISTRY_ASC_URL when it is set.
 func (e *FGAEngine) SetRegistryASCURL(url string) {
 	e.registryASCURL = url
 }
