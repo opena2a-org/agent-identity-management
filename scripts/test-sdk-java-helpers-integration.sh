@@ -26,8 +26,11 @@
 #   2. generates JWT_SECRET, KEYVAULT_MASTER_KEY and the admin password, and
 #      prints none of them;
 #   3. builds cmd/server, cmd/migrate and cmd/bootstrap, runs the migrations,
-#      seeds the admin and starts the server on a free port, then waits for
-#      /health/ready (steps 2 and 3 are scripts/lib/aim-backend.sh);
+#      seeds the admin, starts the server on a free port, waits for
+#      /health/ready and completes the admin's required password change
+#      through POST /api/v1/auth/change-password, as the API admits the
+#      seeded account's session only to GET /api/v1/auth/me and that route
+#      until the change is made (steps 2 and 3 are scripts/lib/aim-backend.sh);
 #   4. runs `mvn -B test -Dtest='org.opena2a.aim.integration.*IntegrationTest'`
 #      with AIM_URL set, a fresh HOME, user.home set to that HOME, and no
 #      inherited environment. The tests take their SDK credentials from the

@@ -76,6 +76,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/application/password_change_sdk_tokens_test.go`,
   `apps/backend/cmd/server/password_change_sessions_wiring_test.go`.
 
+### Changed: the SDK integration scripts complete the seeded admin's required password change before the tests sign in
+
+- `scripts/lib/aim-backend.sh`, which `scripts/test-sdk-python-framework-integration.sh` and
+  `scripts/test-sdk-java-helpers-integration.sh` source, seeds the admin with `aim-bootstrap --default`, whose account
+  must change its default password, and the tests sign in as that admin: the Java helpers' test then calls
+  `GET /api/v1/sdk/download?sdk=java`, and the adapter tests call `POST /api/v1/agents`. While the account's
+  `force_password_change` is set, the API admits its session only to `GET /api/v1/auth/me` and
+  `POST /api/v1/auth/change-password`, and answers those two routes, as every other, 403 `passwordChangeRequired`.
+- Once the server is ready, the script now signs in with the seeded password, changes the password through
+  `POST /api/v1/auth/change-password` to a second password it generates, which clears the requirement, waits for the
+  next whole second, as a token minted in the second of a change is refused, and checks that a sign-in with the new
+  password is admitted and requires no change. The tests sign in with that password, which `admin_password` holds
+  after `aim_backend_start`. The request bodies and the bearer token go through files under the run's directory,
+  mode 0700, removed when the step ends and by the script's EXIT trap; no password or token is on a command line or
+  printed. A sign-in or a change the server refuses stops the run with the route and the status.
+- Test: `apps/backend/cmd/bootstrap/aim_backend_script_test.go` runs the step against a server that answers the two
+  routes as the backend does, and checks that the change carries the sign-in's token and the seeded password, that
+  the password the tests get is the one the change set, that the sign-in after the change is made in a later whole
+  second and requires no change, that no password or token is printed, and that a refused sign-in, a refused change
+  and an account that still requires a change each stop the run.
+
 ### Fixed — a revocation list refresh whose answer ends after the read's deadline is refused as `timeout`, however the answer's body ends (#784)
 
 - A server can end an answer cleanly once it sees the client cancel the request, and the client can read that end
