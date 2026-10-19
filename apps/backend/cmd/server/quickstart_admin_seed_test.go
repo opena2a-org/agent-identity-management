@@ -288,6 +288,7 @@ func TestQuickstart_GeneratedAdminPasswordsSeedTheAdministrator(t *testing.T) {
 	db, mock := newSeedMock(t)
 	expectAdminExists(mock, false)
 	expectAdminOrganization(mock)
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).
 		WithArgs(
 			sqlmock.AnyArg(), // id
@@ -298,6 +299,7 @@ func TestQuickstart_GeneratedAdminPasswordsSeedTheAdministrator(t *testing.T) {
 			bcryptOf(first["ADMIN_PASSWORD"]),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectDefaultPoliciesCommitted(mock, "11111111-1111-1111-1111-111111111111", sqlmock.AnyArg(), 0)
 	seed := config.AdminSeedConfig{Email: first["ADMIN_EMAIL"], Password: first["ADMIN_PASSWORD"], Name: "System Administrator"}
 	if err := seedAdmin(db, seed); err != nil {
 		t.Fatalf("seedAdmin refuses the ADMIN_PASSWORD of the first run's .env: %v", err)
@@ -323,7 +325,9 @@ func TestQuickstart_StopsWhenTheBackendRefusedTheAdminSeed(t *testing.T) {
 	seeded := seedStartLine(t, seedTestPassword, func(m sqlmock.Sqlmock) {
 		expectAdminExists(m, false)
 		expectAdminOrganization(m)
+		m.ExpectBegin()
 		m.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).WillReturnResult(sqlmock.NewResult(0, 1))
+		expectDefaultPoliciesCommitted(m, "11111111-1111-1111-1111-111111111111", sqlmock.AnyArg(), 0)
 	})
 	notApplied := seedStartLine(t, seedTestPassword, func(m sqlmock.Sqlmock) {
 		expectAdminExists(m, true)

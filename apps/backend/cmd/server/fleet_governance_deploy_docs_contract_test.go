@@ -322,6 +322,7 @@ func TestFleetGovernanceDeployStepSeedsAnAdministrator(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM organizations WHERE domain = $1`)).
 		WithArgs(adminSeedOrgDomain).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("11111111-1111-1111-1111-111111111111"))
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).
 		WithArgs(
 			sqlmock.AnyArg(), // id
@@ -332,6 +333,7 @@ func TestFleetGovernanceDeployStepSeedsAnAdministrator(t *testing.T) {
 			bcryptOf(serverEnv["ADMIN_PASSWORD"]),
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectDefaultPoliciesCommitted(mock, "11111111-1111-1111-1111-111111111111", sqlmock.AnyArg(), 0)
 
 	var logged bytes.Buffer
 	prev := log.Writer()

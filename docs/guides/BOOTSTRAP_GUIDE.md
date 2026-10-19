@@ -412,6 +412,13 @@ FROM security_policies
 ORDER BY priority DESC;
 ```
 
+The server adds the same twelve rows when its `ADMIN_PASSWORD` seed creates
+the first administrator at startup, which is how `scripts/quickstart.sh`
+creates it. That start logs:
+```
+Added 12 default security policies to the admin.opena2a.org organization
+```
+
 ---
 
 ## 🔒 Security Best Practices
