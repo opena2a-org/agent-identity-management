@@ -163,8 +163,9 @@ no notification is sent.
    cd ~/Downloads
    unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
 
-   # Copy credentials to your project
-   cp -r aim-sdk-python/.aim ~/.aim/
+   # Replace the expired credentials file with the archive's copy
+   mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json
+   chmod 600 ~/.aim/sdk_credentials.json
    ```
 
 4. **Restart Your Agent**

@@ -127,7 +127,11 @@ def test_the_self_hosted_install_names_the_page_button_archive_folder_and_sign_i
     folder = sprintf_format(handler, "zipPrefix").replace("%s", "python")
     sign_in = re.search(r'credPath := filepath\.Join\(zipPrefix, "([^"]+)", "([^"]+)"\)', handler)
     assert sign_in, f"{SDK_HANDLER.name} no longer places the sign-in this way"
-    assert f"unzip ~/Downloads/{archive}" in commands, f"the install must unzip {archive}: {commands}"
+    # A browser saves a second download of the archive as "<name> (1).zip", and given two
+    # archives unzip extracts nothing, so the install unzips the newest one.
+    newest = f'unzip "$(ls -t ~/Downloads/{archive} | head -n 1)"'
+    assert newest in commands, f"the install must unzip the newest {archive}: {commands}"
+    assert f"unzip ~/Downloads/{archive}" not in commands, f"the install must not unzip every {archive}: {commands}"
     assert f"cd {folder}" in commands, f"the install must enter the archive's folder, {folder}: {commands}"
     assert any(re.fullmatch(r'pip install -e "?\.(\[[a-z,]+\])?"?', c) for c in commands), (
         f"the install must be editable, so the SDK reads the archive's sign-in from any directory: {commands}"

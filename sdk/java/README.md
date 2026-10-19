@@ -81,7 +81,15 @@ Or place a credentials file at `~/.aim/sdk_credentials.json` (mode 0600):
 
 The SDK signs in with the refresh token. Without one, a client ID and secret (`AIM_CLIENT_ID` and `AIM_CLIENT_SECRET`, or `clientId` and `clientSecret`) are refused with `AuthenticationException` before any request is sent: AIM's token route does not accept them.
 
-To download pre-configured credentials: log in to the AIM dashboard, go to **Settings → SDK Download**, copy the JSON into `~/.aim/sdk_credentials.json`.
+To download pre-configured credentials: log in to the AIM dashboard, open Developers → SDK & docs (`/dashboard/sdk`) and click "Download Java SDK". The downloaded `aim-sdk-java-v<version>.zip` unpacks into an `aim-sdk-java` folder; copy its `.aim/sdk_credentials.json` to `~/.aim/sdk_credentials.json`:
+
+```bash
+# Extract the newest aim-sdk-java-v*.zip in ~/Downloads (an earlier download can still be there)
+cd ~/Downloads
+unzip "$(ls -t aim-sdk-java-v*.zip | head -n 1)"
+mkdir -p ~/.aim && cp aim-sdk-java/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json
+chmod 600 ~/.aim/sdk_credentials.json
+```
 
 ## API reference
 

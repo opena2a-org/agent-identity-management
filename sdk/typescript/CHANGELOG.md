@@ -622,6 +622,24 @@ they stay in scope if one ever grows an observational side-channel.
 - `BudgetController.canReserve(estimatedCostUsd)` returns whether `reserve()` would grant that estimate now, and
   reserves nothing.
 
+### Fixed — ARP logs a batched event again once its L2 batch is answered (#805)
+
+- With `enableBatching` on, `AgentRuntimeProtection` writes an event queued for an L2 batch to `events.jsonl` when
+  `analyze()` returns, before the batch is sent, and writes it again once the batch's answer has been applied to it,
+  with its `llmAssessment`, `classifiedBy: 'L2-llm'` and the severity and category the answer gave it.
+  `getEvents()`, `LocalLogger.readEvents()` and `LocalLogger.tail()` return one record per event ID: an event logged
+  twice is returned as its later record, at the place of its first, a limit counts events rather than lines, and
+  each record without an ID is returned. Measured with a stub adapter before this change: an event of severity `high`
+  emitted with batching on and flushed by `stop()`, whose batch was answered `1: KILL - exfiltration`, was returned by
+  `emit()` with `classifiedBy: 'L2-llm'`, severity `critical` and a `kill` recommendation, while `getEvents()`
+  returned it with `classifiedBy: 'L0-rules'`, severity `high` and no `llmAssessment`, and `events.jsonl` held one
+  line for it; with batching off, `getEvents()` returned it with `L2-llm`, `critical` and `kill`. A batch the budget
+  refuses, or whose call throws, leaves its events logged once, as before.
+- `IntelligenceCoordinator.onBatchAssessed(handler)` registers a handler that is called with each event of a batch
+  once the batch's answer has been applied to it, in the order the events were queued, whether `stop()` or the end
+  of the batch window sent the batch. A batch the budget refuses, or whose call throws, calls no handler, and a
+  handler that throws or rejects does not stop the other handlers or events.
+
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.

@@ -130,7 +130,8 @@ open http://localhost:3000/auth/login
 # still be there) and copy credentials
 cd ~/Downloads
 unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
-cp -r aim-sdk-python/.aim ~/.aim/
+mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json
+chmod 600 ~/.aim/sdk_credentials.json
 
 # Step 4: Verify credentials structure
 cat ~/.aim/credentials.json | python -m json.tool

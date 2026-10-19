@@ -41,11 +41,11 @@ Your SDK credentials have expired due to token rotation (security policy).
    cd ~/Downloads
    unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
 
-   # Copy credentials
-   cp -r aim-sdk-python/.aim ~/.aim/
+   # Replace the expired credentials file with the archive's copy
+   mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json
 
-   # Verify permissions
-   chmod 600 ~/.aim/credentials.json
+   # Make it readable by you only
+   chmod 600 ~/.aim/sdk_credentials.json
    ```
 
 4. **Restart your agent**:
@@ -87,7 +87,8 @@ ls -la ~/.aim/credentials.json
 # Extract the newest aim-sdk-python-v*.zip in ~/Downloads and copy credentials
 cd ~/Downloads
 unzip "$(ls -t aim-sdk-python-v*.zip | head -n 1)"
-cp -r aim-sdk-python/.aim ~/.aim/
+mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json
+chmod 600 ~/.aim/sdk_credentials.json
 ```
 
 #### 2. Corrupted Credentials

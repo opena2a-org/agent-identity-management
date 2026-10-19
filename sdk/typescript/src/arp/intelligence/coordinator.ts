@@ -166,6 +166,8 @@ export class IntelligenceCoordinator {
   private adapter: LLMAdapter | null = null;
   private batchQueue: ARPEvent[] = [];
   private batchTimer?: ReturnType<typeof setTimeout>;
+  /** Handlers registered with onBatchAssessed. */
+  private readonly batchAssessedHandlers: Array<(event: ARPEvent) => void | Promise<void>> = [];
   /**
    * Capability manifest used to enforce the `comply` envelope on classified
    * events. Optional: when null the comply gate is inert and the coordinator
@@ -305,7 +307,8 @@ export class IntelligenceCoordinator {
    * Analyze an event through the 3-layer stack.
    * Mutates the event's category, severity, and classifiedBy fields.
    * Returns the LLM assessment if L2 was invoked. An event queued for a batch returns
-   * null here; when its batch is sent and answered, its assessment is written to the event.
+   * null here; when its batch is sent and answered, its assessment is written to the event
+   * and the event is passed to each onBatchAssessed handler.
    */
   async analyze(event: ARPEvent): Promise<LLMAssessment | null> {
     // Guard anomaly (classification distribution drift) detection. Runs
@@ -380,6 +383,20 @@ export class IntelligenceCoordinator {
     }
 
     return null;
+  }
+
+  /**
+   * Register a handler for each event that receives its L2 assessment after analyze()
+   * returned: an event queued for a batch.
+   *
+   * analyze() returns null for such an event, before its batch is sent. When the batch is
+   * answered and its assessments are applied, each handler is called with each event of
+   * the batch, in the order the events were queued. A batch whose call the budget refuses,
+   * or whose call throws, calls no handler. A handler that throws or rejects does not stop
+   * the other handlers or events.
+   */
+  onBatchAssessed(handler: (event: ARPEvent) => void | Promise<void>): void {
+    this.batchAssessedHandlers.push(handler);
   }
 
   /** Get budget status */
@@ -543,6 +560,18 @@ export class IntelligenceCoordinator {
       events.forEach((event, i) => applyAssessment(event, assessments[i]));
     } catch {
       // Batch failure — events remain at L1 classification
+      return;
+    }
+
+    // analyze() returned before these events had their assessments: report them now.
+    for (const event of events) {
+      for (const handler of this.batchAssessedHandlers) {
+        try {
+          await handler(event);
+        } catch {
+          // A handler's error does not stop the other handlers or events
+        }
+      }
     }
   }
 }

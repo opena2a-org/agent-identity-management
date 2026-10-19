@@ -320,6 +320,12 @@ export class AgentRuntimeProtection {
       await this.intelligence.analyze(event);
       this.logger.logEvent(event);
     });
+    // analyze() returns before an event queued for an L2 batch has its assessment, so the
+    // handler above logs that event as L0/L1 left it. Log it again once its batch is
+    // answered; getEvents() returns that later record in place of the first.
+    this.intelligence.onBatchAssessed((event) => {
+      this.logger.logEvent(event);
+    });
 
     // Create monitors based on config
     const mc = this.config.monitors;

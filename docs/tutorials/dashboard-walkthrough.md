@@ -69,13 +69,18 @@ Navigate to **Security** for threat monitoring:
 
 ---
 
-## Step 6: Settings
+## Step 6: Download the SDK
+
+Navigate to **Developers → SDK & docs** (`/dashboard/sdk`) and click "Download Python SDK". You get `aim-sdk-python-v<version>.zip`, the pre-configured Python SDK with your credentials embedded; the [SDK Quickstart](./sdk-quickstart.md) installs it.
+
+---
+
+## Step 7: Settings
 
 Navigate to **Settings** for configuration:
 
 | Setting | Description |
 |---------|-------------|
-| **SDK Download** | Download the pre-configured Python SDK with your credentials embedded |
 | **API Keys** | Generate and manage API keys for direct API access |
 | **Security Policies** | Configure automated security rules and thresholds |
 | **User Management** | Add team members and manage roles (Admin only) |
@@ -90,7 +95,7 @@ Navigate to **Settings** for configuration:
 | Verify a pending agent | Agents → Click agent → Verify |
 | Add an MCP server | MCP Servers → Register Server |
 | View security alerts | Security → Alerts |
-| Download the SDK | Settings → SDK Download |
+| Download the SDK | Developers → SDK & docs (`/dashboard/sdk`), "Download Python SDK" |
 | Generate an API key | Settings → API Keys |
 | Configure security policies | Settings → Security Policies |
 | View audit logs | Admin → Audit Logs |
