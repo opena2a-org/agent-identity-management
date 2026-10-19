@@ -509,10 +509,8 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 	// SECURITY (A3d-viii): replace the pre-fix existence oracle (404
 	// "User not found" vs 403 "User not found in organization") with the
 	// LoadOwned helper. Both branches now collapse to a fixed 404 body,
-	// closing the side channel. The returned user is reused below for
-	// the audit-log email/name capture.
-	user := LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID)
-	if user == nil {
+	// closing the side channel.
+	if LoadOwned(c, h.userRepo.GetByID, targetUserID, orgID, userOrgID) == nil {
 		return nil
 	}
 
@@ -529,16 +527,13 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 		})
 	}
 
-	// Store user info for audit log before deletion
-	userEmail := user.Email
-	userName := user.Name
-
 	// Permanently delete user using admin service
 	if err := h.getAdminService().PermanentlyDeleteUser(c.Context(), targetUserID, adminID, orgID); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
-	// Log audit
+	// Log audit. The row outlives the user it records, so it names the user
+	// by id only and keeps no copy of the user's email or name.
 	h.getAuditService().LogAction(
 		c.Context(),
 		orgID,
@@ -549,10 +544,8 @@ func (h *AdminHandler) PermanentlyDeleteUser(c fiber.Ctx) error {
 		c.IP(),
 		c.Get("User-Agent"),
 		map[string]interface{}{
-			"action":     "permanent_delete",
-			"user_email": userEmail,
-			"user_name":  userName,
-			"warning":    "irreversible_hard_delete",
+			"action":  "permanent_delete",
+			"warning": "irreversible_hard_delete",
 		},
 	)
 
