@@ -79,8 +79,8 @@ func aim07Get(t *testing.T, app *fiber.App) (int, http.Header, []byte) {
 	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	resp, err := app.Test(req, fiber.TestConfig{Timeout: 10 * time.Second, FailOnTimeout: true})
 	require.NoError(t, err)
-	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, resp.Body.Close())
 	require.NoError(t, err)
 	return resp.StatusCode, resp.Header, body
 }

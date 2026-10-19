@@ -39,7 +39,6 @@ func TestEveryRegistryPathTheBackendTargetsIsARegisteredRoute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the Registry route pin: %v (regenerate with scripts/pin-registry-routes.py)", err)
 	}
-	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -50,6 +49,9 @@ func TestEveryRegistryPathTheBackendTargetsIsARegisteredRoute(t *testing.T) {
 		if len(parts) == 2 {
 			pinned[parts[1]] = true
 		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close the Registry route pin: %v", err)
 	}
 	if len(pinned) == 0 {
 		t.Fatalf("the Registry route pin at %s is empty", pinPath)

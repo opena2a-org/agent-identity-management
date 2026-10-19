@@ -143,8 +143,8 @@ func (f *routeFixture) do(t *testing.T, method, path, token, body string) (int, 
 	}
 	resp, err := f.app.Test(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, resp.Body.Close())
 	require.NoError(t, err)
 	out := map[string]interface{}{}
 	_ = json.Unmarshal(raw, &out)
