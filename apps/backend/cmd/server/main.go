@@ -381,6 +381,12 @@ func main() {
 	stopActionRequestNoncePurge := startActionRequestNoncePurgeJob(services.ActionRequestNonces, domain.ActionRequestNoncePurgeInterval)
 	defer stopActionRequestNoncePurge()
 
+	// Start the job that deletes the accounts whose users asked for their
+	// deletion, once domain.AccountDeletionDelay has passed since the request.
+	// Its first run starts with the server, in the background.
+	stopAccountDeletionPurge := startAccountDeletionPurgeJob(services.AccountDeletion, domain.AccountDeletionPurgeInterval)
+	defer stopAccountDeletionPurge()
+
 	// Withdraw the verification of MCP servers that multi-agent consensus
 	// verified and whose attestations no longer agree. Runs in the background
 	// so startup does not wait on it.
@@ -815,6 +821,8 @@ type Services struct {
 	RegistryATCRevocations *application.RegistryATCRevocations
 	// Admits and purges the nonces of signed action-request statements
 	ActionRequestNonces *application.ActionRequestNonceService
+	// Records a user's request for the deletion of their own account, and deletes the account when it is due
+	AccountDeletion *application.AccountDeletionService
 }
 
 func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -1341,6 +1349,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 
 		// Admission store for signed action-request statements and secrets resolve requests
 		ActionRequestNonces: actionRequestNonces,
+
+		// Account deletion requests and the purge that deletes the accounts when due
+		AccountDeletion: application.NewAccountDeletionService(repos.User, auditService),
 	}, keyVault
 }
 
@@ -1370,6 +1381,7 @@ type Handlers struct {
 	Onboarding         *handlers.OnboardingTelemetryHandler
 	AuthRefresh        *handlers.AuthRefreshHandler
 	AuthReauth         *handlers.AuthReauthHandler
+	AccountDeletion    *handlers.AccountDeletionHandler // POST /auth/delete-account -- a user asks for the deletion of their own account
 	SDKTokenRecovery   *handlers.SDKTokenRecoveryHandler
 	Capability         *handlers.CapabilityHandler
 	Detection          *handlers.DetectionHandler          // ✅ For MCP auto-detection (SDK + Direct API)
@@ -1544,6 +1556,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			repos.User,
 			services.Audit,
 			services.Auth, // verifies the password with the sign-in's lockout and failure records
+		),
+		AccountDeletion: handlers.NewAccountDeletionHandler(
+			repos.User,
+			services.Auth, // verifies the password with the sign-in's lockout and failure records
+			services.AccountDeletion,
 		),
 		SDKTokenRecovery: handlers.NewSDKTokenRecoveryHandler(
 			services.SDKToken,
@@ -1812,6 +1829,10 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// adds no limiter: the strict limiter of the /auth group above reaches it
 	// (strictRateLimitedRoutes).
 	authProtected.Post("/reauth", h.AuthReauth.Reauthenticate)
+	// Password again; the account is deactivated at once and deleted by the
+	// account deletion purge when due. The strict limiter of the /auth group
+	// reaches it too.
+	authProtected.Post("/delete-account", h.AccountDeletion.RequestDeletion)
 
 	// Organization routes (authentication required)
 	organizations := v1.Group("/organizations")
@@ -2936,6 +2957,60 @@ func driftMonitorOrganizations(db *sql.DB) func(ctx context.Context) ([]uuid.UUI
 			return nil, err
 		}
 		return orgIDs, nil
+	}
+}
+
+// accountDeletionPurger deletes the accounts whose deletion request is due.
+type accountDeletionPurger interface {
+	Purge(ctx context.Context) (int, error)
+}
+
+// startAccountDeletionPurgeJob starts a background goroutine that runs the
+// account deletion purge at once and then every interval. The returned
+// stop function cancels a purge in flight, ends the job and returns once the
+// goroutine has exited, so nothing the job logs or runs outlives the call.
+// Calling it again does nothing.
+func startAccountDeletionPurgeJob(purger accountDeletionPurger, interval time.Duration) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	ticker := time.NewTicker(interval)
+	log.Printf("Account deletion purge job started (runs every %s; deletes an account %d days after its deletion request)",
+		interval, int(domain.AccountDeletionDelay/(24*time.Hour)))
+
+	go func() {
+		defer close(done)
+		runAccountDeletionPurge(ctx, purger)
+		for {
+			select {
+			case <-ticker.C:
+				runAccountDeletionPurge(ctx, purger)
+			case <-ctx.Done():
+				ticker.Stop()
+				log.Println("Account deletion purge job stopped")
+				return
+			}
+		}
+	}()
+
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// runAccountDeletionPurge is one run of the account deletion purge. A run that
+// deletes accounts logs their count, and a failed run its error.
+func runAccountDeletionPurge(ctx context.Context, purger accountDeletionPurger) {
+	deleted, err := purger.Purge(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return // the job is stopping and cancelled this run
+		}
+		log.Printf("Account deletion purge error, %d account(s) deleted before it: %v", deleted, err)
+		return
+	}
+	if deleted > 0 {
+		log.Printf("Account deletion purge deleted %d account(s)", deleted)
 	}
 }
 

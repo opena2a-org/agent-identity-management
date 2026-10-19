@@ -18,10 +18,11 @@ import (
 )
 
 // The auth middleware reads the user record behind a login access token on
-// every request: a token signed in before the account's last password change
-// is answered 401, and while the account must change its password every
-// request but GET /api/v1/auth/me and POST /api/v1/auth/change-password is
-// answered 403 with the code passwordChangeRequired.
+// every request: a session of a deactivated account is answered 401, a token
+// signed in before the account's last password change is answered 401, and
+// while the account must change its password every request but
+// GET /api/v1/auth/me and POST /api/v1/auth/change-password is answered 403
+// with the code passwordChangeRequired.
 
 type sessionStateFake struct {
 	state *domain.UserSessionState
@@ -123,6 +124,36 @@ func TestAuthMiddleware_RefusesATokenSignedInBeforeThePasswordChange(t *testing.
 	assert.Equal(t, fiber.StatusOK, status, "a sign-in after the change is not refused")
 }
 
+// Deactivating an account ends its sessions: the session's next request is
+// refused on every route, the two a session that must change its password
+// may still use among them.
+func TestAuthMiddleware_RefusesASessionOfADeactivatedAccount(t *testing.T) {
+	reader := &sessionStateFake{state: &domain.UserSessionState{}}
+	svc, access := passwordChangeTestService(t, reader)
+	app := passwordChangeTestApp(svc)
+
+	status, _ := passwordChangeTestCall(t, app, "GET", "/api/v1/auth/me", access)
+	require.Equal(t, fiber.StatusOK, status, "control: the account is not deactivated")
+
+	routes := [][2]string{
+		{"GET", "/api/v1/auth/me"},
+		{"POST", "/api/v1/auth/change-password"},
+		{"POST", "/api/v1/auth/reauth"},
+		{"POST", "/api/v1/agents"},
+	}
+	for _, state := range []domain.UserSessionState{
+		{Deactivated: true},
+		{Deactivated: true, ForcePasswordChange: true},
+	} {
+		reader.state = &state
+		for _, r := range routes {
+			status, body := passwordChangeTestCall(t, app, r[0], r[1], access)
+			assert.Equal(t, fiber.StatusUnauthorized, status, "%s %s, password change required: %v", r[0], r[1], state.ForcePasswordChange)
+			assert.Equal(t, "Token has been revoked: the account is deactivated", body["error"], "%s %s", r[0], r[1])
+		}
+	}
+}
+
 func TestAuthMiddleware_UserRecordThatCannotBeRead(t *testing.T) {
 	t.Run("no such user: 401", func(t *testing.T) {
 		svc, access := passwordChangeTestService(t, &sessionStateFake{err: domain.ErrUserNotFound})
@@ -150,6 +181,9 @@ func TestOptionalAuthMiddleware_SessionTheUserRecordRefusesIsAnonymous(t *testin
 		},
 		"password change required": func(time.Time) *sessionStateFake {
 			return &sessionStateFake{state: &domain.UserSessionState{ForcePasswordChange: true}}
+		},
+		"account deactivated": func(time.Time) *sessionStateFake {
+			return &sessionStateFake{state: &domain.UserSessionState{Deactivated: true}}
 		},
 		"the record cannot be read": func(time.Time) *sessionStateFake {
 			return &sessionStateFake{err: errors.New("connection refused")}

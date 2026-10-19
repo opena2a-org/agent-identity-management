@@ -222,6 +222,38 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Added: a signed-in user can ask for the deletion of their own account, which is deactivated at once and deleted 29 days later
+
+- `POST /api/v1/auth/delete-account` takes the signed-in user's password, checked as at sign-in: a wrong password is
+  recorded as a failed attempt and counts toward the lockout, and a wrong password, a locked account and an account
+  without a password are refused with `401`. An accepted request answers `202` with the account's status, the time of
+  the request (`deletionRequestedAt`) and the time from which the account is deleted (`deletionDueAt`, 29 days later).
+- The request deactivates the account and records its time in `users.deletion_requested_at` (migration
+  `139_user_deletion_requests.sql`). The account deletion purge, which the server runs at start and every hour,
+  deletes each account whose request is 29 days old or older, as `DELETE /api/v1/admin/users/:id` deletes a user: the
+  user's API keys and the user's own audit rows go with it, and the agents and MCP servers the user created are kept
+  without a creator. The request does not revoke the API keys before then. An admin who activates the account
+  withdraws the request: a trigger the migration adds clears it when the account's status leaves `deactivated`.
+- The organization's only active admin is refused with `409` and the code `lastActiveAdmin` while the organization
+  has another user who is not deactivated. The requests of one organization are taken one at a time, so two admins
+  who ask at once do not both get through.
+- Deactivating an account ends its sessions. The auth middleware reads whether the account is deactivated from the
+  user record it reads on every request, and answers the account's access tokens with `401`, after an admin's
+  deactivation as after a deletion request; they were admitted until they expired (`JWT_ACCESS_TTL`, `2h` by default).
+- The request is recorded as an `account_deletion_requested` audit row, which the deletion removes with the user's
+  other rows, and the deletion as an `account_deleted` row that names no user and whose resource is the deleted
+  user's id.
+- The route shares the strict rate limit of the other `/api/v1/auth` routes (10 requests a minute), and `docs/API.md`
+  documents it. The dashboard does not offer it yet.
+- Tests: `apps/backend/internal/interfaces/http/handlers/account_deletion_handler_test.go`,
+  `apps/backend/internal/application/account_deletion_service_test.go`,
+  `apps/backend/cmd/server/account_deletion_purge_job_test.go`, the deactivated account cases of
+  `apps/backend/internal/interfaces/http/middleware/auth_password_change_test.go` and
+  `TestStrictRateLimiterCoversExactlyTheCredentialRoutes`; against PostgreSQL,
+  `apps/backend/internal/infrastructure/repository/user_deletion_request_integration_test.go` and
+  `apps/backend/internal/interfaces/http/middleware/auth_deactivated_account_integration_test.go`, which fails on the
+  code before this change: the deactivated account's access token was admitted.
+
 ### Fixed: deleting an admin removes the admin's email from the admin access reviews kept as compliance evidence
 
 - `POST /api/v1/compliance/evidence/collect` for the `admin_access_review` check stores an access review whose data

@@ -146,9 +146,10 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		}
 
 		// SECURITY: the user record decides whether the session may still act
-		// (see sessionStateRefusal): a password change ends every session
-		// signed in before it, and while an account must change its password
-		// its session is admitted only to GET /api/v1/auth/me and
+		// (see sessionStateRefusal): a deactivated account's sessions are
+		// refused, a password change ends every session signed in before it,
+		// and while an account must change its password its session is
+		// admitted only to GET /api/v1/auth/me and
 		// POST /api/v1/auth/change-password.
 		if refused, err := sessionStateRefusal(c, jwtService, claims, userID); refused {
 			return err
@@ -243,13 +244,13 @@ func OptionalAuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		// Parse UUIDs
 		userID, err := uuid.Parse(claims.UserID)
 		if err == nil {
-			// SECURITY: a session the user record refuses (signed in before
-			// the account's last password change, or of an account that must
-			// change its password) must not authenticate, even optionally
-			// (see AuthMiddleware). Continue unauthenticated, also when the
-			// record cannot be read.
+			// SECURITY: a session the user record refuses (of a deactivated
+			// account, signed in before the account's last password change,
+			// or of an account that must change its password) must not
+			// authenticate, even optionally (see AuthMiddleware). Continue
+			// unauthenticated, also when the record cannot be read.
 			if state, attached, readErr := jwtService.SessionState(c.Context(), userID); attached &&
-				(readErr != nil || auth.SignedInBeforePasswordChange(claims, state.PasswordChangedAt) || state.ForcePasswordChange) {
+				(readErr != nil || state.Deactivated || auth.SignedInBeforePasswordChange(claims, state.PasswordChangedAt) || state.ForcePasswordChange) {
 				return c.Next()
 			}
 			c.Locals("user_id", userID)

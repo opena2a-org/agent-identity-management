@@ -161,6 +161,34 @@ A wrong password, a locked account and an account without a password answer `401
 
 ---
 
+#### POST /api/v1/auth/delete-account
+
+Ask for the deletion of the signed-in user's own account. The request carries the session's access token in the `Authorization` header and the user's password in the body. The password is checked as at sign-in, so a wrong password is recorded as a failed attempt and counts toward the account lockout.
+
+An accepted request deactivates the account at once: sign-in and token refresh refuse it, and a route that requires a signed-in user answers an access token of the account, the one that made the request among them, with `401` and `{"error": "Token has been revoked: the account is deactivated"}`. The account deletion purge, which the server runs at start and every hour, deletes the account at its first run 29 days or more after the request. It deletes the user as `DELETE /api/v1/admin/users/{id}` does, so the same rows go with the user and the same rows are kept: among them, the user's API keys and the user's own audit log rows are deleted, and the agents and MCP servers the user created are kept without a creator. The request does not revoke the account's API keys before then. An admin who activates the account before the purge deletes it (`POST /api/v1/admin/users/{id}/activate`) withdraws the request.
+
+**Request:**
+```json
+{
+  "password": "<the user's password>"
+}
+```
+
+**Response** (202):
+```json
+{
+  "status": "deactivated",
+  "deletionRequestedAt": "2026-10-19T12:30:00Z",
+  "deletionDueAt": "2026-11-17T12:30:00Z"
+}
+```
+
+`deletionDueAt` is 29 days after `deletionRequestedAt`, the time from which the purge deletes the account.
+
+A request without a password answers `400`. A wrong password, a locked account and an account without a password answer `401` with `{"error": "Invalid password"}`. The organization's only active admin is answered `409` with `"code": "lastActiveAdmin"` while the organization has another user who is not deactivated: another user is made an admin first, with `PUT /api/v1/admin/users/{id}/role`. An accepted request is recorded in the audit log as `account_deletion_requested`, a row of the user's own that the deletion removes. The deletion is recorded as `account_deleted`, a row that names no user, whose resource is the deleted user's id and whose `metadata.deletionRequestedAt` is the time of the request.
+
+---
+
 ### Agents Endpoints
 
 #### POST /api/v1/agents
@@ -938,7 +966,7 @@ An error answers with an HTTP status and a JSON body whose `error` member is a m
 Requests are counted per signed-in user when the server knows the user before the limiter runs, and per client IP address otherwise, over a one-minute window:
 
 - **Most routes**: 100 requests per minute.
-- **Credential routes**: 10 requests per minute. These are sign-in, sign-out, token refresh, re-authentication, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
+- **Credential routes**: 10 requests per minute. These are sign-in, sign-out, token refresh, re-authentication, account deletion requests, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
 
 Responses carry the limiter's headers. `X-RateLimit-Reset` is the number of seconds until the window resets:
 

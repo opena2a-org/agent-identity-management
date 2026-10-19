@@ -17,11 +17,13 @@ import (
 )
 
 // users.password_changed_at records the instant the password last changed.
-// The auth middleware reads it, with force_password_change, through
-// GetSessionState on every request, and Update only ever moves it forward.
+// The auth middleware reads it, with force_password_change and whether the
+// account is deactivated, through GetSessionState on every request, and
+// Update only ever moves it forward.
 
 func TestUserRepository_GetSessionState(t *testing.T) {
-	query := regexp.QuoteMeta(`SELECT password_changed_at, COALESCE(force_password_change, FALSE) FROM users WHERE id = $1`)
+	query := regexp.QuoteMeta(`SELECT password_changed_at, COALESCE(force_password_change, FALSE), (status = 'deactivated' OR deleted_at IS NOT NULL) FROM users WHERE id = $1`)
+	columns := []string{"password_changed_at", "force_password_change", "deactivated"}
 	id := uuid.New()
 
 	t.Run("reads the change and the flag", func(t *testing.T) {
@@ -30,13 +32,14 @@ func TestUserRepository_GetSessionState(t *testing.T) {
 		defer db.Close()
 		changedAt := time.Date(2026, 10, 18, 12, 0, 0, 400_000_000, time.UTC)
 		mock.ExpectQuery(query).WithArgs(id).
-			WillReturnRows(sqlmock.NewRows([]string{"password_changed_at", "force_password_change"}).AddRow(changedAt, true))
+			WillReturnRows(sqlmock.NewRows(columns).AddRow(changedAt, true, false))
 
 		state, err := NewUserRepository(db).GetSessionState(context.Background(), id)
 		require.NoError(t, err)
 		require.NotNil(t, state.PasswordChangedAt)
 		assert.True(t, changedAt.Equal(*state.PasswordChangedAt))
 		assert.True(t, state.ForcePasswordChange)
+		assert.False(t, state.Deactivated)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
@@ -45,7 +48,7 @@ func TestUserRepository_GetSessionState(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 		mock.ExpectQuery(query).WithArgs(id).
-			WillReturnRows(sqlmock.NewRows([]string{"password_changed_at", "force_password_change"}).AddRow(nil, false))
+			WillReturnRows(sqlmock.NewRows(columns).AddRow(nil, false, false))
 
 		state, err := NewUserRepository(db).GetSessionState(context.Background(), id)
 		require.NoError(t, err)
@@ -54,12 +57,25 @@ func TestUserRepository_GetSessionState(t *testing.T) {
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
+	t.Run("reads a deactivated account", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+		mock.ExpectQuery(query).WithArgs(id).
+			WillReturnRows(sqlmock.NewRows(columns).AddRow(nil, false, true))
+
+		state, err := NewUserRepository(db).GetSessionState(context.Background(), id)
+		require.NoError(t, err)
+		assert.True(t, state.Deactivated)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
 	t.Run("no such user", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 		defer db.Close()
 		mock.ExpectQuery(query).WithArgs(id).
-			WillReturnRows(sqlmock.NewRows([]string{"password_changed_at", "force_password_change"}))
+			WillReturnRows(sqlmock.NewRows(columns))
 
 		_, err = NewUserRepository(db).GetSessionState(context.Background(), id)
 		assert.True(t, errors.Is(err, domain.ErrUserNotFound), "got %v", err)
