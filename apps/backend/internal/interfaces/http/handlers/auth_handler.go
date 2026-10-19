@@ -124,10 +124,20 @@ func (h *AuthHandler) LocalLogin(c fiber.Ctx) error {
 	if err != nil {
 		reason, userID, orgID := signInFailedUnclassified, uuid.Nil, uuid.Nil
 		var refusal *application.SignInRefusal
-		if errors.As(err, &refusal) {
+		isRefusal := errors.As(err, &refusal)
+		if isRefusal {
 			reason, userID, orgID = refusal.Reason, refusal.UserID, refusal.OrganizationID
 		}
 		reportSignInFailure(c, h.signInFailed, reason, userID, orgID)
+		switch {
+		case reason == application.SignInRefusedProviderSignInRequired:
+			return c.Status(fiber.StatusForbidden).JSON(providerSignInRequiredAnswer(orgID))
+		case !isRefusal:
+			// The service answers an error that is not a refusal only after
+			// the password matched: the organization's requirement of
+			// provider sign-in could not be read.
+			return respondServerError(c, fiber.StatusInternalServerError, err)
+		}
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid email or password",
 		})
@@ -215,9 +225,26 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 	// The session that made it is issued a new pair, minted from the user
 	// read after the change so its sign-in time is not before the change's
 	// boundary. When the pair cannot be issued, the change still stands and
-	// the answer carries no tokens: the client signs in again.
+	// the answer carries no tokens: the client signs in again. A user whose
+	// organization requires sign-in through its identity provider is issued
+	// no pair for a password, and signs in again through the provider.
 	response := fiber.Map{"message": "Password changed successfully"}
-	if user, err := h.authService.GetUserByID(c.Context(), userID); err == nil && h.jwtService != nil {
+	user, err := h.authService.GetUserByID(c.Context(), userID)
+	if err != nil {
+		log.Printf("ChangePassword: user %s not read after the change, no new pair issued: %v", userID, err)
+		return c.JSON(response)
+	}
+	if refused := h.authService.CheckPasswordSignIn(c.Context(), user); refused != nil {
+		var refusal *application.SignInRefusal
+		if errors.As(refused, &refusal) {
+			response["code"] = refusal.Reason
+			response["organizationId"] = user.OrganizationID
+		} else {
+			log.Printf("ChangePassword: no new pair issued for user %s: %v", userID, refused)
+		}
+		return c.JSON(response)
+	}
+	if h.jwtService != nil {
 		accessToken, refreshToken, err := h.jwtService.GenerateTokenPairSince(
 			user.ID.String(),
 			user.OrganizationID.String(),
@@ -232,8 +259,6 @@ func (h *AuthHandler) ChangePassword(c fiber.Ctx) error {
 		} else {
 			log.Printf("ChangePassword: the new pair for user %s was not issued: %v", userID, err)
 		}
-	} else if err != nil {
-		log.Printf("ChangePassword: user %s not read after the change, no new pair issued: %v", userID, err)
 	}
 
 	return c.JSON(response)

@@ -24,6 +24,11 @@ type OIDCSignInConfig struct {
 	// Provisioning is what a sign-in does for a verified email that no user of
 	// the organization has.
 	Provisioning OIDCProvisioning
+	// RequireProviderSignIn refuses a password sign-in to each user of the
+	// organization who is not an administrator: such a user signs in through
+	// the provider. Administrators keep password sign-in, so the organization
+	// can still change or remove a provider that cannot be reached.
+	RequireProviderSignIn bool
 	// UpdatedBy is the user who stored the configuration.
 	UpdatedBy uuid.UUID
 	UpdatedAt time.Time

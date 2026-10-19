@@ -69,6 +69,10 @@ type reauthFixture struct {
 	signedIn time.Time
 	access   string // the session's access token, the bearer
 	refresh  string // the session's current refresh token
+
+	// authService checks the password; a test attaches a requirement of
+	// provider sign-in to it.
+	authService *application.AuthService
 }
 
 // newReauthFixture builds the re-authentication route and the refresh route
@@ -109,7 +113,7 @@ func newReauthFixture(t *testing.T, store auth.RevocationStore, sdkRepo domain.S
 	access, current, err := svc.RefreshTokenPair(first, user.Email, string(user.Role))
 	require.NoError(t, err)
 	return &reauthFixture{
-		app: app, svc: svc, audit: auditRepo, failures: failures, users: users, user: user,
+		app: app, svc: svc, audit: auditRepo, failures: failures, users: users, user: user, authService: authService,
 		sid: sid, signedIn: signedIn, access: access, refresh: current,
 	}
 }

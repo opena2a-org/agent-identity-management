@@ -1168,6 +1168,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		oauth.NewOIDCClient(utils.NewEgressClient(10*time.Second)),
 		cfg.Server.FrontendURL,
 	)
+	// The password routes read from the same configuration whether an
+	// organization requires its users who are not administrators to sign in
+	// through its provider.
+	authService.SetProviderSignInRequirement(oidcSignInService)
 
 	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry,
 	// built only with REGISTRY_BRIDGE_ENABLED=true.

@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"log"
 
 	"github.com/gofiber/fiber/v3"
@@ -122,9 +123,20 @@ func (h *AuthReauthHandler) Reauthenticate(c fiber.Ctx) error {
 	// The password is verified as at sign-in: a lockout, a deactivated
 	// account and an account without a password are refused there, and a
 	// wrong password is recorded as a failed attempt that counts toward a
-	// lockout. Every refusal answers the same line.
+	// lockout. Every refusal answers the same line, but for the user's own
+	// password when the organization requires sign-in through its identity
+	// provider, which answers 403: such a session is signed in again through
+	// the provider. An error that is not a refusal comes only after the
+	// password matched, when that requirement could not be read.
 	verified, err := h.authService.LoginWithPasswordExtended(ctx, user.Email, req.Password, c.IP(), c.Get("User-Agent"))
-	if err != nil || verified == nil || verified.ID != user.ID {
+	var passwordRefusal *application.SignInRefusal
+	isRefusal := errors.As(err, &passwordRefusal)
+	switch {
+	case isRefusal && passwordRefusal.Reason == application.SignInRefusedProviderSignInRequired && passwordRefusal.UserID == user.ID:
+		return c.Status(fiber.StatusForbidden).JSON(providerSignInRequiredAnswer(user.OrganizationID))
+	case err != nil && !isRefusal:
+		return respondServerError(c, fiber.StatusInternalServerError, err)
+	case err != nil || verified == nil || verified.ID != user.ID:
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid password",
 		})
