@@ -91,6 +91,18 @@ func saveRecalculatedAgent(agents domain.AgentRepository, recorded bool, agent *
 	return agents.Update(agent)
 }
 
+// writeRecalculatedTrustScore sets agent's score to trustScore and writes it:
+// agent's row through saveRecalculatedAgent, and the score's trust_scores row
+// when scores is set. It reports whether either write stored the score: the
+// row's save does when there is no recorder, and the insert does through the
+// trigger of migration 093.
+func writeRecalculatedTrustScore(agents domain.AgentRepository, scores domain.TrustScoreRepository, recorded bool, agent *domain.Agent, trustScore *domain.TrustScore) bool {
+	agent.TrustScore = trustScore.Score
+	rowErr := saveRecalculatedAgent(agents, recorded, agent)
+	historyStored := scores != nil && scores.Create(trustScore) == nil
+	return historyStored || (!recorded && rowErr == nil)
+}
+
 // errAgentNotActive is returned by the statement of a compromise suspension
 // for an agent that is already suspended or revoked.
 var errAgentNotActive = errors.New("the agent is already suspended or revoked")

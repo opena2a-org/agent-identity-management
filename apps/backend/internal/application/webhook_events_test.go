@@ -94,9 +94,11 @@ func TestAgentService_CreateAgent_SendsCreatedAndVerified(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.AgentStatusVerified, agent.Status, "the agent qualifies for verification at registration")
 
-	got := receiveEvents(t, dispatcher, 2)
-	assert.ElementsMatch(t, []domain.WebhookEvent{domain.WebhookEventAgentCreated, domain.WebhookEventAgentVerified}, eventNames(got))
-	for _, e := range got {
+	got := receiveEvents(t, dispatcher, 3)
+	assert.ElementsMatch(t, []domain.WebhookEvent{domain.WebhookEventAgentCreated, domain.WebhookEventAgentVerified, domain.WebhookEventTrustScoreChanged}, eventNames(got))
+	assertRegisteredTrustScore(t, got[domain.WebhookEventTrustScoreChanged], agent, 0.75)
+	for _, name := range []domain.WebhookEvent{domain.WebhookEventAgentCreated, domain.WebhookEventAgentVerified} {
+		e := got[name]
 		assert.Equal(t, orgID, e.orgID)
 		assert.NoError(t, e.ctxErr)
 		assert.Equal(t, agent.ID.String(), e.data["agentId"])
@@ -116,15 +118,16 @@ func TestAgentService_CreateAgent_SendsNoVerifiedWhenTheVerificationWasNotStored
 	agents.On("Update", mock.AnythingOfType("*domain.Agent")).Return(errors.New("connection reset")).Once()
 	agents.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil).Once()
 
-	_, err := s.CreateAgent(context.Background(), registrationRequest(), uuid.New(), uuid.New(), nil, nil, "")
+	agent, err := s.CreateAgent(context.Background(), registrationRequest(), uuid.New(), uuid.New(), nil, nil, "")
 	require.NoError(t, err)
 
-	got := receiveEvents(t, dispatcher, 1)
-	assert.ElementsMatch(t, []domain.WebhookEvent{domain.WebhookEventAgentCreated}, eventNames(got))
+	got := receiveEvents(t, dispatcher, 2)
+	assert.ElementsMatch(t, []domain.WebhookEvent{domain.WebhookEventAgentCreated, domain.WebhookEventTrustScoreChanged}, eventNames(got))
+	assertRegisteredTrustScore(t, got[domain.WebhookEventTrustScoreChanged], agent, 0.75)
 	agents.AssertNumberOfCalls(t, "Update", 3)
 }
 
-func TestAgentService_CreateAgent_InStrictModeSendsOnlyCreated(t *testing.T) {
+func TestAgentService_CreateAgent_InStrictModeSendsNoVerified(t *testing.T) {
 	s, agents, dispatcher := registeringAgentService(t)
 	agents.On("Update", mock.AnythingOfType("*domain.Agent")).Return(nil)
 	orgID := uuid.New()
@@ -136,9 +139,10 @@ func TestAgentService_CreateAgent_InStrictModeSendsOnlyCreated(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.AgentStatusPending, agent.Status, "strict mode leaves a new agent pending")
 
-	got := receiveEvents(t, dispatcher, 1)
-	require.Contains(t, got, domain.WebhookEventAgentCreated)
+	got := receiveEvents(t, dispatcher, 2)
+	assert.ElementsMatch(t, []domain.WebhookEvent{domain.WebhookEventAgentCreated, domain.WebhookEventTrustScoreChanged}, eventNames(got))
 	assert.Equal(t, string(domain.AgentStatusPending), got[domain.WebhookEventAgentCreated].data["status"])
+	assertRegisteredTrustScore(t, got[domain.WebhookEventTrustScoreChanged], agent, 0.75)
 }
 
 // lifecycleAgentService is an AgentService over one stored agent whose writes
@@ -165,20 +169,23 @@ func TestAgentService_LifecycleActsSendTheirEvent(t *testing.T) {
 		act        func(s *AgentService, ctx context.Context, a *domain.Agent) error
 		event      domain.WebhookEvent
 		wantStatus domain.AgentStatus
+		// The act stores a recalculated trust score, 0.9 where the agent held
+		// 0.85, and sends trust_score.changed for it as well.
+		rescored bool
 	}{
 		{"update", domain.AgentStatusVerified, func(s *AgentService, ctx context.Context, a *domain.Agent) error {
 			_, err := s.UpdateAgent(ctx, a.ID, &CreateAgentRequest{Description: "Reconciles invoices nightly"}, uuid.New())
 			return err
-		}, domain.WebhookEventAgentUpdated, domain.AgentStatusVerified},
+		}, domain.WebhookEventAgentUpdated, domain.AgentStatusVerified, true},
 		{"verify", domain.AgentStatusPending, func(s *AgentService, ctx context.Context, a *domain.Agent) error {
 			return s.VerifyAgent(ctx, a.ID)
-		}, domain.WebhookEventAgentVerified, domain.AgentStatusVerified},
+		}, domain.WebhookEventAgentVerified, domain.AgentStatusVerified, true},
 		{"suspend", domain.AgentStatusVerified, func(s *AgentService, ctx context.Context, a *domain.Agent) error {
 			return s.SuspendAgent(ctx, a.ID)
-		}, domain.WebhookEventAgentSuspended, domain.AgentStatusSuspended},
+		}, domain.WebhookEventAgentSuspended, domain.AgentStatusSuspended, true},
 		{"delete", domain.AgentStatusVerified, func(s *AgentService, ctx context.Context, a *domain.Agent) error {
 			return s.DeleteAgent(ctx, a.ID)
-		}, domain.WebhookEventAgentDeleted, domain.AgentStatusVerified},
+		}, domain.WebhookEventAgentDeleted, domain.AgentStatusVerified, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			agent := createTestAgentForService()
@@ -190,13 +197,24 @@ func TestAgentService_LifecycleActsSendTheirEvent(t *testing.T) {
 			cancel()
 			require.NoError(t, tc.act(s, ctx, agent))
 
-			got := receiveEvents(t, dispatcher, 1)
-			require.Contains(t, got, tc.event)
+			want := []domain.WebhookEvent{tc.event}
+			if tc.rescored {
+				want = append(want, domain.WebhookEventTrustScoreChanged)
+			}
+			got := receiveEvents(t, dispatcher, len(want))
+			assert.ElementsMatch(t, want, eventNames(got))
 			e := got[tc.event]
 			assert.NoError(t, e.ctxErr, "the event must not be dispatched under the request's context")
 			assert.Equal(t, agent.OrganizationID, e.orgID)
 			assert.Equal(t, agent.ID.String(), e.data["agentId"])
 			assert.Equal(t, string(tc.wantStatus), e.data["status"])
+			if tc.rescored {
+				changed := got[domain.WebhookEventTrustScoreChanged]
+				assert.NoError(t, changed.ctxErr, "the event must not be dispatched under the request's context")
+				assert.Equal(t, agent.OrganizationID, changed.orgID)
+				assert.Equal(t, 0.85, changed.data["previousScore"])
+				assert.Equal(t, 0.9, changed.data["trustScore"])
+			}
 		})
 	}
 }

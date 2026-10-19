@@ -124,6 +124,32 @@ func (s *AgentService) NotifyTrustScoreChanged(agent *domain.Agent, previousScor
 	sendStoredTrustScoreChange(s.webhooks, agent, previousScore, newScore)
 }
 
+// storeRecalculatedTrustScore stores trustScore, recalculated for agent after
+// a change to the agent (writeRecalculatedTrustScore). When it was stored,
+// trust_score.changed is sent if the score differs from the one agent held at
+// the stored precision (sendStoredTrustScoreChange). The trust score policy
+// does not run.
+func (s *AgentService) storeRecalculatedTrustScore(agent *domain.Agent, trustScore *domain.TrustScore) {
+	previousScore := agent.TrustScore
+	if writeRecalculatedTrustScore(s.agentRepo, s.trustScoreRepo, s.transitions != nil, agent, trustScore) {
+		sendStoredTrustScoreChange(s.webhooks, agent, previousScore, trustScore.Score)
+	}
+}
+
+// sendRegisteredTrustScore sends trust_score.changed for the trust score a
+// registration stored, at the stored precision, as a change from no score:
+// previousScore is 0. It is sent whatever the score, as the 0.5 PrepareNewAgent
+// gives a new agent that has none is not a previous score. A registration
+// sends it once, after its last write of the score. When no webhook service is
+// set, nothing is sent.
+func (s *AgentService) sendRegisteredTrustScore(agent *domain.Agent, score float64) {
+	if s.webhooks == nil {
+		return
+	}
+	sendWebhookEvent(s.webhooks, agent.OrganizationID, domain.WebhookEventTrustScoreChanged,
+		trustScoreEventData(agent, 0, storedTrustScore(score)))
+}
+
 // storedTrustScore rounds a score to the precision of agents.trust_score,
 // DECIMAL(5,2).
 func storedTrustScore(score float64) float64 {
@@ -458,7 +484,8 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 	}
 
 	if s.transitions != nil {
-		if err := s.registerAgent(ctx, agent, req.Capabilities, orgID, userID); err != nil {
+		scored, err := s.registerAgent(ctx, agent, req.Capabilities, orgID, userID)
+		if err != nil {
 			return nil, err
 		}
 		if s.onboardingEvents != nil {
@@ -466,6 +493,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 		s.applyRegistrationTags(ctx, agent, req.TagIds, orgID, userID)
 		s.sendRegistrationEvents(agent, agent.Status == domain.AgentStatusVerified)
+		if scored {
+			s.sendRegisteredTrustScore(agent, agent.TrustScore)
+		}
 		return agent, nil
 	}
 
@@ -477,6 +507,13 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		s.onboardingEvents.FirstAgentRegistered(orgID)
 	}
 
+	// The last trust score the registration stored, sent once it is done
+	// (sendRegisteredTrustScore). Either write stores a score, the agent's row
+	// or its trust_scores row, whose insert sets agents.trust_score through the
+	// trigger of migration 093.
+	var registeredScore float64
+	scoreRegistered := false
+
 	// Calculate initial trust score
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err != nil {
@@ -484,11 +521,16 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		fmt.Printf("Warning: failed to calculate trust score: %v\n", err)
 	} else {
 		agent.TrustScore = trustScore.Score
-		if err := s.agentRepo.Update(agent); err != nil {
-			fmt.Printf("Warning: failed to update trust score: %v\n", err)
+		rowErr := s.agentRepo.Update(agent)
+		if rowErr != nil {
+			fmt.Printf("Warning: failed to update trust score: %v\n", rowErr)
 		}
-		if err := s.trustScoreRepo.Create(trustScore); err != nil {
-			fmt.Printf("Warning: failed to save trust score: %v\n", err)
+		historyErr := s.trustScoreRepo.Create(trustScore)
+		if historyErr != nil {
+			fmt.Printf("Warning: failed to save trust score: %v\n", historyErr)
+		}
+		if rowErr == nil || historyErr == nil {
+			registeredScore, scoreRegistered = agent.TrustScore, true
 		}
 	}
 
@@ -513,9 +555,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		// Recalculate trust score with verified status (verification boosts score)
 		updatedTrustScore, err := s.trustCalc.Calculate(agent)
 		if err == nil {
-			agent.TrustScore = updatedTrustScore.Score
-			s.agentRepo.Update(agent)
-			s.trustScoreRepo.Create(updatedTrustScore)
+			if writeRecalculatedTrustScore(s.agentRepo, s.trustScoreRepo, s.transitions != nil, agent, updatedTrustScore) {
+				registeredScore, scoreRegistered = agent.TrustScore, true
+			}
 			fmt.Printf("Updated trust score after verification: %.2f\n", agent.TrustScore)
 		}
 	}
@@ -551,6 +593,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	s.applyRegistrationTags(ctx, agent, req.TagIds, orgID, userID)
 	s.sendRegistrationEvents(agent, autoVerified)
+	if scoreRegistered {
+		s.sendRegisteredTrustScore(agent, registeredScore)
+	}
 
 	return agent, nil
 }
@@ -607,8 +652,9 @@ func (s *AgentService) inStrictMode(orgID uuid.UUID) bool {
 // and no second transition records a pending state that never committed. The
 // trust score is computed for that status and stored with the agent, and its
 // history row is written after the commit. The actor is the one the context
-// names, else the registering user.
-func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, capabilities []string, orgID, userID uuid.UUID) error {
+// names, else the registering user. It reports whether the agent was stored
+// with a calculated trust score.
+func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, capabilities []string, orgID, userID uuid.UUID) (bool, error) {
 	repository.PrepareNewAgent(agent)
 	var trustScore *domain.TrustScore
 	if score, err := s.trustCalc.Calculate(agent); err != nil {
@@ -644,7 +690,7 @@ func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, c
 			return nil
 		})
 	if err != nil {
-		return agentCreateError(err)
+		return false, agentCreateError(err)
 	}
 	if len(capabilities) > 0 {
 		fmt.Printf("Granted %d baseline capabilities for agent %s: %v\n", len(capabilities), agent.Name, capabilities)
@@ -658,7 +704,7 @@ func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, c
 		fmt.Printf("Agent %s auto-verified (trust score: %.2f)\n", agent.Name, agent.TrustScore)
 		s.createAutoVerificationEvent(ctx, orgID, agent)
 	}
-	return nil
+	return trustScore != nil, nil
 }
 
 // createAutoVerificationEvent records an agent's automatic verification at
@@ -1013,11 +1059,7 @@ func (s *AgentService) UpdateAgent(ctx context.Context, id uuid.UUID, req *Creat
 	if s.trustCalc != nil {
 		trustScore, err := s.trustCalc.Calculate(agent)
 		if err == nil {
-			agent.TrustScore = trustScore.Score
-			saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-			if s.trustScoreRepo != nil {
-				s.trustScoreRepo.Create(trustScore)
-			}
+			s.storeRecalculatedTrustScore(agent, trustScore)
 		}
 	}
 
@@ -1133,9 +1175,7 @@ func (s *AgentService) VerifyAgent(ctx context.Context, id uuid.UUID) error {
 	// Recalculate trust score
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 
 	s.sendAgentEvent(agent, domain.WebhookEventAgentVerified)
@@ -2217,12 +2257,7 @@ func (s *AgentService) AddMCPServers(
 		}
 
 		// 6. Automatically recalculate trust score after MCP connections change
-		trustScore, err := s.trustCalc.Calculate(agent)
-		if err == nil {
-			agent.TrustScore = trustScore.Score
-			s.agentRepo.Update(agent)
-			s.trustScoreRepo.Create(trustScore)
-		}
+		s.recalculateAfterTalksToChange(agent)
 	}
 
 	return agent, addedServers, nil
@@ -2304,13 +2339,12 @@ func (s *AgentService) removeMCPServersRecorded(ctx context.Context, agent *doma
 }
 
 // recalculateAfterTalksToChange recalculates agent's trust score after its
-// talks_to list changed, as AddMCPServers and RemoveMCPServers do.
+// talks_to list changed, as AddMCPServers and RemoveMCPServers do, and stores
+// it (storeRecalculatedTrustScore).
 func (s *AgentService) recalculateAfterTalksToChange(agent *domain.Agent) {
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 }
 
@@ -2413,12 +2447,7 @@ func (s *AgentService) RemoveMCPServers(
 		}
 
 		// 6. Automatically recalculate trust score after MCP connections change
-		trustScore, err := s.trustCalc.Calculate(agent)
-		if err == nil {
-			agent.TrustScore = trustScore.Score
-			s.agentRepo.Update(agent)
-			s.trustScoreRepo.Create(trustScore)
-		}
+		s.recalculateAfterTalksToChange(agent)
 	}
 
 	return agent, removedServers, nil
@@ -2715,9 +2744,7 @@ func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	// Recalculate trust score (suspension affects trust)
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 
 	s.sendAgentEvent(agent, domain.WebhookEventAgentSuspended)
@@ -2750,9 +2777,7 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 	// Recalculate trust score (reactivation affects trust)
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 
 	return nil
@@ -2786,9 +2811,7 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	// Recalculate trust score (revocation drops trust to 0)
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 
 	return nil
