@@ -304,7 +304,8 @@ export class IntelligenceCoordinator {
   /**
    * Analyze an event through the 3-layer stack.
    * Mutates the event's category, severity, and classifiedBy fields.
-   * Returns the LLM assessment if L2 was invoked.
+   * Returns the LLM assessment if L2 was invoked. An event queued for a batch returns
+   * null here; when its batch is sent and answered, its assessment is written to the event.
    */
   async analyze(event: ARPEvent): Promise<LLMAssessment | null> {
     // Guard anomaly (classification distribution drift) detection. Runs
@@ -468,19 +469,7 @@ export class IntelligenceCoordinator {
       const { response, cost } = answered;
 
       const assessment = parseAssessment(response.content, response.inputTokens + response.outputTokens, cost);
-
-      event.llmAssessment = assessment;
-      event.classifiedBy = 'L2-llm';
-
-      // LLM can upgrade severity
-      if (assessment.recommendation === 'kill') {
-        event.severity = 'critical';
-        event.category = 'threat';
-      } else if (assessment.recommendation === 'pause') {
-        event.severity = 'high';
-        event.category = 'violation';
-      }
-
+      applyAssessment(event, assessment);
       return assessment;
     } catch {
       // LLM failure — fall back to L1 classification
@@ -515,7 +504,17 @@ export class IntelligenceCoordinator {
 
     try {
       // One call for the whole batch, so one reservation, taken when the batch is sent.
-      await this.callWithinBudget(prompt, maxTokens);
+      const answered = await this.callWithinBudget(prompt, maxTokens);
+      if (!answered) return;
+      const { response, cost } = answered;
+
+      const assessments = parseBatchAssessments(
+        response.content,
+        events.length,
+        response.inputTokens + response.outputTokens,
+        cost,
+      );
+      events.forEach((event, i) => applyAssessment(event, assessments[i]));
     } catch {
       // Batch failure — events remain at L1 classification
     }
@@ -709,8 +708,9 @@ ${agentContext}
 Events:
 ${summary}
 
-Are any of these inconsistent with the agent's purpose? Flag only genuinely suspicious items.
-Format: EVENT_NUM: ALLOW/ALERT/PAUSE/KILL — one sentence reason`;
+Is each event consistent with the agent's declared purpose and capabilities?
+Answer every event, one line each, in exactly this format:
+EVENT_NUM: ALLOW, ALERT, PAUSE, or KILL — one sentence reason`;
 }
 
 function parseAssessment(content: string, tokens: number, cost: number): LLMAssessment {
@@ -751,6 +751,91 @@ function parseAssessment(content: string, tokens: number, cost: number): LLMAsse
   }
 
   return { consistent, confidence, reasoning, recommendation, tokensUsed: tokens, estimatedCost: cost };
+}
+
+/** The actions a batch answer can give an event. */
+const BATCH_ACTIONS = new Map<string, LLMAssessment['recommendation']>([
+  ['ALLOW', 'allow'],
+  ['ALERT', 'alert'],
+  ['PAUSE', 'pause'],
+  ['KILL', 'kill'],
+]);
+
+/** Recommendations from least to most strict. */
+const RECOMMENDATION_ORDER: LLMAssessment['recommendation'][] = ['allow', 'alert', 'pause', 'kill'];
+
+/**
+ * One verdict line of a batch answer: `EVENT_NUM: ACTION — reason`. A leading list bullet,
+ * `EVENT` or `#` before the number, and `.`, `)` or `-` in place of the colon are accepted;
+ * markdown `*` and backticks are removed before a line is read. The action must be followed
+ * by a space, `—`, `–`, `-`, `:`, `,`, `.`, `;` or the end of the line, so `ALLOW/KILL` is
+ * not read as ALLOW.
+ */
+const BATCH_VERDICT_LINE = /^(?:[-•]\s*)?(?:EVENT[\s_]*)?#?(\d+)\s*[:.)-]\s*([A-Z]+)(?=$|[\s—–:,.;-])(.*)$/i;
+
+/**
+ * Read a batch answer into one assessment per event, in the order the events were numbered.
+ *
+ * An event the answer gives no recognized action gets the deny-safe default a single-event
+ * answer without an ACTION line gets: `alert`, not consistent. An event given more than one
+ * action keeps the strictest. A batch line carries no confidence, so each assessment
+ * has the single-event parser's default of 0.5, and is consistent only when its action is
+ * ALLOW. The call's tokens and cost are shared equally among the events, so the assessments
+ * of a batch add up to what the call used and cost.
+ */
+function parseBatchAssessments(
+  content: string,
+  eventCount: number,
+  tokens: number,
+  cost: number,
+): LLMAssessment[] {
+  const verdicts = new Map<number, { recommendation: LLMAssessment['recommendation']; reasoning: string }>();
+
+  for (const line of content.split('\n')) {
+    const match = BATCH_VERDICT_LINE.exec(line.replace(/[*`]/g, '').trim());
+    if (!match) continue;
+    const index = Number(match[1]) - 1;
+    const recommendation = BATCH_ACTIONS.get(match[2].toUpperCase());
+    // A number outside the batch, or an action that is not one of the four, is not a
+    // verdict; an event left without one gets the deny-safe default below.
+    if (recommendation === undefined || index < 0 || index >= eventCount) continue;
+    const held = verdicts.get(index);
+    if (held && RECOMMENDATION_ORDER.indexOf(held.recommendation) >= RECOMMENDATION_ORDER.indexOf(recommendation)) {
+      continue;
+    }
+    const reasoning = match[3].replace(/^[\s—–:,.;-]+/, '').trim();
+    verdicts.set(index, { recommendation, reasoning: reasoning || 'No reason given in the batch answer' });
+  }
+
+  return Array.from({ length: eventCount }, (_, i): LLMAssessment => {
+    const verdict = verdicts.get(i);
+    return {
+      consistent: verdict?.recommendation === 'allow',
+      confidence: 0.5,
+      reasoning: verdict?.reasoning ?? 'No action for this event in the batch answer — defaulting to deny-safe',
+      recommendation: verdict?.recommendation ?? 'alert',
+      tokensUsed: Math.floor(tokens / eventCount) + (i < tokens % eventCount ? 1 : 0),
+      estimatedCost: cost / eventCount,
+    };
+  });
+}
+
+/**
+ * Apply an L2 assessment to its event: the same step for a single-event call and for each
+ * event of a batch.
+ */
+function applyAssessment(event: ARPEvent, assessment: LLMAssessment): void {
+  event.llmAssessment = assessment;
+  event.classifiedBy = 'L2-llm';
+
+  // LLM can upgrade severity
+  if (assessment.recommendation === 'kill') {
+    event.severity = 'critical';
+    event.category = 'threat';
+  } else if (assessment.recommendation === 'pause') {
+    event.severity = 'high';
+    event.category = 'violation';
+  }
 }
 
 function severityIndex(severity: EventSeverity): number {

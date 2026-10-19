@@ -586,6 +586,26 @@ they stay in scope if one ever grows an observational side-channel.
   controller and `AgentRuntimeProtection.getStatus().budget` reported 1 as well. Each now reports 0, the count a
   `reserve()` at that moment starts from.
 
+### Fixed — ARP applies a batched L2 answer to each event of the batch (#801)
+
+- With `enableBatching` on, the answer to a batched L2 call is read, and each event of the batch receives its own
+  assessment through the same step as an event assessed alone: `llmAssessment` is set and `classifiedBy` becomes
+  `L2-llm`; KILL sets the event's severity and category to `critical` and `threat`, and PAUSE to `high` and
+  `violation`. `analyze()` returns null for an event it queues, as before, and the assessment is written to that
+  event when the batch's answer arrives. Measured with a stub adapter before this change, a batch of three `high`
+  events flushed by `stop()` was sent as one call and recorded in `budget.json` at its cost, and all three events
+  kept `classifiedBy: 'L0-rules'`, their severity and category, and no `llmAssessment`, both when the answer gave
+  each event a verdict in the batch format and when it was in the single-event format.
+- The batch prompt asks for one line for every event, `EVENT_NUM: ALLOW, ALERT, PAUSE, or KILL — one sentence
+  reason`, in place of "Flag only genuinely suspicious items". An event the answer gives none of the four actions,
+  because it leaves the event out or answers it with another word such as `APPROVE` or `ALLOW/KILL`, gets the
+  deny-safe default a single-event answer without an ACTION line gets: `alert`, `consistent: false`, and no change
+  to its severity or category. An event given two actions keeps the stricter. A batch line carries no confidence,
+  so a batched assessment has `confidence: 0.5`, and `consistent` is true only for ALLOW. Each event's
+  `estimatedCost` is an equal share of the call's cost, and its `tokensUsed` a whole-number share of the call's
+  tokens that adds up to them: 200 tokens over three events are 67, 67 and 66.
+- A batch the budget refuses, or whose call throws, leaves its events as they were, as before.
+
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.
