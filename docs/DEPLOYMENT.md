@@ -1012,6 +1012,8 @@ bash quickstart.sh
 
 Brings up `aim-server`, `aim-dashboard`, PostgreSQL, and Redis. Dashboard at `localhost:3000`, API at `localhost:8080`. Login credentials print at the end of the run.
 
+The quickstart passes no `REGISTRY_*` variable to `aim-server`, so the server runs no Registry bridge, the job that sends attestation data to the OpenA2A Registry. To turn it on, add `REGISTRY_BRIDGE_ENABLED=true` and a `REGISTRY_BRIDGE_SECRET` to the `backend` service's `environment` in the install's `docker-compose.quickstart.yml` and run `docker compose -f docker-compose.quickstart.yml up -d` in that directory; the bridge then runs every 6 hours. Set in the shell or in the `.env` beside that file, the two variables do not reach the server: the `backend` service is handed only the variables its `environment` lists.
+
 The host ports and the container names come from the environment, with the values below as defaults. Set a variable before `bash quickstart.sh` (or in the `.env` next to `docker-compose.quickstart.yml`) to run AIM beside another service on the same port, or to run a second AIM stack on one host. A first run records the values it ran with in the install's `.env`, so a later `docker compose` in that directory keeps them. A run over an existing install starts the stack with the variables set for that run and leaves that `.env` as it is, so a later `docker compose` in that directory reads the values `.env` holds; to keep a new value, change it in that `.env`.
 
 | Variable | Default | Sets |

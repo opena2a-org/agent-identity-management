@@ -36,6 +36,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - Tests: `apps/backend/internal/application/fga_engine_registry_asc_url_test.go`. A new engine holds an empty Registry
   ASC address; the control sets one with `SetRegistryASCURL` and reads it back.
 
+### Changed: the deployment guide says the quickstart server runs no Registry bridge and names the variables that turn it on, and a test holds the bridge to `REGISTRY_BRIDGE_ENABLED=true`
+
+- The Docker section of `docs/DEPLOYMENT.md`'s "Install from this repository", which the self-hosted install section
+  of `README.md` links, says that the quickstart passes no `REGISTRY_*` variable to `aim-server`, so the server runs no
+  Registry bridge, the job that sends attestation data to the OpenA2A Registry, and that adding
+  `REGISTRY_BRIDGE_ENABLED=true` and a `REGISTRY_BRIDGE_SECRET` to the `backend` service's `environment` and running
+  `docker compose -f docker-compose.quickstart.yml up -d` turns it on. Set in the shell or in the install's `.env`, the
+  two variables do not reach the server: `docker-compose.quickstart.yml` and `scripts/quickstart.sh` name no
+  `REGISTRY_` variable, and the compose file's `backend` service reads no `env_file`. `README.md` does not change; it
+  is at the word target its short-form test holds.
+- No default changes. `config.Load` reads `REGISTRY_BRIDGE_ENABLED` as on only when it is exactly `true`, as the
+  `REGISTRY_BRIDGE_ENABLED` rows of `internal/config/testdata/environment_table.json` record.
+- `cmd/server` builds the bridge in `newRegistryBridgeService`, which returns nil unless `REGISTRY_BRIDGE_ENABLED` is
+  `true`. For a nil bridge `startRegistryBridgeJob` starts no goroutine and logs nothing, and `main` passes it
+  `services.RegistryBridge` without a nil check of its own. The job's start line,
+  `Registry bridge enabled (runs every 6 hours)`, is logged before `startRegistryBridgeJob` returns, and its stop line,
+  `Registry bridge stopped`, by the stop function it returns; the job's goroutine logged both before.
+- Tests: `apps/backend/cmd/server/registry_bridge_opt_in_test.go`. With every `REGISTRY_` and `ATC_` variable unset,
+  `config.Load` and `newRegistryBridgeService` build no bridge and `startRegistryBridgeJob` logs no line; the negative
+  control sets `REGISTRY_BRIDGE_ENABLED=true`, and the bridge is built and the job logs its start and stop lines. A
+  third test reads the non-test Go files of `cmd/server`: `NewRegistryBridgeService` is called only in
+  `newRegistryBridgeService`, `initServices` sets `Services.RegistryBridge` from it with `cfg.Registry`, and `main`
+  passes `services.RegistryBridge` to `startRegistryBridgeJob`.
+
 ### Fixed: `aim-bootstrap --default` adds the default security policies a fresh database did not receive
 
 - Migrations `015_add_default_security_policies.sql` and `052_add_default_mcp_policies.sql` insert the OpenA2A Admin
