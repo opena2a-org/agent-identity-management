@@ -66,7 +66,7 @@ AIM includes the following security features:
 
 ### Cryptographic Security
 - **Ed25519 Key Pairs**: Modern elliptic curve cryptography for agent identity (RFC 8032)
-- **AES-256-GCM**: Authenticated encryption for stored private keys, each bound to its agent's ID as additional data (NIST SP 800-38D)
+- **AES-256-GCM**: Authenticated encryption for stored private keys, each bound to its agent's ID as additional data. The server encrypts each private key it stores under a data key of its own, and stores the data key encrypted under `KEYVAULT_MASTER_KEY` (NIST SP 800-38D)
 - **SHA-256 API Key Hashing**: Secure API key storage
 - **bcrypt (cost=12)**: Password hashing per OWASP guidelines
 - **TLS 1.2+**: Encrypted data in transit (TLS 1.3 recommended)

@@ -23,9 +23,9 @@ type AgentPrivateKeyRewrapResult struct {
 	StorageKeyID   byte // the storage-key id rows are re-encrypted to
 	Skipped        bool // the key ring holds only the current key; no row was read
 	AlreadyCurrent int  // rows already under the current id when read
-	Rewritten      int  // rows this run re-encrypted to the current id
-	Failures       int  // rows under an older id in the ring that were not re-encrypted: not readable, changed since read, or not written
-	NotV2          int  // rows with no storage-key id to read: not in format v2, or not decodable
+	Rewritten      int  // rows this run moved to the current id
+	Failures       int  // rows under an older id in the ring that were not moved: not readable, changed since read, or not written
+	NotV2          int  // rows with no storage-key id to read: in neither format v2 nor format v3, or not decodable
 
 	// Remaining counts, by storage-key id, the rows this run left under an id
 	// other than the current one. Every other id in the key ring is listed,
@@ -34,10 +34,12 @@ type AgentPrivateKeyRewrapResult struct {
 	Remaining map[byte]int
 }
 
-// RewrapAgentPrivateKeys re-encrypts each stored agent private key that is
-// under an older storage-key id in the vault's key ring to the current id, at
-// startup, and reports by id how many rows are still under other ids. When the
-// ring holds only the current key it reads nothing.
+// RewrapAgentPrivateKeys moves each stored agent private key that is under an
+// older storage-key id in the vault's key ring to the current id, at startup,
+// and reports by id how many rows are still under other ids. A key in format
+// v3 keeps its data key and ciphertext, and its data key is sealed again under
+// the current master key; a key in format v2 is sealed again in format v3. When
+// the ring holds only the current key it reads nothing.
 //
 // It is resumable: each row is rewritten on its own, with a compare-and-swap
 // on the ciphertext it read, so a run that stops part way leaves every row

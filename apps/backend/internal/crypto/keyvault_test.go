@@ -399,7 +399,7 @@ func TestEncryptDecrypt_RoundTrip_SpecialCharacters(t *testing.T) {
 
 // sealLegacyV1 produces a v1 ciphertext (nonce || AES-256-GCM with no
 // additional data), the format stored before storage binding. The fixed nonce
-// keeps the leading byte away from the v2 version byte.
+// keeps the leading byte away from the v2 and v3 version bytes.
 func sealLegacyV1(t *testing.T, kv *KeyVault, plaintext string) string {
 	t.Helper()
 	gcm, err := kv.newGCM()
@@ -422,12 +422,15 @@ func TestStorageAAD_Layout(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestEncryptPrivateKey_V2HeaderAndRowBinding(t *testing.T) {
+// A value in format v2, as the vault wrote it before data keys, carries the
+// documented header and additional data, and DecryptPrivateKey still opens it.
+// The format v3 the vault writes now is held by keyvault_data_key_test.go.
+func TestDecryptPrivateKey_V2HeaderAndRowBinding(t *testing.T) {
 	kv, err := NewKeyVault(generateTestMasterKey())
 	require.NoError(t, err)
 	agentID := uuid.New()
 
-	encrypted, err := kv.EncryptPrivateKey(agentID, "row-bound-key")
+	encrypted, err := kv.sealFormatV2(agentPrivateKeyPurpose, agentID, []byte("row-bound-key"))
 	require.NoError(t, err)
 
 	raw, err := base64.StdEncoding.DecodeString(encrypted)
@@ -448,6 +451,10 @@ func TestEncryptPrivateKey_V2HeaderAndRowBinding(t *testing.T) {
 
 	_, err = gcm.Open(nil, nonce, body, nil)
 	assert.Error(t, err, "v2 ciphertext must not open without additional data")
+
+	got, err := kv.DecryptPrivateKey(agentID, encrypted)
+	require.NoError(t, err)
+	assert.Equal(t, "row-bound-key", got)
 }
 
 func TestDecryptPrivateKey_CopiedToAnotherRowIsRefused(t *testing.T) {
@@ -473,7 +480,7 @@ func TestDecryptPrivateKey_WrongPurposeIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	agentID := uuid.New()
 
-	other, err := kv.sealV2("aim/some-other-purpose", agentID, []byte("not-a-private-key"))
+	other, err := kv.sealFormatV2("aim/some-other-purpose", agentID, []byte("not-a-private-key"))
 	require.NoError(t, err)
 
 	_, err = kv.DecryptPrivateKey(agentID, other)
@@ -507,8 +514,9 @@ func TestDecryptPrivateKey_TamperedHeaderIsRefused(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown storage key id")
 
+	// 0x02 and 0x03 are the formats the vault reads; 0x04 is none of them.
 	otherVersion := append([]byte(nil), raw...)
-	otherVersion[0] = 0x03
+	otherVersion[0] = 0x04
 	_, err = kv.DecryptPrivateKey(testAgentID, base64.StdEncoding.EncodeToString(otherVersion))
 	assert.ErrorIs(t, err, ErrUnsupportedPrivateKeyFormat)
 }
@@ -531,7 +539,7 @@ func TestMigrateLegacyPrivateKey(t *testing.T) {
 	require.NoError(t, err)
 	rowA, rowB := uuid.New(), uuid.New()
 
-	t.Run("v1 is re-encrypted as v2 bound to its own row", func(t *testing.T) {
+	t.Run("v1 is re-encrypted as v3 bound to its own row", func(t *testing.T) {
 		legacy := sealLegacyV1(t, kv, "legacy-key-a")
 
 		migrated, changed, err := kv.MigrateLegacyPrivateKey(rowA, legacy)
@@ -547,7 +555,7 @@ func TestMigrateLegacyPrivateKey(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("v2 for the same row is left unchanged", func(t *testing.T) {
+	t.Run("v3 for the same row is left unchanged", func(t *testing.T) {
 		current, err := kv.EncryptPrivateKey(rowA, "current-key-a")
 		require.NoError(t, err)
 
@@ -557,7 +565,7 @@ func TestMigrateLegacyPrivateKey(t *testing.T) {
 		assert.Equal(t, current, out)
 	})
 
-	t.Run("v2 copied from another row is not re-bound", func(t *testing.T) {
+	t.Run("v3 copied from another row is not re-bound", func(t *testing.T) {
 		copied, err := kv.EncryptPrivateKey(rowA, "current-key-a")
 		require.NoError(t, err)
 

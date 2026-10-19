@@ -35,7 +35,7 @@ func migrationTestVault(t *testing.T) *crypto.KeyVault {
 
 // sealV1 writes the format stored before storage binding: nonce || AES-256-GCM
 // with no additional data. The fixed nonce keeps the leading byte away from
-// the v2 version byte.
+// the v2 and v3 version bytes.
 func sealV1(t *testing.T, plaintext string) string {
 	t.Helper()
 	block, err := aes.NewCipher([]byte(migrationTestMasterKey))
@@ -87,7 +87,7 @@ func TestMigrateAgentPrivateKeysToV2_ConvertsEveryRowAndRecordsCompletion(t *tes
 
 	assert.Equal(t, AgentPrivateKeyMigrationResult{V1Read: 1, V2Written: 1, AlreadyV2: 1, Recorded: true}, result)
 
-	// The rewritten value is v2 bound to its own row.
+	// The rewritten value is bound to its own row.
 	got, err := kv.DecryptPrivateKey(legacyID, written.value)
 	require.NoError(t, err)
 	assert.Equal(t, "legacy-agent-private-key", got)
@@ -105,7 +105,7 @@ func TestMigrateAgentPrivateKeysToV2_FailuresAreCountedAndLeaveItPending(t *test
 	legacyID, ownerID, copyID, garbageID := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	plantedKey := "planted-agent-private-key"
 	legacy := sealV1(t, plantedKey)
-	ownersV2, err := kv.EncryptPrivateKey(ownerID, "owner-agent-private-key")
+	ownersStored, err := kv.EncryptPrivateKey(ownerID, "owner-agent-private-key")
 	require.NoError(t, err)
 	garbage := base64.StdEncoding.EncodeToString([]byte("not-a-ciphertext-of-either-format"))
 
@@ -115,8 +115,8 @@ func TestMigrateAgentPrivateKeysToV2_FailuresAreCountedAndLeaveItPending(t *test
 	mock.ExpectQuery(migrationListQuery).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "encrypted_private_key"}).
 			AddRow(legacyID.String(), legacy).
-			AddRow(ownerID.String(), ownersV2).
-			AddRow(copyID.String(), ownersV2). // v2 copied from another row
+			AddRow(ownerID.String(), ownersStored).
+			AddRow(copyID.String(), ownersStored). // copied from another row
 			AddRow(garbageID.String(), garbage))
 	mock.ExpectExec(migrationUpdateExec).WithArgs(written, legacyID, legacy).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -131,7 +131,7 @@ func TestMigrateAgentPrivateKeysToV2_FailuresAreCountedAndLeaveItPending(t *test
 	// The log holds counts only: no key material, no ciphertext, no agent ID.
 	out := logs.String()
 	assert.Contains(t, out, "v1Read=1 v2Written=1 alreadyV2=1 failures=2 recorded=false")
-	for _, secret := range []string{plantedKey, legacy, ownersV2, garbage, written.value,
+	for _, secret := range []string{plantedKey, legacy, ownersStored, garbage, written.value,
 		legacyID.String(), ownerID.String(), copyID.String(), garbageID.String()} {
 		assert.NotContains(t, out, secret)
 	}

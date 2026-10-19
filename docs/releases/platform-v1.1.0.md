@@ -73,10 +73,12 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
 - **Rate limits in development.** The general and strict rate limits now apply when `ENVIRONMENT` is `development`.
   CHANGELOG: *Security: the rate limits no longer loosen when ENVIRONMENT is development*.
 - **Stored agent private keys.** At its first start, 1.1.0 re-encrypts each stored agent private key bound to its own
-  agent row, and the request path refuses the earlier format. Stop every 1.0.0 instance before the first 1.1.0
-  instance starts. 1.0.0 cannot read the new format, so rolling back after that start leaves server-generated agent
-  keys unreadable until the agents' credentials are rotated; take a database backup first. CHANGELOG: *Security: a
-  stored agent private key decrypts only in the agent row it was written for*, and
+  agent row, under a data key of its own, and the request path refuses the earlier format. Stop every 1.0.0 instance
+  before the first 1.1.0 instance starts. 1.0.0 cannot read the new format, so rolling back after that start leaves
+  server-generated agent keys unreadable until the agents' credentials are rotated; take a database backup first.
+  CHANGELOG: *Security: a stored agent private key decrypts only in the agent row it was written for*; *Changed: each
+  agent private key the server stores is encrypted under a data key of its own, which is stored encrypted under
+  `KEYVAULT_MASTER_KEY`*, and
   [Database migrations and the application role](../DEPLOYMENT.md#database-migrations-and-the-application-role).
 - **Sessions and SDK credentials issued by 1.0.0.** 1.1.0 accepts only session and refresh tokens that carry a token
   type, and 1.0.0 mints none. After the upgrade every dashboard user signs in again, and an SDK install that holds
@@ -181,8 +183,8 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   `AUTH PLAIN` are tested against a server, and the email providers are documented*.
 - `KEYVAULT_MASTER_KEY` can be rotated. `KEYVAULT_MASTER_KEY` is the current key and `KEYVAULT_MASTER_KEY_ID` its id
   (1 when unset); each `KEYVAULT_MASTER_KEY_<id>` adds an earlier key under its id, which the server decrypts under
-  and never encrypts under. At each start with more than one key in the ring, a sweep re-encrypts the stored agent
-  private keys under the current key. The procedure is in
+  and never encrypts under. At each start with more than one key in the ring, a sweep moves the stored agent private
+  keys to the current key. The procedure is in
   [Rotating `KEYVAULT_MASTER_KEY`](../DEPLOYMENT.md#rotating-keyvault_master_key). CHANGELOG: *Added:
   `KEYVAULT_MASTER_KEY` can be rotated with a ring of master keys and a startup sweep*.
 - At start the server prints

@@ -133,6 +133,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Changed: each agent private key the server stores is encrypted under a data key of its own, which is stored encrypted under `KEYVAULT_MASTER_KEY`
+
+- `KeyVault.EncryptPrivateKey` wrote format v2: the private key encrypted with AES-256-GCM under the master key itself.
+  It now writes format v3. For each private key it generates a 32-byte data key, encrypts the private key under the
+  data key with AES-256-GCM, and stores the data key only in encrypted form, under the current master key with
+  AES-256-GCM and a nonce of its own. The additional data of the encrypted data key binds the purpose label, the
+  header (version byte 3 and the storage key id) and the agent row; the additional data of the encrypted private key
+  binds the purpose label, the version byte and the agent row.
+- Keys stored in format v2 still decrypt. For a v3 key under an older storage key id, the startup sweep decrypts the
+  data key, checks that the private key decrypts under it, and encrypts the data key under the current master key,
+  leaving the encrypted private key as it is; a v2 key under an older id is encrypted again in format v3. The one-time
+  conversion of v1 keys writes format v3.
+- A build from before this change refuses format v3 as `unsupported private key format`. `docs/DEPLOYMENT.md`
+  describes the data key under Rotating `KEYVAULT_MASTER_KEY`, and the upgrade under Upgrading across the agent
+  private key data key change: stop every instance of an earlier build before the first instance of this one starts.
+- Test: `apps/backend/internal/crypto/keyvault_data_key_test.go` reads stored values by the documented layout. Three
+  values the vault encrypts, two for different agent rows and one again for the first row, each carry a different
+  data key, which decrypts under the master key and does not appear in the stored bytes; each private key decrypts
+  under its data key and not under the master key, and a value in format v2, written by the v2 writer the vault held
+  before, still decrypts. A v3 value built from the layout decrypts, and is refused with the data key or the private
+  key encrypted for another purpose or agent row, the data key encrypted under another master key, or a header
+  naming another storage key id. `RewrapPrivateKey`, which the sweep calls, moves only the data key and refuses a
+  value whose encrypted private key was altered; the v1 conversion writes v3. Run against the vault before this
+  change, each of the four tests fails.
+
 ### Fixed — `docs/API.md`'s `POST /api/v1/agents` request sends `agentType` and registers an agent, and its agent answers show `agentType` (#795)
 
 - The `POST /api/v1/agents` section of `docs/API.md` gave the agent's type as `"type": "ai_agent"` in its request
