@@ -133,6 +133,41 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Fixed: a user who created an agent, an API key, an MCP server or another row the organization keeps can be deleted
+
+- The admin's `DELETE /api/v1/admin/users/:id` deletes the user with `DELETE FROM users`, which failed with a
+  foreign-key violation for a user named in any of eighteen references to `users(id)`: sixteen had no `ON DELETE` rule,
+  and `webhooks.created_by` and `capability_requests.requested_by` had `ON DELETE RESTRICT`. The user who created an
+  agent, an API key or an MCP server was one such user. Migration `135_user_references_allow_user_delete.sql` gives
+  each of the eighteen a rule.
+- The user's API keys and CLI sign-in device codes are deleted with the user, as the user's SDK tokens and bootstrap
+  tokens already were. The API key middleware gives a request the key's creator as its user, and polling an approved
+  device code mints a token pair for the user who approved it. An SDK install that authenticates with an API key the
+  deleted user created needs a new key.
+- The other rows are kept, with the reference to the user set to `NULL`: agents, MCP servers, webhooks, compliance
+  evidence, capability requests and capability grants, A2A policies, security settings, delegations and revocations,
+  alerts, sign-in lockouts, registration requests, and the users the deleted user approved. Deleting a user also
+  deleted the security policies and the tags the user had created, and with a tag its links to agents and MCP
+  servers; those are now kept the same way. `agents.created_by`, `mcp_servers.created_by`, `webhooks.created_by`,
+  `compliance_evidence.collected_by`, `capability_requests.requested_by`, `security_policies.created_by` and
+  `tags.created_by` accept `NULL`.
+- An agent whose creator was deleted is read with a zero `CreatedBy`, and the handlers write that id as the user of the
+  agent's audit rows, of the MCP servers it registers, and of its capability requests with their automatic approval
+  and grant. The repositories now store `NULL` for the zero id, which failed the foreign key. A capability request
+  whose requester was deleted is still read and listed, with an empty `requestedByEmail`, and can still be decided.
+- Agents and MCP servers keep `created_by_name` and `created_by_email`, the name and email copied when they were
+  created. The other thirteen references to `users(id)` keep their rule; among them, the user's audit log rows are
+  deleted with the user.
+- Test: `apps/backend/internal/infrastructure/repository/user_delete_integration_test.go`, against PostgreSQL with
+  every migration applied. One test reads the catalog: every reference to `users(id)` has `ON DELETE CASCADE` or
+  `ON DELETE SET NULL`, and each of the twenty references the migration changed has the rule it chose. One deletes a user named in all twenty
+  through `UserRepository.Delete`, and checks that the user's API key and device code are gone, that every other row
+  is kept with the reference `NULL`, and that another user's API key and device code are kept. One deletes the creator
+  of an agent and writes the agent's audit row, MCP server, and capability requests with their approval and grant
+  through the repositories. Against a database migrated without migration 135 the three tests fail, the delete with
+  `violates foreign key constraint "agents_created_by_fkey"`; with the repositories as they were, the third fails on
+  the first such write.
+
 ### Changed: each agent private key the server stores is encrypted under a data key of its own, which is stored encrypted under `KEYVAULT_MASTER_KEY`
 
 - `KeyVault.EncryptPrivateKey` wrote format v2: the private key encrypted with AES-256-GCM under the master key itself.

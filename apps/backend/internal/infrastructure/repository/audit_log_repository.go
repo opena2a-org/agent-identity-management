@@ -38,6 +38,11 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 	if log.Timestamp.IsZero() {
 		log.Timestamp = time.Now()
 	}
+	// uuid.Nil names no user (see userRef): the row is stored with a NULL
+	// user_id, and the entry onCreate receives says the same.
+	if log.UserID != nil && *log.UserID == uuid.Nil {
+		log.UserID = nil
+	}
 
 	metadataJSON, err := json.Marshal(log.Metadata)
 	if err != nil {

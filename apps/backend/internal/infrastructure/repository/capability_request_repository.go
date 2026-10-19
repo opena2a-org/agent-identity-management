@@ -60,7 +60,7 @@ func insertCapabilityRequest(ctx context.Context, db execer, req *domain.Capabil
 		req.Reason,
 		req.Metadata, // JSONBMap implements driver.Valuer
 		req.Status,
-		req.RequestedBy,
+		userRef(req.RequestedBy),
 		req.RequestedAt,
 		req.CreatedAt,
 		req.UpdatedAt,
@@ -69,6 +69,9 @@ func insertCapabilityRequest(ctx context.Context, db execer, req *domain.Capabil
 	return err
 }
 
+// GetByID and List join the requester with a LEFT JOIN: a request whose
+// requester was deleted keeps its row with requested_by NULL (migration 135),
+// and is read with a zero RequestedBy and an empty RequestedByEmail.
 func (r *capabilityRequestRepository) GetByID(id uuid.UUID) (*domain.CapabilityRequestWithDetails, error) {
 	query := `
 		SELECT
@@ -86,11 +89,11 @@ func (r *capabilityRequestRepository) GetByID(id uuid.UUID) (*domain.CapabilityR
 			cr.updated_at,
 			a.name AS agent_name,
 			a.display_name AS agent_display_name,
-			u1.email AS requested_by_email,
+			COALESCE(u1.email, '') AS requested_by_email,
 			u2.email AS reviewed_by_email
 		FROM capability_requests cr
 		INNER JOIN agents a ON cr.agent_id = a.id
-		INNER JOIN users u1 ON cr.requested_by = u1.id
+		LEFT JOIN users u1 ON cr.requested_by = u1.id
 		LEFT JOIN users u2 ON cr.reviewed_by = u2.id
 		WHERE cr.id = $1
 	`
@@ -124,11 +127,11 @@ func (r *capabilityRequestRepository) List(filter domain.CapabilityRequestFilter
 			cr.updated_at,
 			a.name AS agent_name,
 			a.display_name AS agent_display_name,
-			u1.email AS requested_by_email,
+			COALESCE(u1.email, '') AS requested_by_email,
 			u2.email AS reviewed_by_email
 		FROM capability_requests cr
 		INNER JOIN agents a ON cr.agent_id = a.id
-		INNER JOIN users u1 ON cr.requested_by = u1.id
+		LEFT JOIN users u1 ON cr.requested_by = u1.id
 		LEFT JOIN users u2 ON cr.reviewed_by = u2.id
 		WHERE 1=1
 	`
@@ -203,7 +206,7 @@ func (r *capabilityRequestRepository) UpdateStatus(id uuid.UUID, status domain.C
 	`
 
 	now := time.Now()
-	result, err := r.db.Exec(query, status, reviewedBy, now, now, id, from)
+	result, err := r.db.Exec(query, status, userRef(reviewedBy), now, now, id, from)
 	if err != nil {
 		return err
 	}
