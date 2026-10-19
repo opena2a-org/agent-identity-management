@@ -167,6 +167,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   started none, and shows a refusal and a provider's error. `apps/web/lib/api.oidc-sign-in.test.ts` holds the two
   requests and the `401` refusal, and `apps/web/lib/oidc-sign-in.test.ts` the stored flow and the lines shown.
 
+### Added: an organization can require its users to sign in through its OpenID Connect provider
+
+- `PUT /api/v1/admin/oidc-sign-in` takes an optional `requireProviderSignIn`, `false` when it is left out. `GET`
+  answers it, and the audit row of a stored configuration names it. It is kept in the configuration's `system_config`
+  row; this adds no migration, and a configuration stored without it writes the document the earlier changes wrote.
+- With it set, a user of the organization who is not an administrator is answered `403`, with the code
+  `provider_sign_in_required` and the organization's id and no tokens, for their own password at
+  `POST /api/v1/auth/login/local`, `POST /api/v1/public/login` and `POST /api/v1/auth/reauth`. The requirement is read
+  after the password check, so a wrong password is answered `401` as before, and the `403` is not recorded as a failed
+  attempt. A password change by such a user, at `POST /api/v1/auth/change-password` or at the required change's
+  `POST /api/v1/public/change-password`, stands and answers no tokens. The same user signs in through the provider.
+- Administrators keep password sign-in, so the organization can still change or remove a provider that cannot be
+  reached; removing the provider removes the requirement with it. When the requirement cannot be read, those three
+  routes answer a user who is not an administrator `500`, and that user's password change answers no tokens.
+- Tests: `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_required_test.go` stores the requirement through
+  the administration route, refuses a member's own password at both sign-in routes and at re-authentication, signs
+  the member in through the stub provider on 127.0.0.1, signs in an administrator of the organization and a member of
+  another, and holds the two password changes and the unreadable requirement.
+  `apps/backend/internal/application/provider_sign_in_requirement_test.go` holds the order of the checks and what a
+  refusal records, and `apps/backend/internal/infrastructure/repository/oidc_sign_in_config_repository_requirement_test.go`
+  the stored document.
+
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
 - With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and

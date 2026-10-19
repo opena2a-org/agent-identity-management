@@ -30,6 +30,20 @@ type AuthService struct {
 	emailService    domain.EmailService
 	failureConfig   domain.AuthFailureConfig
 	sdkTokenRepo    domain.SDKTokenRepository
+	providerSignIn  ProviderSignInRequirement
+}
+
+// ProviderSignInRequirement reports whether an organization requires its
+// users who are not administrators to sign in through its identity provider.
+// *OIDCSignInService implements it.
+type ProviderSignInRequirement interface {
+	RequiresProviderSignIn(ctx context.Context, organizationID uuid.UUID) (bool, error)
+}
+
+// SetProviderSignInRequirement attaches the requirement CheckPasswordSignIn
+// reads. With none attached, no organization requires provider sign-in.
+func (s *AuthService) SetProviderSignInRequirement(r ProviderSignInRequirement) {
+	s.providerSignIn = r
 }
 
 // SetSDKTokenRepository attaches the sdk_tokens rows a password change
@@ -82,7 +96,31 @@ const (
 	SignInRefusedAccountDeactivated = "account_deactivated" // the user is deactivated or deleted
 	SignInRefusedPasswordNotSet     = "password_not_set"    // the user has no password
 	SignInRefusedPasswordMismatch   = "password_mismatch"   // the password is not the user's
+	// the password is the user's, and the user's organization requires its
+	// users who are not administrators to sign in through its identity provider
+	SignInRefusedProviderSignInRequired = "provider_sign_in_required"
 )
+
+// CheckPasswordSignIn returns nil when user may sign in with a password, and
+// a *SignInRefusal with the reason SignInRefusedProviderSignInRequired when
+// the user's organization requires sign-in through its identity provider and
+// the user is not an administrator. An administrator's sign-in reads no
+// requirement. When the requirement cannot be read, the returned error is
+// not a *SignInRefusal, and the caller refuses the sign-in.
+func (s *AuthService) CheckPasswordSignIn(ctx context.Context, user *domain.User) error {
+	if s.providerSignIn == nil || user.Role == domain.RoleAdmin {
+		return nil
+	}
+	required, err := s.providerSignIn.RequiresProviderSignIn(ctx, user.OrganizationID)
+	if err != nil {
+		return fmt.Errorf("reading whether the organization requires provider sign-in: %w", err)
+	}
+	if required {
+		return signInRefusal(SignInRefusedProviderSignInRequired, user,
+			"the organization requires sign-in through its identity provider")
+	}
+	return nil
+}
 
 // SignInRefusal is the error LoginWithPasswordExtended returns when it
 // refuses a sign-in. Its text is the refusal's message. Reason names the
@@ -107,7 +145,10 @@ func signInRefusal(reason string, user *domain.User, message string) *SignInRefu
 }
 
 // LoginWithPasswordExtended authenticates with additional context for
-// failure tracking. A refused sign-in returns a *SignInRefusal.
+// failure tracking. A refused sign-in returns a *SignInRefusal. A sign-in
+// with the user's password whose organization's requirement of provider
+// sign-in cannot be read (CheckPasswordSignIn) returns another error, and no
+// user.
 func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, password, ipAddress, userAgent string) (*domain.User, error) {
 	// Check for active lockout before attempting authentication
 	if s.authFailureRepo != nil {
@@ -147,6 +188,14 @@ func (s *AuthService) LoginWithPasswordExtended(ctx context.Context, email, pass
 	if err := passwordHasher.VerifyPassword(password, *user.PasswordHash); err != nil {
 		s.recordAuthFailure(email, &user.OrganizationID, &user.ID, domain.AuthFailureInvalidCredentials, ipAddress, userAgent)
 		return nil, signInRefusal(SignInRefusedPasswordMismatch, user, "invalid credentials")
+	}
+
+	// The requirement of provider sign-in is read after the password check,
+	// so a caller without the password learns nothing of it. Its refusal is
+	// not recorded as a failed attempt and clears none, and the sign-in is
+	// not recorded in last_login_at.
+	if err := s.CheckPasswordSignIn(ctx, user); err != nil {
+		return nil, err
 	}
 
 	// Email verification removed - handled during registration approval

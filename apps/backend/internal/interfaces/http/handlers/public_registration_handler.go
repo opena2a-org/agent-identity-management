@@ -290,6 +290,14 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 			// Verify password from users table
 			passwordHasher := auth.NewPasswordHasher()
 			if err := passwordHasher.VerifyPassword(req.Password, *user.PasswordHash); err == nil {
+				// An organization that requires sign-in through its identity
+				// provider refuses the password of a user who is not an
+				// administrator, including one who must change it. The
+				// requirement is read only once the password matched.
+				if refused := h.authService.CheckPasswordSignIn(c.Context(), user); refused != nil {
+					return h.refusePasswordSignIn(c, user, refused)
+				}
+
 				// Check if user must change password (e.g., default admin on first login)
 				if user.ForcePasswordChange {
 					// Generate tokens even for forced password change
@@ -362,6 +370,22 @@ func (h *PublicRegistrationHandler) Login(c fiber.Ctx) error {
 		"success": false,
 		"error":   "Invalid email or password",
 	})
+}
+
+// refusePasswordSignIn answers a sign-in with the user's own password that
+// CheckPasswordSignIn refused, and reports it as a refused sign-in: 403 with
+// the code provider_sign_in_required, or 500 when the organization's
+// requirement could not be read.
+func (h *PublicRegistrationHandler) refusePasswordSignIn(c fiber.Ctx, user *domain.User, refused error) error {
+	var refusal *application.SignInRefusal
+	if !errors.As(refused, &refusal) {
+		reportSignInFailure(c, h.signInFailed, signInFailedUnclassified, user.ID, user.OrganizationID)
+		return respondServerError(c, fiber.StatusInternalServerError, refused)
+	}
+	reportSignInFailure(c, h.signInFailed, SignInFailedProviderSignInRequired, user.ID, user.OrganizationID)
+	answer := providerSignInRequiredAnswer(user.OrganizationID)
+	answer["success"] = false
+	return c.Status(fiber.StatusForbidden).JSON(answer)
 }
 
 // generateApprovedLoginResponse generates tokens and response for approved users
@@ -672,6 +696,23 @@ func (h *PublicRegistrationHandler) ChangePassword(c fiber.Ctx) error {
 			"success": false,
 			"error":   "Failed to retrieve user after password change",
 		})
+	}
+
+	// A user whose organization requires sign-in through its identity
+	// provider is issued no pair for a password, and neither is one whose
+	// requirement could not be read: the change stands, and the user signs
+	// in again.
+	if refused := h.authService.CheckPasswordSignIn(c.Context(), user); refused != nil {
+		answer := fiber.Map{"success": true, "message": "Password changed successfully. Sign in again to continue."}
+		var refusal *application.SignInRefusal
+		if errors.As(refused, &refusal) {
+			answer["message"] = "Password changed successfully. " + providerSignInRequiredMessage
+			answer["code"] = refusal.Reason
+			answer["organizationId"] = user.OrganizationID
+		} else {
+			log.Printf("Forced password change: no pair issued for user %s: %v", user.ID, refused)
+		}
+		return c.JSON(answer)
 	}
 
 	// Generate new tokens and return successful login response

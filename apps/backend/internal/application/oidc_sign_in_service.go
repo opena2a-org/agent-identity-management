@@ -202,6 +202,9 @@ type OIDCSignInConfigInput struct {
 	ClientSecret string
 	// Provisioning is stored only when it is enabled.
 	Provisioning OIDCProvisioningInput
+	// RequireProviderSignIn refuses a password sign-in to the organization's
+	// users who are not administrators.
+	RequireProviderSignIn bool
 }
 
 // OIDCProvisioningInput is the just-in-time provisioning of a configuration.
@@ -248,16 +251,32 @@ func (s *OIDCSignInService) Configure(ctx context.Context, organizationID, actor
 		return nil, fmt.Errorf("sealing the client secret: %w", err)
 	}
 	if err := s.configs.Put(ctx, &domain.OIDCSignInConfig{
-		OrganizationID:     organizationID,
-		Issuer:             issuer,
-		ClientID:           clientID,
-		SealedClientSecret: sealed,
-		Provisioning:       provisioning,
-		UpdatedBy:          actorID,
+		OrganizationID:        organizationID,
+		Issuer:                issuer,
+		ClientID:              clientID,
+		SealedClientSecret:    sealed,
+		Provisioning:          provisioning,
+		RequireProviderSignIn: in.RequireProviderSignIn,
+		UpdatedBy:             actorID,
 	}); err != nil {
 		return nil, err
 	}
 	return s.configs.Get(ctx, organizationID)
+}
+
+// RequiresProviderSignIn reports whether the organization's configuration
+// requires its users who are not administrators to sign in through the
+// provider. An organization without a configuration requires none. An error
+// reading the configuration is returned, with false.
+func (s *OIDCSignInService) RequiresProviderSignIn(ctx context.Context, organizationID uuid.UUID) (bool, error) {
+	cfg, err := s.configs.Get(ctx, organizationID)
+	if errors.Is(err, domain.ErrOIDCSignInNotConfigured) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return cfg.RequireProviderSignIn, nil
 }
 
 // checkOIDCProvisioning returns the provisioning to store for in. A

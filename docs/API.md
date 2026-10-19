@@ -109,6 +109,8 @@ An account an administrator has not approved yet answers with `isApproved: false
 
 `POST /api/v1/auth/login/local` takes the same request and answers with `accessToken`, `refreshToken` and `user` (`id`, `email`, `name`, `role`, `organizationId`, `forcePasswordChange`).
 
+When the user's organization requires sign-in through its OpenID Connect provider and the user is not an administrator, both routes answer the user's own password with `403` and the code `provider_sign_in_required` in place of tokens; see `requireProviderSignIn` below.
+
 ---
 
 #### POST /api/v1/auth/refresh
@@ -157,7 +159,7 @@ Re-authenticate the signed-in user. The request carries the session's access tok
 
 **Response** (200): the shape of `POST /api/v1/auth/refresh`. Without a revocation store `rotated` is `false`, `refreshToken` is the token presented, and `accessToken` carries the new `auth_time`.
 
-A wrong password, a locked account and an account without a password answer `401` with `{"error": "Invalid password"}`. A refresh token that is not a login refresh token of the bearer's session answers `401` with `{"error": "Invalid or expired refresh token"}`. A refresh token already retired by a rotation ends the session, as at refresh, and it and a member of a revoked session answer `401` with `{"error": "Token has been revoked or is invalid"}`. A suspended, deactivated or deleted account answers `401` with `{"error": "Account is not active"}`. A successful re-authentication is recorded in the audit log as a `login` with `method` `reauthentication`.
+A wrong password, a locked account and an account without a password answer `401` with `{"error": "Invalid password"}`. A refresh token that is not a login refresh token of the bearer's session answers `401` with `{"error": "Invalid or expired refresh token"}`. A refresh token already retired by a rotation ends the session, as at refresh, and it and a member of a revoked session answer `401` with `{"error": "Token has been revoked or is invalid"}`. A suspended, deactivated or deleted account answers `401` with `{"error": "Account is not active"}`. A user whose organization requires sign-in through its OpenID Connect provider, and who is not an administrator, is answered `403` with the code `provider_sign_in_required` for their own password, and nothing is rotated; see `requireProviderSignIn` below. A successful re-authentication is recorded in the audit log as a `login` with `method` `reauthentication`.
 
 ---
 
@@ -193,7 +195,7 @@ A request without a password answers `400`. A wrong password, a locked account a
 
 #### Sign-in through the organization's OpenID Connect provider
 
-An administrator stores the OpenID Connect provider the users of the organization sign in through: the provider's issuer, and the client id and client secret the provider registered for this deployment. An organization has at most one. A user then signs in at the provider with the authorization code flow and PKCE (`S256`), and the server answers a login pair for the user of that organization whose email the provider asserts. A configuration can also provision users: the first sign-in of an email that no user of the organization has then creates that user.
+An administrator stores the OpenID Connect provider the users of the organization sign in through: the provider's issuer, and the client id and client secret the provider registered for this deployment. An organization has at most one. A user then signs in at the provider with the authorization code flow and PKCE (`S256`), and the server answers a login pair for the user of that organization whose email the provider asserts. A configuration can also provision users: the first sign-in of an email that no user of the organization has then creates that user. And it can require the organization's users who are not administrators to sign in through the provider rather than with a password.
 
 `PUT /api/v1/admin/oidc-sign-in` (admin role) stores the provider of the caller's organization, in place of any earlier one.
 
@@ -207,11 +209,24 @@ An administrator stores the OpenID Connect provider the users of the organizatio
     "enabled": true,
     "role": "viewer",
     "emailDomains": ["example.com"]
-  }
+  },
+  "requireProviderSignIn": true
 }
 ```
 
 `provisioning` is optional. A body without it, or with `enabled` `false`, stores a configuration that provisions no user, and the role and domains of a provisioning that is not enabled are not stored. With `enabled` `true`, `role` is `viewer`, `member` or `manager`, and `viewer` when it is left out; `admin` is refused, so a provider's assertion never makes a user an administrator. `emailDomains` holds 1 to 20 domain names, such as `example.com`, stored in lower case without a final dot; a wildcard, an address, a URL and a name of one label are refused. A role or domains outside these rules answer `400`.
+
+`requireProviderSignIn` is optional, and `false` when left out. With `true`, a user of the organization who is not an administrator cannot sign in or re-authenticate with a password: `POST /api/v1/auth/login/local`, `POST /api/v1/public/login` and `POST /api/v1/auth/reauth` answer the user's own password with `403` and no tokens:
+
+```json
+{
+  "error": "Your organization requires sign-in through its identity provider. Sign in from your organization's sign-in link.",
+  "code": "provider_sign_in_required",
+  "organizationId": "<the organization's id>"
+}
+```
+
+`POST /api/v1/public/login` adds `"success": false`. The requirement is read only after the password matched, so a wrong password is answered `401` as before and says nothing of it, and the `403` is not recorded as a failed attempt toward the account lockout. A password change by such a user, at `POST /api/v1/auth/change-password` or, for a change an administrator required, at `POST /api/v1/public/change-password`, stands, and its answer carries the same `code` and `organizationId` and no tokens; the user then signs in through the provider. Administrators keep password sign-in, so the organization can still change or remove a provider that cannot be reached, and removing the provider removes the requirement with it. When the requirement cannot be read, the three routes answer a user who is not an administrator `500`, and a password change by such a user answers no tokens.
 
 The issuer must be an `https` URL with no query or fragment. Before it stores anything, the server reads the provider's configuration document, `<issuer>/.well-known/openid-configuration`, and answers `400` when the document cannot be read, names another issuer, or names an authorization, token or key set endpoint that is not an `https` URL. Every request to the provider is sent with the server's egress client, which refuses internal addresses such as loopback. The client secret is stored encrypted with the key vault's master key (`KEYVAULT_MASTER_KEY`) and bound to the organization. No answer and no audit row carries it.
 
@@ -227,13 +242,14 @@ The issuer must be an `https` URL with no query or fragment. Before it stores an
     "role": "viewer",
     "emailDomains": ["example.com"]
   },
+  "requireProviderSignIn": true,
   "redirectUrl": "https://aim.example.com/auth/oidc/callback",
   "updatedBy": "550e8400-e29b-41d4-a716-446655440000",
   "updatedAt": "2026-10-19T08:00:00Z"
 }
 ```
 
-`provisioning` is `{"enabled": false}` for a configuration that provisions no user. `GET /api/v1/admin/oidc-sign-in` answers the same, or `{"configured": false, "redirectUrl": "..."}` when the organization has no provider. `DELETE /api/v1/admin/oidc-sign-in` removes the provider and answers `204`; a sign-in started before the removal is then refused. A stored provider and a removal are recorded in the audit log as `update` and `delete` of the resource type `oidc_sign_in_config`; the metadata of the `update` row names the issuer, the client id and the provisioning.
+`provisioning` is `{"enabled": false}` for a configuration that provisions no user. `GET /api/v1/admin/oidc-sign-in` answers the same, or `{"configured": false, "redirectUrl": "..."}` when the organization has no provider. `DELETE /api/v1/admin/oidc-sign-in` removes the provider and answers `204`; a sign-in started before the removal is then refused. A stored provider and a removal are recorded in the audit log as `update` and `delete` of the resource type `oidc_sign_in_config`; the metadata of the `update` row names the issuer, the client id, the provisioning and `requireProviderSignIn`.
 
 `redirectUrl` is the `/auth/oidc/callback` page under `FRONTEND_URL`, the redirect URI every authorization request names; register it with the provider.
 

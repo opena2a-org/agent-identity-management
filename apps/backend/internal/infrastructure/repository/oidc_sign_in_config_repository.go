@@ -42,6 +42,11 @@ type oidcSignInConfigValue struct {
 	// users, so the document of one that does not is the document of a
 	// configuration stored before provisioning existed.
 	Provisioning *oidcProvisioningValue `json:"provisioning,omitempty"`
+	// RequireProviderSignIn is written only when it is set, so the document
+	// of a configuration that requires no provider sign-in is the document
+	// of one stored before the requirement existed, and such a document
+	// reads as requiring none.
+	RequireProviderSignIn bool `json:"requireProviderSignIn,omitempty"`
 }
 
 // oidcProvisioningValue is the provisioning member of the document.
@@ -76,12 +81,13 @@ func (r *OIDCSignInConfigRepository) Get(ctx context.Context, organizationID uui
 		return nil, fmt.Errorf("failed to read the OIDC sign-in configuration: %w", err)
 	}
 	cfg := &domain.OIDCSignInConfig{
-		OrganizationID:     organizationID,
-		Issuer:             doc.Issuer,
-		ClientID:           doc.ClientID,
-		SealedClientSecret: doc.SealedClientSecret,
-		UpdatedBy:          doc.UpdatedBy,
-		UpdatedAt:          updatedAt,
+		OrganizationID:        organizationID,
+		Issuer:                doc.Issuer,
+		ClientID:              doc.ClientID,
+		SealedClientSecret:    doc.SealedClientSecret,
+		RequireProviderSignIn: doc.RequireProviderSignIn,
+		UpdatedBy:             doc.UpdatedBy,
+		UpdatedAt:             updatedAt,
 	}
 	if p := doc.Provisioning; p != nil && p.Enabled {
 		cfg.Provisioning = domain.OIDCProvisioning{
@@ -100,10 +106,11 @@ func (r *OIDCSignInConfigRepository) Put(ctx context.Context, cfg *domain.OIDCSi
 		return errors.New("an OIDC sign-in configuration needs an organization")
 	}
 	doc := oidcSignInConfigValue{
-		Issuer:             cfg.Issuer,
-		ClientID:           cfg.ClientID,
-		SealedClientSecret: cfg.SealedClientSecret,
-		UpdatedBy:          cfg.UpdatedBy,
+		Issuer:                cfg.Issuer,
+		ClientID:              cfg.ClientID,
+		SealedClientSecret:    cfg.SealedClientSecret,
+		UpdatedBy:             cfg.UpdatedBy,
+		RequireProviderSignIn: cfg.RequireProviderSignIn,
 	}
 	if p := cfg.Provisioning; p.Enabled {
 		doc.Provisioning = &oidcProvisioningValue{Enabled: true, Role: string(p.Role), EmailDomains: p.EmailDomains}

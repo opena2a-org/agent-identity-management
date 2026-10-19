@@ -11,13 +11,17 @@ import (
 )
 
 // The reasons POST /api/v1/public/login gives for a refused sign-in, one per
-// check that answers 401. POST /api/v1/auth/login/local gives the reason of
-// the service's application.SignInRefusal.
+// check that answers 401, and the one it answers 403. POST
+// /api/v1/auth/login/local gives the reason of the service's
+// application.SignInRefusal.
 const (
 	SignInFailedAccountDeactivated      = application.SignInRefusedAccountDeactivated // the user is deactivated or deleted
 	SignInFailedRegistrationRejected    = "registration_rejected"                     // the email and password match a rejected registration request
 	SignInFailedEmailOrPasswordMismatch = "email_or_password_mismatch"                // no user or registration request has the email and password
 	signInFailedUnclassified            = "sign_in_refused"                           // the service refused without naming a check
+	// the password is the user's, and the user's organization requires sign-in
+	// through its identity provider (answered 403)
+	SignInFailedProviderSignInRequired = application.SignInRefusedProviderSignInRequired
 )
 
 // SignInFailure is one password sign-in a route refused, as a sign-in

@@ -147,14 +147,15 @@ func (h *OIDCSignInHandler) oidcConfigurationAnswer(cfg *domain.OIDCSignInConfig
 		return fiber.Map{"configured": false, "redirectUrl": h.service.RedirectURL()}
 	}
 	return fiber.Map{
-		"configured":      true,
-		"issuer":          cfg.Issuer,
-		"clientId":        cfg.ClientID,
-		"clientSecretSet": cfg.SealedClientSecret != "",
-		"provisioning":    oidcProvisioningAnswer(cfg.Provisioning),
-		"redirectUrl":     h.service.RedirectURL(),
-		"updatedBy":       cfg.UpdatedBy,
-		"updatedAt":       cfg.UpdatedAt.UTC(),
+		"configured":            true,
+		"issuer":                cfg.Issuer,
+		"clientId":              cfg.ClientID,
+		"clientSecretSet":       cfg.SealedClientSecret != "",
+		"provisioning":          oidcProvisioningAnswer(cfg.Provisioning),
+		"requireProviderSignIn": cfg.RequireProviderSignIn,
+		"redirectUrl":           h.service.RedirectURL(),
+		"updatedBy":             cfg.UpdatedBy,
+		"updatedAt":             cfg.UpdatedAt.UTC(),
 	}
 }
 
@@ -190,12 +191,15 @@ func (h *OIDCSignInHandler) GetConfiguration(c fiber.Ctx) error {
 }
 
 // oidcConfigurationRequest is the body of PUT /api/v1/admin/oidc-sign-in. A
-// body without provisioning stores a configuration that provisions no user.
+// body without provisioning stores a configuration that provisions no user,
+// and one without requireProviderSignIn a configuration that requires no
+// provider sign-in.
 type oidcConfigurationRequest struct {
-	Issuer       string                   `json:"issuer"`
-	ClientID     string                   `json:"clientId"`
-	ClientSecret string                   `json:"clientSecret"`
-	Provisioning *oidcProvisioningRequest `json:"provisioning"`
+	Issuer                string                   `json:"issuer"`
+	ClientID              string                   `json:"clientId"`
+	ClientSecret          string                   `json:"clientSecret"`
+	Provisioning          *oidcProvisioningRequest `json:"provisioning"`
+	RequireProviderSignIn bool                     `json:"requireProviderSignIn"`
 }
 
 // oidcProvisioningRequest is the provisioning member of the body.
@@ -218,9 +222,10 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 	}
 
 	in := application.OIDCSignInConfigInput{
-		Issuer:       req.Issuer,
-		ClientID:     req.ClientID,
-		ClientSecret: req.ClientSecret,
+		Issuer:                req.Issuer,
+		ClientID:              req.ClientID,
+		ClientSecret:          req.ClientSecret,
+		RequireProviderSignIn: req.RequireProviderSignIn,
 	}
 	if p := req.Provisioning; p != nil {
 		in.Provisioning = application.OIDCProvisioningInput{Enabled: p.Enabled, Role: p.Role, EmailDomains: p.EmailDomains}
@@ -257,9 +262,10 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 	}
 
 	h.audit(c, organizationID, userID, domain.AuditActionUpdate, oidcSignInConfigResource, organizationID, fiber.Map{
-		"issuer":       cfg.Issuer,
-		"clientId":     cfg.ClientID,
-		"provisioning": oidcProvisioningAnswer(cfg.Provisioning),
+		"issuer":                cfg.Issuer,
+		"clientId":              cfg.ClientID,
+		"provisioning":          oidcProvisioningAnswer(cfg.Provisioning),
+		"requireProviderSignIn": cfg.RequireProviderSignIn,
 	})
 	return c.JSON(h.oidcConfigurationAnswer(cfg))
 }
