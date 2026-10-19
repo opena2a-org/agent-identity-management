@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: the FGA engine holds no Registry ASC address until `FGA_REGISTRY_ASC_URL` sets one
+
+- `NewFGAEngine` set the engine's Registry ASC address to `https://api.oa2a.org`, the OpenA2A Registry, and the server
+  replaced it only when `FGA_REGISTRY_ASC_URL` was set. A new engine now holds none, and `initServices` sets one from
+  `FGA_REGISTRY_ASC_URL` when it is set, as before. The quickstart sets no `FGA_` variable.
+- No request changes: no code outside the tests reads the address. The engine reads the ASC risk summary from the
+  `agent_security_contexts` table.
+- Tests: `apps/backend/internal/application/fga_engine_registry_asc_url_test.go`. A new engine holds an empty Registry
+  ASC address; the control sets one with `SetRegistryASCURL` and reads it back.
+
 ### Fixed: `aim-bootstrap --default` adds the default security policies a fresh database did not receive
 
 - Migrations `015_add_default_security_policies.sql` and `052_add_default_mcp_policies.sql` insert the OpenA2A Admin
