@@ -294,10 +294,16 @@ func (r *UserRepository) GetByOrganizationAndStatus(orgID uuid.UUID, status doma
 	return filteredUsers, nil
 }
 
-// Update updates a user. password_changed_at only moves forward: GREATEST
-// ignores a NULL, so a copy of the row read without the column (or with an
-// older value) leaves the recorded change in place, and a password change
-// cannot be undone by a later write of a stale copy.
+// Update updates a user. password_changed_at only moves forward, and the
+// query states the rule case by case rather than leaning on a function's
+// NULL behaviour: a copy of the row that carries no change (nil, as a copy
+// read without the column) leaves the recorded change in place, an older
+// instant leaves it in place, and only a later instant replaces it; the
+// first change is recorded over NULL. So a password change cannot be undone
+// by a later write of a stale copy. The cast on the first use of $14 fixes
+// the parameter's type: IS NULL alone leaves it undetermined, and PostgreSQL
+// refuses the statement. user_repository_password_changed_at_integration_test.go
+// holds the rule against PostgreSQL.
 func (r *UserRepository) Update(user *domain.User) error {
 	query := `
 		UPDATE users
@@ -306,7 +312,11 @@ func (r *UserRepository) Update(user *domain.User) error {
 		    status = $7, approved_by = $8, approved_at = $9,
 		    password_reset_token = $10, password_reset_expires_at = $11,
 		    updated_at = $12,
-		    password_changed_at = GREATEST(password_changed_at, $14)
+		    password_changed_at = CASE
+		        WHEN $14::timestamptz IS NULL THEN password_changed_at
+		        WHEN password_changed_at IS NULL OR password_changed_at < $14 THEN $14
+		        ELSE password_changed_at
+		    END
 		WHERE id = $13
 	`
 

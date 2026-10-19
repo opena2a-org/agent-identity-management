@@ -5,7 +5,8 @@
 -- request a login or SDK token authenticates reads it with force_password_change
 -- (UserRepository.GetSessionState), and a token whose sign-in time is before the first
 -- whole second after it is refused, so a password change ends every session signed in
--- before it. UserRepository.Update writes it through GREATEST, so it only moves forward.
+-- before it. UserRepository.Update only moves it forward: a write that carries NULL or an
+-- older instant leaves the recorded one in place.
 --
 -- NULL until the user's password first changes after this migration: no row is backfilled,
 -- and a token of an account whose column is NULL is not refused by it.

@@ -32,8 +32,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - `AuthService.ChangePassword`, which `POST /api/v1/auth/change-password` and `POST /api/v1/public/change-password`
   call, and `RegistrationService.ResetPassword`, which `POST /api/v1/public/reset-password` calls, record the instant
   of the change in `users.password_changed_at`. Migration `134_users_password_changed_at.sql` adds the column, NULL
-  until the user's password first changes. `UserRepository.Update` writes it through `GREATEST`, so a later write of a
-  copy of the row that does not carry it leaves it in place.
+  until the user's password first changes. `UserRepository.Update` only moves it forward: a later write of a copy of
+  the row that does not carry it, or carries an older instant, leaves it in place, and
+  `apps/backend/internal/infrastructure/repository/user_repository_password_changed_at_integration_test.go` holds
+  that against PostgreSQL.
 - For each request the auth middleware authenticates with an access token, it reads that column and
   `force_password_change` from the user's row through `UserRepository.GetSessionState`, which `cmd/server` attaches to
   the JWT service. A token whose sign-in time is before the first whole second after the change is answered 401 by the

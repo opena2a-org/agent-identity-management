@@ -85,7 +85,7 @@ func (r *pwChangeUserRepo) Update(u *domain.User) error {
 	}
 	r.user.PasswordHash = u.PasswordHash
 	r.user.ForcePasswordChange = u.ForcePasswordChange
-	// As the SQL's GREATEST: the recorded change only moves forward.
+	// As UserRepository.Update's query: the recorded change only moves forward.
 	if u.PasswordChangedAt != nil && (r.user.PasswordChangedAt == nil || u.PasswordChangedAt.After(*r.user.PasswordChangedAt)) {
 		at := *u.PasswordChangedAt
 		r.user.PasswordChangedAt = &at
