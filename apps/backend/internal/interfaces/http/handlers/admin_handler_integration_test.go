@@ -898,9 +898,7 @@ func TestAdminHandler_PermanentlyDeleteUser_Success(t *testing.T) {
 		nil,
 	)
 	// A3d-viii: LoadOwned now uses userRepo (not AuthService.GetUserByID)
-	// for the existence+ownership check. The returned user is also reused
-	// for the audit-log Email/Name capture, so the stub must populate
-	// those fields.
+	// for the existence+ownership check.
 	handler.userRepo = &adminTestUserRepo{
 		getByID: func(id uuid.UUID) (*domain.User, error) {
 			return &domain.User{
@@ -926,6 +924,88 @@ func TestAdminHandler_PermanentlyDeleteUser_Success(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+}
+
+// The audit row of a permanent delete outlives the user it records, so it names the
+// user by id only: it holds no copy of the deleted user's email or name.
+func TestAdminHandler_PermanentlyDeleteUser_AuditRowNamesTheUserByIDOnly(t *testing.T) {
+	orgID := uuid.New()
+	adminID := uuid.New()
+	targetUserID := uuid.New()
+	const targetEmail = "deleted-user@test.com"
+	const targetName = "Deleted Test User"
+
+	mockAuthService := &MockAuthServiceImpl{
+		GetUsersByOrganizationFunc: func(ctx context.Context, oID uuid.UUID) ([]*domain.User, error) {
+			return []*domain.User{
+				{ID: adminID, Role: "admin", Status: "active", CreatedAt: time.Now().Add(-time.Hour)},
+			}, nil
+		},
+	}
+	deleted := false
+	mockAdminService := &MockAdminServiceImpl{
+		PermanentlyDeleteUserFunc: func(ctx context.Context, uID, aID uuid.UUID) error {
+			deleted = true
+			return nil
+		},
+	}
+
+	type auditRow struct {
+		orgID, userID, resourceID uuid.UUID
+		action                    domain.AuditAction
+		resourceType              string
+		metadata                  map[string]interface{}
+	}
+	var rows []auditRow
+	mockAuditService := &MockAuditServiceImpl{
+		LogActionFunc: func(ctx context.Context, oID, uID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress, userAgent string, metadata map[string]interface{}) error {
+			rows = append(rows, auditRow{oID, uID, resourceID, action, resourceType, metadata})
+			return nil
+		},
+	}
+
+	handler := createAdminHandlerWithMocks(mockAuthService, mockAdminService, nil, nil, mockAuditService, nil, nil, nil)
+	handler.userRepo = &adminTestUserRepo{
+		getByID: func(id uuid.UUID) (*domain.User, error) {
+			return &domain.User{
+				ID:             id,
+				Email:          targetEmail,
+				Name:           targetName,
+				OrganizationID: orgID,
+				Role:           "member",
+			}, nil
+		},
+	}
+
+	app := fiber.New()
+	app.Delete("/admin/users/:id/permanent", func(c fiber.Ctx) error {
+		c.Locals("organization_id", orgID)
+		c.Locals("user_id", adminID)
+		return handler.PermanentlyDeleteUser(c)
+	})
+
+	req := httptest.NewRequest("DELETE", "/admin/users/"+targetUserID.String()+"/permanent", nil)
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, fiber.StatusOK, resp.StatusCode)
+	require.True(t, deleted, "the handler must delete the user")
+	require.Len(t, rows, 1, "the handler must write one audit row")
+	row := rows[0]
+	assert.Equal(t, orgID, row.orgID)
+	assert.Equal(t, adminID, row.userID, "the row names the admin who deleted the user as its user")
+	assert.Equal(t, domain.AuditActionDelete, row.action)
+	assert.Equal(t, "user", row.resourceType)
+	assert.Equal(t, targetUserID, row.resourceID, "the row names the deleted user by id")
+	assert.Equal(t, map[string]interface{}{
+		"action":  "permanent_delete",
+		"warning": "irreversible_hard_delete",
+	}, row.metadata)
+	encoded, err := json.Marshal(row.metadata)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), targetEmail, "the row must not copy the deleted user's email")
+	assert.NotContains(t, string(encoded), targetName, "the row must not copy the deleted user's name")
 }
 
 func TestAdminHandler_PermanentlyDeleteUser_CannotDeleteSelf(t *testing.T) {

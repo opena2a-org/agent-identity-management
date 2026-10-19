@@ -27,10 +27,6 @@ import (
 //   - h.getAdminService().ActivateUser / PermanentlyDeleteUser, or
 //   - h.isSuperAdmin -> h.getAuthService().GetUserByID
 // All four nil-deref → fiber 500 → assert.Equal(404) below fires.
-//
-// PermanentlyDeleteUser has an additional dimension: the LoadOwned
-// returned user is reused for the audit log; a bypass also surfaces as
-// a nil-pointer panic on `user.Email` even before any service call.
 // ===========================
 
 func TestAdminHandler_UserLifecycle_CrossOrgReturns404(t *testing.T) {

@@ -133,6 +133,41 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Fixed: deleting a user deletes the user's registration requests and the copies of the user's email and name in audit rows
+
+- Approving a registration request copies its email into the user it creates and keeps the request, which holds the
+  email and the first and last name it was filed with, and the password hash and signup answers when the registration
+  gave them. Deleting the user kept the request, and as registration files a request without an organization,
+  deleting the organization kept it too. An admin's role change writes the
+  user's email into its audit row as `user_email`, a registration approval writes `user_email` and `user_name`, and
+  the admin's permanent delete wrote both into the row it adds after the delete. These rows name the admin as their
+  user, so deleting the user kept them with the user's email.
+- Migration `137_user_delete_removes_registration_requests_and_audit_copies.sql` adds an `AFTER DELETE` trigger to
+  `users`. For each deleted user it deletes the registration requests filed with the user's email, compared without
+  case, that hold the user's organization, and those that hold none when no remaining user has that email; a request
+  that holds another organization is kept. It removes `user_email` and `user_name` from the metadata of the `user` and
+  `user_role` audit rows of the user's organization whose resource is the user, and of the organization's
+  `registration_approval` rows whose `user_email` is the user's email; the rows are kept.
+- `DELETE /api/v1/admin/users/:id` writes its audit row with `action` and `warning` in its metadata, and names the
+  deleted user by the row's resource id only.
+- The migration also deletes, once, the approved requests whose email no user has, and removes `user_email` and
+  `user_name` from the `user` and `user_role` rows whose resource is a user who no longer exists, among them the
+  permanent delete rows written before this change, and from the `registration_approval` rows whose `user_email` no
+  user of the row's organization has.
+- Test: `apps/backend/internal/infrastructure/repository/user_delete_requests_audit_integration_test.go`, against
+  PostgreSQL. With every migration applied, one test deletes a user through `UserRepository.Delete` and checks that
+  the requests filed with the user's email that hold the user's organization or none are deleted, with the email in
+  either case, that a request with that email filed with another organization and another person's request are kept,
+  and that the user's role change and registration approval rows keep their other metadata and lose the copies,
+  while another user's rows and another organization's row are kept as written. One shows that a request that holds
+  no organization is kept while a user of another organization has its email, and deleted with that user; one deletes
+  an organization and checks that the requests of its users are deleted. Against a database migrated without
+  migration 137 the three fail, each on a request or a copy that is kept. The fourth runs the migration file twice in a
+  schema that stands in for a database migrated through 136. In
+  `apps/backend/internal/interfaces/http/handlers/admin_handler_integration_test.go`, a test reads the audit row that
+  `PermanentlyDeleteUser`, the handler of `DELETE /api/v1/admin/users/:id`, writes, and fails with the handler as it
+  was, whose row held the user's email and name.
+
 ### Fixed: deleting a user clears the copies of the user's name and email that agents and MCP servers hold
 
 - An agent and an MCP server store the name and email of the user who created them, returned as `createdByName` and
