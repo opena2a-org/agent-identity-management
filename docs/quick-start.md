@@ -111,26 +111,34 @@ aim-sdk login --url http://localhost:8080
 
 `aim-sdk login` prints a code; approve it on your dashboard's `/device` page. The SDK saves its credentials to `~/.aim/`.
 
-That is how the SDK in this repository signs in. The release on PyPI, aim-sdk 2.0.3, has no device sign-in: with it, `aim-sdk login --url http://localhost:8080` prints `Opening browser for authentication...` and an `http://localhost:8080/auth/login?response_type=code&...` address, then waits, and the API at that address registers no `/auth/login` route. Until this repository's SDK is published to PyPI ([#789](https://github.com/opena2a-org/agent-identity-management/issues/789)), install the SDK from your dashboard on a self-hosted AIM.
+That is how the SDK in this repository signs in. The release on PyPI, aim-sdk 2.0.3, has no device sign-in: with it, `aim-sdk login --url http://localhost:8080` prints `Opening browser for authentication...` and an `http://localhost:8080/auth/login?response_type=code&...` address, then waits, and the API at that address registers no `/auth/login` route. Until this repository's SDK is published to PyPI ([#789](https://github.com/opena2a-org/agent-identity-management/issues/789)), [sign in from your dashboard](#sign-in-from-your-dashboard) on a self-hosted AIM instead.
 
-### Install the SDK from your dashboard
+### Sign in from your dashboard
 
-The dashboard gives you the SDK from the `sdk/python` tree its server image was built with, as a ZIP with your sign-in embedded, so you skip `aim-sdk login`:
+The dashboard's SDK download is a ZIP of the SDK from the `sdk/python` tree its server image was built with, and it carries your sign-in, so you skip `aim-sdk login`:
 
 1. **Sign in** to the dashboard (`http://localhost:3000` on a quickstart stack)
 2. **Open** Developers, then SDK & docs (`/dashboard/sdk`)
 3. **Click** "Download Python SDK"
-4. **Unzip** the archive and install it:
+4. **Unzip** the archive and copy its sign-in to `~/.aim/`:
 
 ```bash
 cd ~/projects  # or any folder outside the repository clone
 # The newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there)
 unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"
+mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json
+chmod 600 ~/.aim/sdk_credentials.json
+```
+
+The sign-in is `aim-sdk-python/.aim/sdk_credentials.json` inside the archive. `~/.aim/sdk_credentials.json` is the first file the SDK reads its sign-in from, in the release on PyPI as in this repository's SDK, so with the release installed by `pip install aim-sdk` above, `secure()` signs in with it and registers the agent.
+
+To use the SDK the archive carries in place of the release on PyPI, install it from the folder you unzipped; with the editable install, it reads the sign-in from any directory:
+
+```bash
+cd ~/projects  # the folder you unzipped the archive in
 cd aim-sdk-python
 pip install -e ".[rich]"
 ```
-
-The sign-in is `aim-sdk-python/.aim/sdk_credentials.json` inside the archive; with the editable install, the SDK reads it from any directory.
 
 **Verify Installation**:
 ```bash

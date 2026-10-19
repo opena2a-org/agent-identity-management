@@ -11,6 +11,35 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the Quick start signs the release of the Python SDK on PyPI in to a self-hosted AIM with the sign-in from the dashboard's SDK download (#789)
+
+- aim-sdk 2.0.3, the release on PyPI, cannot complete the Quick start's `aim-sdk login --url http://localhost:8080`:
+  it opens `<url>/auth/login` and exchanges a code at `/api/v1/auth/token`, and the server registers neither. Run
+  without a terminal against a server built from this tree, it printed nothing for 20 seconds while the server
+  answered its `GET /auth/login` with `404`. Its `secure()` signs in with the sign-in in
+  `~/.aim/sdk_credentials.json`, the first file it reads one from, as this repository's SDK does.
+- `docs/quick-start.md` now titles the section Sign in from your dashboard (it was Install the SDK from your
+  dashboard). After Download Python SDK it unzips the newest archive, runs
+  `mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json` and
+  `chmod 600 ~/.aim/sdk_credentials.json`, and keeps the release on PyPI. Installing the archive's SDK with
+  `pip install -e ".[rich]"` is the alternative, in a fence of its own. The README's Quick start links the section
+  as the self-hosted sign-in. With aim-sdk 2.0.3 from PyPI and those commands run as written, against a server
+  built from this tree on a database migrated and seeded with `aim-bootstrap --default`, the Quick start ran to its
+  end: `secure("my-first-agent", capabilities=["db:read"])` registered the agent pending at 59%, the `db:read` call
+  returned the record once an administrator had verified the agent, and in strict mode the `db:write` call was
+  refused with the reason the README quotes.
+- The server is unchanged: it already serves every request that release sends for the Quick start. The release on
+  PyPI prints a sign-in code at `aim-sdk login` once this repository's SDK is published.
+- Tests: `apps/backend/cmd/server/readme_quick_start_pypi_release_integration_test.go` builds the server as `main`
+  does over `TEST_DATABASE_URL` and downloads the Python SDK as a signed-in administrator. It takes the archive
+  member the docs copy, then sends the requests aim-sdk 2.0.3 sends for the Quick start: the refresh, the existence
+  check, the registration with a key pair of its own, the Ed25519-signed capability registrations and the
+  verifications, approved for `db:read` and refused for `db:write` in strict mode.
+  `sdk/python/tests/test_readme_self_hosted_sign_in.py` holds the section's first fence to the copy and the
+  `chmod`, with no install, and checks that the SDK reads `~/.aim/sdk_credentials.json` before the archive's copy.
+  On the previous docs both failed, finding no section titled Sign in from your dashboard; the section it replaces
+  copies no sign-in.
+
 ### Fixed — the account deletion purge removes the OpenID Connect sign-in configuration of an organization it deletes
 
 - An organization's OpenID Connect sign-in configuration, sealed client secret included, is a `system_config` row
