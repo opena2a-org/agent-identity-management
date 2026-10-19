@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -334,5 +336,74 @@ func TestAnalyticsTracking_RecordKeepsItsOwnRequestStrings(t *testing.T) {
 		assert.Equal(t, "client-"+suffix, log.UserAgent,
 			"endpoint %q and user agent %q come from different requests", log.Endpoint, log.UserAgent)
 		assert.Regexp(t, `^/api/v1/agents/request-\d{3}$`, log.Endpoint)
+	}
+}
+
+// TestAnalyticsTracking_RecordsTheAnswerTheClientReceives sends requests that
+// end in a returned error, which the app's error handler answers only after
+// the handler chain has returned, beside one a handler answers itself. Each
+// record must carry the status, body size and error text the client receives.
+func TestAnalyticsTracking_RecordsTheAnswerTheClientReceives(t *testing.T) {
+	records := make(chan APICallLog, 1)
+	saved := recordAPICall
+	recordAPICall = func(_ *sql.DB, log APICallLog) { records <- log }
+	defer func() { recordAPICall = saved }()
+
+	app := fiber.New(fiber.Config{
+		// An error handler other than Fiber's default, so a record that
+		// matches the answer follows the app's own handler: a *fiber.Error is
+		// answered with its code and message, any other error 500, each in a
+		// JSON body.
+		ErrorHandler: func(c fiber.Ctx, err error) error {
+			code, message := fiber.StatusInternalServerError, "Internal Server Error"
+			if e, ok := err.(*fiber.Error); ok {
+				code, message = e.Code, e.Message
+			}
+			return c.Status(code).JSON(fiber.Map{"error": true, "message": message})
+		},
+	})
+	app.Use(AnalyticsTracking(nil))
+	app.Get("/api/v1/agents", func(c fiber.Ctx) error {
+		return c.JSON(fiber.Map{"agents": []string{}})
+	})
+	app.Get("/api/v1/agents/:id", func(c fiber.Ctx) error {
+		return fiber.NewError(fiber.StatusForbidden, "agent belongs to another organization")
+	})
+	app.Post("/api/v1/agents", func(c fiber.Ctx) error {
+		return errors.New("insert agent: connection refused")
+	})
+
+	for _, tc := range []struct {
+		method, path string
+		status       int
+	}{
+		{fiber.MethodGet, "/api/v1/no-such-group/x", fiber.StatusNotFound}, // no route serves it
+		{fiber.MethodGet, "/api/v1/agents/" + uuid.NewString(), fiber.StatusForbidden},
+		{fiber.MethodPost, "/api/v1/agents", fiber.StatusInternalServerError},
+		{fiber.MethodGet, "/api/v1/agents", fiber.StatusOK},
+	} {
+		name := tc.method + " " + tc.path
+		resp, err := app.Test(httptest.NewRequest(tc.method, tc.path, nil))
+		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, tc.status, resp.StatusCode, name)
+
+		select {
+		case log := <-records:
+			assert.Equal(t, tc.path, log.Endpoint, name)
+			assert.Equal(t, tc.status, log.StatusCode, "%s is answered %d", name, tc.status)
+			assert.Equal(t, len(body), log.ResponseSizeBytes, name)
+			if tc.status >= 400 {
+				if assert.NotNil(t, log.ErrorMessage, name) {
+					assert.Equal(t, string(body), *log.ErrorMessage, name)
+				}
+			} else {
+				assert.Nil(t, log.ErrorMessage, name)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("no record for %s", name)
+		}
 	}
 }

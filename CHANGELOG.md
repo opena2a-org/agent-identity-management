@@ -56,6 +56,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   organization and administrator each policy INSERT carries, the log lines, and the rollback when a policy is refused.
   `security_policy_seed_threshold_test.go` reads the trust-score policies from the table's new path.
 
+### Fixed: a request that ends in a returned error is recorded in `api_calls` with the status the client received
+
+- `AnalyticsTracking` read the response before the app's error handler had run, so the record it writes to
+  `api_calls` for a request that ended in a returned error carried status `200`, a response size of `0` and no error
+  message: a `404` for a path no route serves, a `403` a handler returned as a `*fiber.Error`, and the `500` the error
+  handler answers for a returned error that is not a `*fiber.Error`. The middleware now runs the app's error handler
+  itself and returns nil, as `HTTPServerSpans` and `PrometheusMiddleware` do, and records the status and response size
+  of the answer that handler writes. For a status of `400` or above, the error message is that answer's body when the
+  body is shorter than 1,000 bytes, as it already was for an error a handler writes itself.
+- `analytics_tracking_test.go` sends those three requests and one a handler answers `200` through an app with its own
+  JSON error handler, and fails when a record's status, response size or error message differs from the answer the
+  client received. On the previous middleware the first three were each recorded with status `200`.
+
 ### Fixed — `docs/API.md`'s `POST /api/v1/agents` request sends `agentType` and registers an agent, and its agent answers show `agentType` (#795)
 
 - The `POST /api/v1/agents` section of `docs/API.md` gave the agent's type as `"type": "ai_agent"` in its request
