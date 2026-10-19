@@ -17,7 +17,7 @@ import (
 // oidcSignInService is what the handler asks of application.OIDCSignInService.
 type oidcSignInService interface {
 	StartSignIn(ctx context.Context, organizationID uuid.UUID) (*application.OIDCSignInStart, error)
-	CompleteSignIn(ctx context.Context, code, state, flow string) (*domain.User, error)
+	CompleteSignIn(ctx context.Context, code, state, flow string) (*application.OIDCSignInResult, error)
 	Configuration(ctx context.Context, organizationID uuid.UUID) (*domain.OIDCSignInConfig, error)
 	Configure(ctx context.Context, organizationID, actorID uuid.UUID, in application.OIDCSignInConfigInput) (*domain.OIDCSignInConfig, error)
 	RemoveConfiguration(ctx context.Context, organizationID uuid.UUID) error
@@ -80,7 +80,9 @@ type oidcCallbackRequest struct {
 
 // CompleteSignIn completes a sign-in with the code and state the provider
 // redirected with and the flow StartSignIn answered, and answers a login pair
-// in the form POST /api/v1/auth/login/local answers one.
+// in the form POST /api/v1/auth/login/local answers one. A sign-in that
+// created its user is recorded in the audit log as a create of that user
+// before the login.
 func (h *OIDCSignInHandler) CompleteSignIn(c fiber.Ctx) error {
 	var req oidcCallbackRequest
 	if err := c.Bind().JSON(&req); err != nil {
@@ -90,7 +92,7 @@ func (h *OIDCSignInHandler) CompleteSignIn(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "code, state and flow are required"})
 	}
 
-	user, err := h.service.CompleteSignIn(c.Context(), req.Code, req.State, req.Flow)
+	result, err := h.service.CompleteSignIn(c.Context(), req.Code, req.State, req.Flow)
 	var refusal *application.OIDCSignInRefusal
 	switch {
 	case errors.As(err, &refusal):
@@ -107,6 +109,11 @@ func (h *OIDCSignInHandler) CompleteSignIn(c fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to complete the sign-in"})
 	}
 
+	user := result.User
+	if result.Provisioned {
+		h.audit(c, user.OrganizationID, user.ID, domain.AuditActionCreate, "user", user.ID,
+			fiber.Map{"method": "oidc_provisioning", "role": user.Role})
+	}
 	accessToken, refreshToken, err := h.jwtService.GenerateTokenPair(
 		user.ID.String(),
 		user.OrganizationID.String(),
@@ -144,10 +151,24 @@ func (h *OIDCSignInHandler) oidcConfigurationAnswer(cfg *domain.OIDCSignInConfig
 		"issuer":          cfg.Issuer,
 		"clientId":        cfg.ClientID,
 		"clientSecretSet": cfg.SealedClientSecret != "",
+		"provisioning":    oidcProvisioningAnswer(cfg.Provisioning),
 		"redirectUrl":     h.service.RedirectURL(),
 		"updatedBy":       cfg.UpdatedBy,
 		"updatedAt":       cfg.UpdatedAt.UTC(),
 	}
+}
+
+// oidcProvisioningAnswer is the provisioning member of a configuration's
+// answer and of the audit row of a stored one.
+func oidcProvisioningAnswer(p domain.OIDCProvisioning) fiber.Map {
+	if !p.Enabled {
+		return fiber.Map{"enabled": false}
+	}
+	domains := p.EmailDomains
+	if domains == nil {
+		domains = []string{}
+	}
+	return fiber.Map{"enabled": true, "role": p.Role, "emailDomains": domains}
 }
 
 // GetConfiguration answers the caller's organization's provider, or
@@ -168,11 +189,20 @@ func (h *OIDCSignInHandler) GetConfiguration(c fiber.Ctx) error {
 	return c.JSON(h.oidcConfigurationAnswer(cfg))
 }
 
-// oidcConfigurationRequest is the body of PUT /api/v1/admin/oidc-sign-in.
+// oidcConfigurationRequest is the body of PUT /api/v1/admin/oidc-sign-in. A
+// body without provisioning stores a configuration that provisions no user.
 type oidcConfigurationRequest struct {
-	Issuer       string `json:"issuer"`
-	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
+	Issuer       string                   `json:"issuer"`
+	ClientID     string                   `json:"clientId"`
+	ClientSecret string                   `json:"clientSecret"`
+	Provisioning *oidcProvisioningRequest `json:"provisioning"`
+}
+
+// oidcProvisioningRequest is the provisioning member of the body.
+type oidcProvisioningRequest struct {
+	Enabled      bool     `json:"enabled"`
+	Role         string   `json:"role"`
+	EmailDomains []string `json:"emailDomains"`
 }
 
 // PutConfiguration stores the caller's organization's provider, in place of
@@ -187,11 +217,15 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	cfg, err := h.service.Configure(c.Context(), organizationID, userID, application.OIDCSignInConfigInput{
+	in := application.OIDCSignInConfigInput{
 		Issuer:       req.Issuer,
 		ClientID:     req.ClientID,
 		ClientSecret: req.ClientSecret,
-	})
+	}
+	if p := req.Provisioning; p != nil {
+		in.Provisioning = application.OIDCProvisioningInput{Enabled: p.Enabled, Role: p.Role, EmailDomains: p.EmailDomains}
+	}
+	cfg, err := h.service.Configure(c.Context(), organizationID, userID, in)
 	if err != nil && !errors.Is(err, application.ErrOIDCSignInConfigInvalid) {
 		log.Printf("OIDC sign-in configuration of organization %s refused: %v", organizationID, err)
 	}
@@ -204,6 +238,12 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "clientId is required, at most 512 characters"})
 	case errors.Is(err, application.ErrOIDCClientSecretInvalid):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "clientSecret is required, at most 2048 characters"})
+	case errors.Is(err, application.ErrOIDCProvisioningRoleInvalid):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "provisioning.role must be viewer, member or manager"})
+	case errors.Is(err, application.ErrOIDCProvisioningDomainsInvalid):
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "provisioning.emailDomains must hold 1 to 20 domain names, such as example.com, when provisioning is enabled",
+		})
 	case errors.Is(err, oauth.ErrOIDCIssuerMismatch):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "The issuer's configuration document names another issuer; issuer must be the issuer the document names, exactly",
@@ -216,7 +256,11 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
-	h.audit(c, organizationID, userID, domain.AuditActionUpdate, fiber.Map{"issuer": cfg.Issuer, "clientId": cfg.ClientID})
+	h.audit(c, organizationID, userID, domain.AuditActionUpdate, oidcSignInConfigResource, organizationID, fiber.Map{
+		"issuer":       cfg.Issuer,
+		"clientId":     cfg.ClientID,
+		"provisioning": oidcProvisioningAnswer(cfg.Provisioning),
+	})
 	return c.JSON(h.oidcConfigurationAnswer(cfg))
 }
 
@@ -230,18 +274,23 @@ func (h *OIDCSignInHandler) DeleteConfiguration(c fiber.Ctx) error {
 	if err := h.service.RemoveConfiguration(c.Context(), organizationID); err != nil {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
-	h.audit(c, organizationID, userID, domain.AuditActionDelete, fiber.Map{})
+	h.audit(c, organizationID, userID, domain.AuditActionDelete, oidcSignInConfigResource, organizationID, fiber.Map{})
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// audit writes the row of a configuration change. A row that cannot be
-// written is logged and does not fail the change.
-func (h *OIDCSignInHandler) audit(c fiber.Ctx, organizationID, userID uuid.UUID, action domain.AuditAction, meta fiber.Map) {
+// oidcSignInConfigResource is the resource type of the audit rows of a
+// configuration change; their resource id is the organization's.
+const oidcSignInConfigResource = "oidc_sign_in_config"
+
+// audit writes the row of a configuration change or of a provisioned user. A
+// row that cannot be written is logged and does not fail the request.
+func (h *OIDCSignInHandler) audit(c fiber.Ctx, organizationID, userID uuid.UUID, action domain.AuditAction,
+	resourceType string, resourceID uuid.UUID, meta fiber.Map) {
 	if h.auditService == nil {
 		return
 	}
-	if err := h.auditService.LogAction(c.Context(), organizationID, userID, action, "oidc_sign_in_config", organizationID,
+	if err := h.auditService.LogAction(c.Context(), organizationID, userID, action, resourceType, resourceID,
 		recordedClientIP(c), c.Get("User-Agent"), meta); err != nil {
-		log.Printf("OIDC sign-in configuration: audit row not written: %v", err)
+		log.Printf("OIDC sign-in: %s audit row of %s not written: %v", action, resourceType, err)
 	}
 }

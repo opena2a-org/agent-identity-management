@@ -11,6 +11,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 
@@ -29,6 +30,16 @@ const (
 	maxOIDCIssuerLength       = 2048
 	maxOIDCClientIDLength     = 512
 	maxOIDCClientSecretLength = 2048
+
+	// maxOIDCProvisioningDomains is the most email domains a configuration
+	// provisions users at.
+	maxOIDCProvisioningDomains = 20
+	// maxProvisionedEmailLength and maxProvisionedNameLength are the lengths
+	// of users.email and users.name (VARCHAR(255)).
+	maxProvisionedEmailLength = 255
+	maxProvisionedNameLength  = 255
+	// provisionedUserProvider is the users.provider of a provisioned user.
+	provisionedUserProvider = "oidc"
 )
 
 // The reasons an OIDCSignInRefusal names, one per check that refuses a sign-in.
@@ -41,9 +52,14 @@ const (
 	OIDCSignInRefusedCodeRefused          = "code_refused"          // the token endpoint refused the authorization code
 	OIDCSignInRefusedIDTokenInvalid       = "id_token_invalid"      // the ID token failed verification
 	OIDCSignInRefusedEmailNotVerified     = "email_not_verified"    // the ID token asserts no email, or not as verified
-	OIDCSignInRefusedNoUser               = "no_user"               // no user of the organization has the email
+	OIDCSignInRefusedNoUser               = "no_user"               // no user of the organization has the email, and the configuration provisions none
 	OIDCSignInRefusedAmbiguousUser        = "ambiguous_user"        // more than one user of the organization has the email
 	OIDCSignInRefusedAccountInactive      = "account_inactive"      // the user may not hold a session
+
+	// The two reasons of a configuration that provisions users, for an email
+	// that no user of the organization has.
+	OIDCSignInRefusedDomainNotProvisioned     = "domain_not_provisioned"      // the email is not an address at one of the configuration's domains
+	OIDCSignInRefusedEmailInOtherOrganization = "email_in_other_organization" // a user of another organization has the email
 )
 
 // OIDCSignInRefusal is the error CompleteSignIn returns when it refuses a
@@ -81,7 +97,21 @@ var (
 	// ErrOIDCClientSecretInvalid: the client secret is empty or longer than
 	// 2048 characters.
 	ErrOIDCClientSecretInvalid = fmt.Errorf("%w: clientSecret", ErrOIDCSignInConfigInvalid)
+	// ErrOIDCProvisioningRoleInvalid: provisioning is enabled with a role
+	// other than viewer, member or manager.
+	ErrOIDCProvisioningRoleInvalid = fmt.Errorf("%w: provisioning.role", ErrOIDCSignInConfigInvalid)
+	// ErrOIDCProvisioningDomainsInvalid: provisioning is enabled with no
+	// email domain, with more than 20, or with one that is not a domain name.
+	ErrOIDCProvisioningDomainsInvalid = fmt.Errorf("%w: provisioning.emailDomains", ErrOIDCSignInConfigInvalid)
 )
+
+// oidcProvisionedRoles are the roles a provisioned user may be given. A
+// provider's assertion of an email never makes its holder an administrator.
+var oidcProvisionedRoles = map[domain.UserRole]bool{
+	domain.RoleViewer:  true,
+	domain.RoleMember:  true,
+	domain.RoleManager: true,
+}
 
 // OIDCSignInSealer seals what OIDC sign-in keeps out of reach: an
 // organization's client secret at rest, and the state of a sign-in while the
@@ -94,12 +124,17 @@ type OIDCSignInSealer interface {
 }
 
 // OIDCSignInUsers is the part of the user repository OIDC sign-in uses: it
-// reads the users of one organization and records a sign-in. It has no method
-// that creates a user or changes the organization of one.
+// reads the users of one organization, records a sign-in, and, for a
+// configuration that provisions users, looks an email up in the other
+// organizations and creates a user. The service creates a user only of the
+// organization a sign-in is for; the interface has no method that changes the
+// organization of a user.
 type OIDCSignInUsers interface {
 	GetByOrganization(orgID uuid.UUID) ([]*domain.User, error)
 	GetByID(id uuid.UUID) (*domain.User, error)
 	UpdateLastLogin(id uuid.UUID, at time.Time) error
+	EmailInUseOutsideOrganization(email string, organizationID uuid.UUID) (bool, error)
+	Create(user *domain.User) error
 }
 
 // OIDCSignInOrganizations reads an organization.
@@ -111,9 +146,11 @@ type OIDCSignInOrganizations interface {
 // Connect provider with the authorization code flow and PKCE. The server
 // keeps nothing between the start of a sign-in and its callback: the state,
 // the nonce and the code verifier travel sealed in the flow value the client
-// holds. A sign-in ends as an existing user of the organization whose
-// provider issued the ID token, matched by the token's verified email among
-// that organization's users only; it creates no user.
+// holds. A sign-in ends as a user of the organization whose provider issued
+// the ID token, matched by the token's verified email among that
+// organization's users only. It creates a user only when that organization's
+// configuration provisions users and none of them has the email, and then only
+// a user of that organization.
 type OIDCSignInService struct {
 	configs     domain.OIDCSignInConfigRepository
 	orgs        OIDCSignInOrganizations
@@ -163,14 +200,27 @@ type OIDCSignInConfigInput struct {
 	Issuer       string
 	ClientID     string
 	ClientSecret string
+	// Provisioning is stored only when it is enabled.
+	Provisioning OIDCProvisioningInput
+}
+
+// OIDCProvisioningInput is the just-in-time provisioning of a configuration.
+type OIDCProvisioningInput struct {
+	Enabled bool
+	// Role is viewer, member or manager; empty is viewer.
+	Role string
+	// EmailDomains are 1 to 20 domain names, such as example.com.
+	EmailDomains []string
 }
 
 // Configure stores in as the organization's configuration, in place of any
 // earlier one, with the client secret sealed to the organization. It refuses
 // an issuer, client id or client secret that breaks its rule with
 // ErrOIDCIssuerInvalid, ErrOIDCClientIDInvalid or ErrOIDCClientSecretInvalid,
-// and an issuer whose configuration document cannot be read or names another
-// issuer with an error that wraps oauth.ErrOIDCProviderUnavailable.
+// an enabled provisioning whose role or domains break their rule with
+// ErrOIDCProvisioningRoleInvalid or ErrOIDCProvisioningDomainsInvalid, and an
+// issuer whose configuration document cannot be read or names another issuer
+// with an error that wraps oauth.ErrOIDCProviderUnavailable.
 func (s *OIDCSignInService) Configure(ctx context.Context, organizationID, actorID uuid.UUID, in OIDCSignInConfigInput) (*domain.OIDCSignInConfig, error) {
 	issuer := strings.TrimSpace(in.Issuer)
 	clientID := strings.TrimSpace(in.ClientID)
@@ -181,6 +231,10 @@ func (s *OIDCSignInService) Configure(ctx context.Context, organizationID, actor
 		return nil, ErrOIDCClientIDInvalid
 	case strings.TrimSpace(in.ClientSecret) == "" || len(in.ClientSecret) > maxOIDCClientSecretLength:
 		return nil, ErrOIDCClientSecretInvalid
+	}
+	provisioning, err := checkOIDCProvisioning(in.Provisioning)
+	if err != nil {
+		return nil, err
 	}
 	if err := oauth.CheckOIDCIssuer(issuer); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrOIDCIssuerInvalid, err)
@@ -198,11 +252,74 @@ func (s *OIDCSignInService) Configure(ctx context.Context, organizationID, actor
 		Issuer:             issuer,
 		ClientID:           clientID,
 		SealedClientSecret: sealed,
+		Provisioning:       provisioning,
 		UpdatedBy:          actorID,
 	}); err != nil {
 		return nil, err
 	}
 	return s.configs.Get(ctx, organizationID)
+}
+
+// checkOIDCProvisioning returns the provisioning to store for in. A
+// provisioning that is not enabled stores none, whatever role or domains it
+// names. One that is enabled stores its role, or viewer when it names none,
+// and its domains in lower case without a final dot, each once, in the order
+// given.
+func checkOIDCProvisioning(in OIDCProvisioningInput) (domain.OIDCProvisioning, error) {
+	if !in.Enabled {
+		return domain.OIDCProvisioning{}, nil
+	}
+	role := domain.UserRole(strings.TrimSpace(in.Role))
+	if role == "" {
+		role = domain.RoleViewer
+	}
+	if !oidcProvisionedRoles[role] {
+		return domain.OIDCProvisioning{}, ErrOIDCProvisioningRoleInvalid
+	}
+	if len(in.EmailDomains) == 0 || len(in.EmailDomains) > maxOIDCProvisioningDomains {
+		return domain.OIDCProvisioning{}, ErrOIDCProvisioningDomainsInvalid
+	}
+	domains := make([]string, 0, len(in.EmailDomains))
+	seen := make(map[string]bool, len(in.EmailDomains))
+	for _, d := range in.EmailDomains {
+		name, ok := normalizeEmailDomain(d)
+		if !ok {
+			return domain.OIDCProvisioning{}, ErrOIDCProvisioningDomainsInvalid
+		}
+		if !seen[name] {
+			seen[name] = true
+			domains = append(domains, name)
+		}
+	}
+	return domain.OIDCProvisioning{Enabled: true, Role: role, EmailDomains: domains}, nil
+}
+
+// normalizeEmailDomain returns d in lower case, without surrounding space or
+// a final dot, and whether that is a domain name: at most 253 characters, two
+// or more labels, and each label 1 to 63 ASCII letters, digits or hyphens
+// that neither starts nor ends with a hyphen. A wildcard, an address and a
+// name of one label are not.
+func normalizeEmailDomain(d string) (string, bool) {
+	name := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d)), ".")
+	if name == "" || len(name) > 253 {
+		return "", false
+	}
+	labels := strings.Split(name, ".")
+	if len(labels) < 2 {
+		return "", false
+	}
+	for _, label := range labels {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return "", false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
+				return "", false
+			}
+		}
+	}
+	return name, true
 }
 
 // RemoveConfiguration removes the organization's configuration, after which
@@ -326,12 +443,20 @@ func (s *OIDCSignInService) openFlow(value string) (*oidcSignInFlow, error) {
 	return &flow, nil
 }
 
+// OIDCSignInResult is a completed sign-in.
+type OIDCSignInResult struct {
+	// User is the user signed in.
+	User *domain.User
+	// Provisioned is set when the sign-in created User.
+	Provisioned bool
+}
+
 // CompleteSignIn completes the sign-in flow started with the code and state
 // the provider redirected with. It returns the signed-in user, after
-// recording the sign-in in the user's last_login_at. A refused sign-in
-// returns an *OIDCSignInRefusal. An error reaching the provider wraps
-// oauth.ErrOIDCProviderUnavailable.
-func (s *OIDCSignInService) CompleteSignIn(ctx context.Context, code, state, flowValue string) (*domain.User, error) {
+// recording the sign-in in the user's last_login_at, and whether the sign-in
+// created the user. A refused sign-in returns an *OIDCSignInRefusal. An error
+// reaching the provider wraps oauth.ErrOIDCProviderUnavailable.
+func (s *OIDCSignInService) CompleteSignIn(ctx context.Context, code, state, flowValue string) (*OIDCSignInResult, error) {
 	flow, err := s.openFlow(flowValue)
 	if err != nil {
 		return nil, &OIDCSignInRefusal{Reason: OIDCSignInRefusedFlowInvalid, cause: err}
@@ -398,14 +523,27 @@ func (s *OIDCSignInService) CompleteSignIn(ctx context.Context, code, state, flo
 	// The user is looked up among the users of the flow's organization only:
 	// a provider configured for one organization never signs in a user of
 	// another, whatever email it asserts.
-	members, err := s.users.GetByOrganization(flow.OrganizationID)
+	matched, err := s.usersWithEmail(flow.OrganizationID, email)
 	if err != nil {
-		return nil, fmt.Errorf("reading the organization's users: %w", err)
+		return nil, err
 	}
-	matched := make([]*domain.User, 0)
-	for _, member := range members {
-		if member.OrganizationID == flow.OrganizationID && strings.EqualFold(strings.TrimSpace(member.Email), email) {
-			matched = append(matched, member)
+	provisioned := false
+	// A stored role that Configure would refuse provisions no one.
+	if len(matched) == 0 && cfg.Provisioning.Enabled && oidcProvisionedRoles[cfg.Provisioning.Role] {
+		created, reason, err := s.provision(flow.OrganizationID, cfg.Provisioning, identity, email, now)
+		switch {
+		case reason != "":
+			return nil, refuse(reason, uuid.Nil, nil)
+		case err != nil:
+			// A concurrent first sign-in with the email may have created the
+			// user first, so the organization's users are read again.
+			again, readErr := s.usersWithEmail(flow.OrganizationID, email)
+			if readErr != nil || len(again) == 0 {
+				return nil, err
+			}
+			matched = again
+		default:
+			matched, provisioned = []*domain.User{created}, true
 		}
 	}
 	switch len(matched) {
@@ -437,5 +575,103 @@ func (s *OIDCSignInService) CompleteSignIn(ctx context.Context, code, state, flo
 		user.LastLoginAt = &at
 		user.UpdatedAt = at
 	}
-	return user, nil
+	return &OIDCSignInResult{User: user, Provisioned: provisioned}, nil
+}
+
+// usersWithEmail returns the users of the organization whose email is email,
+// compared without regard to case.
+func (s *OIDCSignInService) usersWithEmail(organizationID uuid.UUID, email string) ([]*domain.User, error) {
+	members, err := s.users.GetByOrganization(organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("reading the organization's users: %w", err)
+	}
+	matched := make([]*domain.User, 0)
+	for _, member := range members {
+		if member.OrganizationID == organizationID && strings.EqualFold(strings.TrimSpace(member.Email), email) {
+			matched = append(matched, member)
+		}
+	}
+	return matched, nil
+}
+
+// provision creates a user of the organization for the verified email that a
+// sign-in through the organization's provider asserts and no user of the
+// organization has. The user has p's role, is active, and has the email in
+// lower case and the ID token's name. The reason of a refusal is returned,
+// and nothing is created, when the email is not an address at one of p's
+// domains or a user of another organization has it.
+func (s *OIDCSignInService) provision(organizationID uuid.UUID, p domain.OIDCProvisioning, identity *oauth.IDTokenIdentity, email string, now time.Time) (*domain.User, string, error) {
+	address := strings.ToLower(email)
+	if !provisionsAddress(p, address) {
+		return nil, OIDCSignInRefusedDomainNotProvisioned, nil
+	}
+	inUse, err := s.users.EmailInUseOutsideOrganization(address, organizationID)
+	if err != nil {
+		return nil, "", fmt.Errorf("looking the email up in other organizations: %w", err)
+	}
+	if inUse {
+		return nil, OIDCSignInRefusedEmailInOtherOrganization, nil
+	}
+
+	at := now.UTC()
+	id := uuid.New()
+	user := &domain.User{
+		ID:             id,
+		OrganizationID: organizationID,
+		Email:          address,
+		Name:           provisionedName(identity.Name, address),
+		Role:           p.Role,
+		Provider:       provisionedUserProvider,
+		// users.provider_id is unique per provider across every organization,
+		// and a provider's subject is unique only per issuer, so the user's
+		// own id stands in for it.
+		ProviderID: id.String(),
+		Status:     domain.UserStatusActive,
+		ApprovedAt: &at,
+		CreatedAt:  at,
+		UpdatedAt:  at,
+	}
+	if err := s.users.Create(user); err != nil {
+		return nil, "", fmt.Errorf("creating the provisioned user: %w", err)
+	}
+	log.Printf("OIDC sign-in: user %s provisioned in organization %s with role %s", user.ID, organizationID, user.Role)
+	return user, "", nil
+}
+
+// provisionsAddress reports whether p creates a user for address, an email in
+// lower case: at most 255 bytes, one @ after a nonempty local part, no space
+// or control character, and a domain that is one of p's domains exactly. A
+// subdomain of one of them is not.
+func provisionsAddress(p domain.OIDCProvisioning, address string) bool {
+	if len(address) > maxProvisionedEmailLength || strings.Count(address, "@") != 1 {
+		return false
+	}
+	for _, r := range address {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return false
+		}
+	}
+	local, domainName, _ := strings.Cut(address, "@")
+	if local == "" {
+		return false
+	}
+	for _, d := range p.EmailDomains {
+		if domainName == d {
+			return true
+		}
+	}
+	return false
+}
+
+// provisionedName is the name of a provisioned user: the ID token's name, or
+// the address when the token has none, cut to 255 characters.
+func provisionedName(name, address string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = address
+	}
+	if r := []rune(name); len(r) > maxProvisionedNameLength {
+		name = string(r[:maxProvisionedNameLength])
+	}
+	return name
 }
