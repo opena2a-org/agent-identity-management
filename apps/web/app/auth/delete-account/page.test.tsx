@@ -76,6 +76,15 @@ describe("delete account page", () => {
     expect(router.replace).toHaveBeenCalledWith("/auth/login?returnUrl=%2Fauth%2Fdelete-account");
   });
 
+  it("says that the organization is deleted with the account when no other user is left in it", () => {
+    render(<DeleteAccountPage />);
+    expect(
+      screen.getByText(
+        "If no other user is left in your organization then, the organization is deleted too, with its agents and MCP servers."
+      )
+    ).toBeTruthy();
+  });
+
   it("asks for the password before it sends anything", () => {
     render(<DeleteAccountPage />);
     fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));

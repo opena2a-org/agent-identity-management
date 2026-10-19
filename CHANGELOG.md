@@ -222,6 +222,38 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Changed: the account deletion purge deletes an organization it leaves with no user
+
+- When the account deletion purge deletes the last user of an organization, it deletes the organization too, in the
+  same transaction, with the rows whose reference to the organization has `ON DELETE CASCADE`: among them the
+  organization's agents, MCP servers, API keys, webhooks and audit log rows. Before this change the purge deleted the
+  user and kept the organization, with its agents, MCP servers and other rows and no user. `a2a_call_chain` and
+  `a2a_security_violations` keep their rows, with their reference to the organization set to `NULL`.
+- Migration `140_organization_references_allow_organization_delete.sql` gives `ON DELETE CASCADE` to the three
+  references to `organizations(id)` that had no `ON DELETE` rule: `a2a_consent_records.organization_id`,
+  `community_intelligence_reports.organization_id` and `device_codes.organization_id`. Deleting an organization that
+  held an A2A consent record or a community intelligence report was refused with a foreign-key violation.
+- An organization that has a signed audit record chain is kept, as `record_chains.organization_id` and
+  `record_debts.organization_id` keep `ON DELETE RESTRICT`: the purge deletes the account all the same and logs the
+  refusal. Another failure of the organization's delete rolls back the purge's batch, whose accounts the next run
+  deletes.
+- The purge locks the organization's row before it reads whether a user is left: a user that another transaction is
+  adding to the organization when the purge reaches it is counted once that transaction commits, and the organization
+  and that user are kept.
+- No `account_deleted` audit row is written for an account whose organization the purge deleted with it, as the
+  organization's audit log goes with the organization; the server logs a line that names the user and the
+  organization.
+- The purge chooses and locks the due accounts of a batch once, in a `MATERIALIZED` common table expression. Its
+  `DELETE FROM users ... WHERE id IN (SELECT ... LIMIT ... FOR UPDATE SKIP LOCKED)` was planned as a nested loop that
+  ran the subquery again for each row of `users`, and with the oldest due account locked by another transaction it
+  deleted two accounts under a limit of one.
+- The dashboard's `/auth/delete-account` page says that the organization is deleted too, with its agents and MCP
+  servers, when no other user is left in it then, and `docs/API.md` describes the organization's delete.
+- Tests: against PostgreSQL, `apps/backend/internal/infrastructure/repository/user_deletion_organization_integration_test.go`,
+  five of whose six tests fail with the purge code and the migrations of this change's parent; and
+  `apps/backend/internal/application/account_deletion_service_test.go` and
+  `apps/web/app/auth/delete-account/page.test.tsx`.
+
 ### Added: a signed-in user can ask for the deletion of their own account, which is deactivated at once and deleted 29 days later
 
 - `POST /api/v1/auth/delete-account` takes the signed-in user's password, checked as at sign-in: a wrong password is
@@ -232,7 +264,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `139_user_deletion_requests.sql`). The account deletion purge, which the server runs at start and every hour,
   deletes each account whose request is 29 days old or older, as `DELETE /api/v1/admin/users/:id` deletes a user: the
   user's API keys and the user's own audit rows go with it, and the agents and MCP servers the user created are kept
-  without a creator. The request does not revoke the API keys before then. An admin who activates the account
+  without a creator, unless the purge deletes the organization with them, as the entry above describes. The request
+  does not revoke the API keys before then. An admin who activates the account
   withdraws the request: a trigger the migration adds clears it when the account's status leaves `deactivated`.
 - The organization's only active admin is refused with `409` and the code `lastActiveAdmin` while the organization
   has another user who is not deactivated. The requests of one organization are taken one at a time, so two admins
@@ -242,7 +275,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   deactivation as after a deletion request; they were admitted until they expired (`JWT_ACCESS_TTL`, `2h` by default).
 - The request is recorded as an `account_deletion_requested` audit row, which the deletion removes with the user's
   other rows, and the deletion as an `account_deleted` row that names no user and whose resource is the deleted
-  user's id.
+  user's id, when the organization is kept.
 - The route shares the strict rate limit of the other `/api/v1/auth` routes (10 requests a minute), and `docs/API.md`
   documents it.
 - The refused password's `401` carries the code `invalidPassword`. The route's other `401` answers, which refuse the
