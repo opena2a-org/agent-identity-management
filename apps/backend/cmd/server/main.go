@@ -206,14 +206,14 @@ func main() {
 	// Initialize application services
 	services, keyVault := initServices(cfg, db, repos, cacheService, oauthRepo, jwtService, emailService)
 
-	// Convert stored agent private keys to the storage-bound v2 format once,
+	// Convert stored v1 agent private keys to the storage-bound format once,
 	// before the server accepts requests: the request path refuses v1.
 	if _, err := application.MigrateAgentPrivateKeysToV2(context.Background(), migrationDB, keyVault); err != nil {
 		log.Printf("Agent private key migration did not finish: %v", err)
 	}
 
-	// Re-encrypt stored agent private keys under an older storage key id in
-	// the key ring to the current one. With one key in the ring it reads nothing.
+	// Move stored agent private keys under an older storage key id in the key
+	// ring to the current one. With one key in the ring it reads nothing.
 	if _, err := application.RewrapAgentPrivateKeys(context.Background(), migrationDB, keyVault); err != nil {
 		log.Printf("Agent private key sweep did not finish: %v", err)
 	}

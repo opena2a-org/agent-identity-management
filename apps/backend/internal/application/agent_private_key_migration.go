@@ -11,7 +11,9 @@ import (
 )
 
 // agentPrivateKeyMigrationVersion marks, in schema_migrations, that every
-// stored agent private key has been converted to the storage-bound v2 format.
+// stored agent private key has been converted from v1 to a storage-bound
+// format. The marker, the function and the field names say v2, the first
+// storage-bound format; a conversion writes format v3.
 const agentPrivateKeyMigrationVersion = "keyvault/agent-private-key-v2"
 
 // AgentPrivateKeyMigrationResult is the record of one migration run. It holds
@@ -19,15 +21,16 @@ const agentPrivateKeyMigrationVersion = "keyvault/agent-private-key-v2"
 type AgentPrivateKeyMigrationResult struct {
 	AlreadyComplete bool // an earlier run finished; nothing was read
 	V1Read          int  // v1 ciphertexts decrypted
-	V2Written       int  // rows rewritten in v2, bound to their own ID
-	AlreadyV2       int  // rows already in v2 for their own ID
-	Failures        int  // rows not readable as v1 or v2 for their own ID, or not rewritten
+	V2Written       int  // rows rewritten in format v3, bound to their own ID
+	AlreadyV2       int  // rows already in format v2 or v3 for their own ID
+	Failures        int  // rows not readable as v1, v2 or v3 for their own ID, or not rewritten
 	Recorded        bool // the run finished with no failures and is marked complete
 }
 
 // MigrateAgentPrivateKeysToV2 converts each stored agent private key from v1
-// (no additional data) to v2 (bound to the agent row's ID), once. The request
-// path refuses v1, so this runs at startup before the server accepts requests.
+// (no additional data) to format v3 (bound to the agent row's ID, under a data
+// key of its own), once. The request path refuses v1, so this runs at startup
+// before the server accepts requests.
 //
 // It is marked complete only when every row converts. Until then it runs again
 // at the next startup and touches only the rows still in v1. A row that cannot

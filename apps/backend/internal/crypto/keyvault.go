@@ -21,10 +21,12 @@ import (
 )
 
 // KeyVault handles secure storage and retrieval of private keys
-// Uses AES-256-GCM for encryption at rest, bound to the storing agent row
+// Uses AES-256-GCM for encryption at rest, bound to the storing agent row. Each
+// value is sealed under a data key of its own, and the data key is stored
+// sealed under a master key, the key-encryption key.
 //
 // It holds a ring of master keys keyed by storage-key id, the second byte of
-// the v2 header. It decrypts under any id in the ring, encrypts only under the
+// the header. It decrypts under any id in the ring, encrypts only under the
 // current id, and refuses an id outside the ring.
 type KeyVault struct {
 	masterKey []byte          // the current master key (AES-256, 32 bytes); derived signing keys come from it
@@ -158,9 +160,9 @@ func (kv *KeyVault) MasterKeySource() string {
 }
 
 // MasterKeyIdentity returns the identity of the current master key, the key
-// every new ciphertext is encrypted under: 32 lowercase hex characters. It
-// names the key without revealing it, so two starts can be compared; it is not
-// a key and is used for nothing else.
+// the data key of every new ciphertext is sealed under: 32 lowercase hex
+// characters. It names the key without revealing it, so two starts can be
+// compared; it is not a key and is used for nothing else.
 func (kv *KeyVault) MasterKeyIdentity() string {
 	return masterKeyIdentity(kv.masterKey)
 }
@@ -182,8 +184,8 @@ var ephemeralKeyEnvironments = map[string]bool{
 }
 
 const (
-	// MasterKeyEnvVar holds the current master key: every new ciphertext is
-	// encrypted under it.
+	// MasterKeyEnvVar holds the current master key: the data key of every new
+	// ciphertext is sealed under it.
 	MasterKeyEnvVar = "KEYVAULT_MASTER_KEY"
 	// MasterKeyIDEnvVar holds the storage-key id of MasterKeyEnvVar, a decimal
 	// number from 1 to 255. Unset, it is 1.
@@ -302,35 +304,63 @@ func newKeyVaultFromEnv(getenv func(string) string) (*KeyVault, error) {
 	return kv, nil
 }
 
-// Stored agent private keys use format v2:
+// Stored agent private keys use format v3:
+//
+//	header (version byte, storage-key id)
+//	|| data key nonce || data key sealed with AES-256-GCM under the master key, and its tag
+//	|| nonce || AES-256-GCM ciphertext and tag under the data key
+//
+// The data key is 32 random bytes generated for that one value, and it is
+// stored only in its sealed form. The header travels in cleartext. The
+// additional data of the sealed data key binds the purpose label, the header
+// and the ID of the agent row the ciphertext is stored in:
+//
+//	"aim/agent-private-key/data-key" 0x00 header 0x00 agents.id (canonical lowercase)
+//
+// and the additional data of the ciphertext binds the purpose label, the
+// version byte and the same row:
+//
+//	"aim/agent-private-key" 0x00 0x03 0x00 agents.id (canonical lowercase)
+//
+// The ciphertext's additional data leaves out the storage-key id, so moving a
+// value to another master key seals its data key again and leaves the
+// ciphertext as it is.
+//
+// Format v2, written before data keys, seals the value under the master key
+// itself, with the purpose label, the header and the row as additional data:
 //
 //	header (version byte, storage-key id) || nonce || AES-256-GCM ciphertext and tag
-//
-// The header travels in cleartext and is authenticated as part of the
-// additional data, which also binds the purpose label and the ID of the agent
-// row the ciphertext is stored in:
-//
 //	"aim/agent-private-key" 0x00 header 0x00 agents.id (canonical lowercase)
 //
-// A ciphertext copied from one agent row to another therefore fails to decrypt.
-// Callers pass the ID of the row they loaded, never an ID taken from a request.
+// The vault decrypts format v2 and never writes it.
 //
-// The storage-key id names the master key in the vault's ring that encrypted
-// the ciphertext; it is never 0.
+// In both formats a ciphertext copied from one agent row to another fails to
+// decrypt. Callers pass the ID of the row they loaded, never an ID taken from a
+// request. The storage-key id names the master key in the vault's ring that
+// sealed the data key (v3) or the ciphertext (v2); it is never 0.
 const (
 	agentPrivateKeyPurpose = "aim/agent-private-key"
 
+	// dataKeyLabel is appended to the purpose label in the additional data of
+	// a sealed data key.
+	dataKeyLabel = "/data-key"
+
 	privateKeyFormatV2 byte = 0x02
+	privateKeyFormatV3 byte = 0x03
 
 	// defaultStorageKeyID is the storage-key id of a vault built from one
 	// master key, and of KEYVAULT_MASTER_KEY when KEYVAULT_MASTER_KEY_ID is unset.
 	defaultStorageKeyID byte = 0x01
 
 	privateKeyHeaderSize = 2
+
+	// dataKeySize is the length of a data key: AES-256.
+	dataKeySize = 32
 )
 
-// ErrUnsupportedPrivateKeyFormat is returned when a stored private key is not
-// in format v2, including a v1 ciphertext that predates storage binding.
+// ErrUnsupportedPrivateKeyFormat is returned when a stored private key is in
+// neither format v2 nor format v3, including a v1 ciphertext that predates
+// storage binding.
 var ErrUnsupportedPrivateKeyFormat = errors.New("unsupported private key format")
 
 // newGCM returns the AEAD for the current master key.
@@ -364,41 +394,121 @@ func storageAAD(purpose string, header []byte, agentID uuid.UUID) []byte {
 	return aad
 }
 
-func (kv *KeyVault) sealV2(purpose string, agentID uuid.UUID, plaintext []byte) (string, error) {
+// valueAAD builds the additional data that binds a v3 ciphertext to its
+// purpose, its format and the agent row it is stored in. It leaves out the
+// storage-key id.
+func valueAAD(purpose string, agentID uuid.UUID) []byte {
+	return storageAAD(purpose, []byte{privateKeyFormatV3}, agentID)
+}
+
+// sealV3 seals plaintext under a new data key, and the data key under the
+// current master key.
+func (kv *KeyVault) sealV3(purpose string, agentID uuid.UUID, plaintext []byte) (string, error) {
 	if agentID == uuid.Nil {
 		return "", fmt.Errorf("agent ID is required to encrypt a private key")
 	}
 
-	gcm, err := kv.newGCM()
+	dataKey := make([]byte, dataKeySize)
+	if _, err := io.ReadFull(rand.Reader, dataKey); err != nil {
+		return "", fmt.Errorf("failed to generate data key: %w", err)
+	}
+	gcm, err := gcmFor(dataKey)
 	if err != nil {
 		return "", err
 	}
 
-	header := []byte{privateKeyFormatV2, kv.currentID}
-
-	// Generate a random nonce
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
 
-	out := make([]byte, 0, len(header)+len(nonce)+len(plaintext)+gcm.Overhead())
+	sealedValue := make([]byte, 0, len(nonce)+len(plaintext)+gcm.Overhead())
+	sealedValue = append(sealedValue, nonce...)
+	sealedValue = gcm.Seal(sealedValue, nonce, plaintext, valueAAD(purpose, agentID))
+
+	return kv.wrapV3(purpose, agentID, dataKey, sealedValue)
+}
+
+// wrapV3 seals dataKey under the current master key and returns the stored
+// value: the v3 header, the sealed data key, and sealedValue, the nonce and
+// ciphertext the data key sealed.
+func (kv *KeyVault) wrapV3(purpose string, agentID uuid.UUID, dataKey, sealedValue []byte) (string, error) {
+	gcm, err := kv.newGCM()
+	if err != nil {
+		return "", err
+	}
+
+	header := []byte{privateKeyFormatV3, kv.currentID}
+
+	keyNonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, keyNonce); err != nil {
+		return "", fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	out := make([]byte, 0, len(header)+len(keyNonce)+len(dataKey)+gcm.Overhead()+len(sealedValue))
 	out = append(out, header...)
-	out = append(out, nonce...)
-	out = gcm.Seal(out, nonce, plaintext, storageAAD(purpose, header, agentID))
+	out = append(out, keyNonce...)
+	out = gcm.Seal(out, keyNonce, dataKey, storageAAD(purpose+dataKeyLabel, header, agentID))
+	out = append(out, sealedValue...)
 
 	return base64.StdEncoding.EncodeToString(out), nil
 }
 
-func (kv *KeyVault) openV2(purpose string, agentID uuid.UUID, encoded string) ([]byte, error) {
-	if agentID == uuid.Nil {
-		return nil, fmt.Errorf("agent ID is required to decrypt a private key")
+// unwrapV3 opens the data key of a decoded v3 value under the master key its
+// header names. It returns the data key and the rest of the value: the nonce
+// and ciphertext the data key sealed.
+func (kv *KeyVault) unwrapV3(purpose string, agentID uuid.UUID, data []byte) (dataKey, sealedValue []byte, err error) {
+	header := data[:privateKeyHeaderSize]
+	masterKey, ok := kv.ring[header[1]]
+	if !ok {
+		return nil, nil, fmt.Errorf("unknown storage key id %d", header[1])
 	}
 
-	data, err := decodeV2(encoded)
+	gcm, err := gcmFor(masterKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// The data key's nonce, the sealed data key and its tag, then at least a
+	// nonce and a tag for the ciphertext. Both keys are AES-256-GCM keys, so
+	// the ciphertext's nonce and tag have the sizes of the data key's.
+	rest := data[privateKeyHeaderSize:]
+	nonceSize := gcm.NonceSize()
+	sealedKeyEnd := nonceSize + dataKeySize + gcm.Overhead()
+	if len(rest) < sealedKeyEnd+nonceSize+gcm.Overhead() {
+		return nil, nil, fmt.Errorf("ciphertext too short")
+	}
+
+	dataKey, err = gcm.Open(nil, rest[:nonceSize], rest[nonceSize:sealedKeyEnd], storageAAD(purpose+dataKeyLabel, header, agentID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+	return dataKey, rest[sealedKeyEnd:], nil
+}
+
+// openSealedValue opens the nonce and ciphertext of a v3 value under its data
+// key.
+func openSealedValue(purpose string, agentID uuid.UUID, dataKey, sealedValue []byte) ([]byte, error) {
+	gcm, err := gcmFor(dataKey)
 	if err != nil {
 		return nil, err
 	}
+
+	nonceSize := gcm.NonceSize()
+	if len(sealedValue) < nonceSize+gcm.Overhead() {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+	nonce, ciphertext := sealedValue[:nonceSize], sealedValue[nonceSize:]
+
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, valueAAD(purpose, agentID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+	return plaintext, nil
+}
+
+// openV2 decrypts a decoded v2 value under the master key its header names.
+func (kv *KeyVault) openV2(purpose string, agentID uuid.UUID, data []byte) ([]byte, error) {
 	header := data[:privateKeyHeaderSize]
 	masterKey, ok := kv.ring[header[1]]
 	if !ok {
@@ -424,9 +534,31 @@ func (kv *KeyVault) openV2(purpose string, agentID uuid.UUID, encoded string) ([
 	return plaintext, nil
 }
 
-// decodeV2 decodes a stored ciphertext and checks that it starts with a v2
-// header.
-func decodeV2(encoded string) ([]byte, error) {
+// open decrypts a stored value in format v2 or v3 for the agent row with the
+// given ID.
+func (kv *KeyVault) open(purpose string, agentID uuid.UUID, encoded string) ([]byte, error) {
+	if agentID == uuid.Nil {
+		return nil, fmt.Errorf("agent ID is required to decrypt a private key")
+	}
+
+	data, err := decodeStored(encoded)
+	if err != nil {
+		return nil, err
+	}
+	if data[0] == privateKeyFormatV2 {
+		return kv.openV2(purpose, agentID, data)
+	}
+
+	dataKey, sealedValue, err := kv.unwrapV3(purpose, agentID, data)
+	if err != nil {
+		return nil, err
+	}
+	return openSealedValue(purpose, agentID, dataKey, sealedValue)
+}
+
+// decodeStored decodes a stored ciphertext and checks that it starts with a
+// v2 or v3 header.
+func decodeStored(encoded string) ([]byte, error) {
 	data, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode ciphertext: %w", err)
@@ -434,42 +566,65 @@ func decodeV2(encoded string) ([]byte, error) {
 	if len(data) < privateKeyHeaderSize {
 		return nil, fmt.Errorf("ciphertext too short")
 	}
-	if data[0] != privateKeyFormatV2 {
+	if data[0] != privateKeyFormatV2 && data[0] != privateKeyFormatV3 {
 		return nil, ErrUnsupportedPrivateKeyFormat
 	}
 	return data, nil
 }
 
 // PrivateKeyStorageKeyID returns the storage-key id in the header of a stored
-// private key, without decrypting it. A value that is not in format v2 returns
-// ErrUnsupportedPrivateKeyFormat.
+// private key, without decrypting it. A value in neither format v2 nor format
+// v3 returns ErrUnsupportedPrivateKeyFormat.
 func PrivateKeyStorageKeyID(encryptedPrivateKey string) (byte, error) {
-	data, err := decodeV2(encryptedPrivateKey)
+	data, err := decodeStored(encryptedPrivateKey)
 	if err != nil {
 		return 0, err
 	}
 	return data[1], nil
 }
 
-// RewrapPrivateKey re-encrypts the private key stored in the agent row with
-// the given ID under the current storage-key id, from any id in the ring. A
+// RewrapPrivateKey moves the private key stored in the agent row with the
+// given ID to the current storage-key id, from any id in the ring. A v3 value
+// keeps its data key and its ciphertext: once the ciphertext opens under the
+// data key, the data key is sealed again under the current master key. A v2
+// value is decrypted and sealed again in format v3, under a new data key. A
 // value already under the current id is returned unchanged with
 // rewrapped=false. The ciphertext stays bound to the same row, and the key
 // pair is unchanged.
 func (kv *KeyVault) RewrapPrivateKey(agentID uuid.UUID, encryptedPrivateKey string) (string, bool, error) {
-	id, err := PrivateKeyStorageKeyID(encryptedPrivateKey)
+	data, err := decodeStored(encryptedPrivateKey)
 	if err != nil {
 		return "", false, err
 	}
-	if id == kv.currentID {
+	if data[1] == kv.currentID {
 		return encryptedPrivateKey, false, nil
 	}
+	if agentID == uuid.Nil {
+		return "", false, fmt.Errorf("agent ID is required to decrypt a private key")
+	}
 
-	plaintext, err := kv.openV2(agentPrivateKeyPurpose, agentID, encryptedPrivateKey)
+	if data[0] == privateKeyFormatV2 {
+		plaintext, err := kv.openV2(agentPrivateKeyPurpose, agentID, data)
+		if err != nil {
+			return "", false, err
+		}
+		rewrapped, err := kv.sealV3(agentPrivateKeyPurpose, agentID, plaintext)
+		if err != nil {
+			return "", false, err
+		}
+		return rewrapped, true, nil
+	}
+
+	dataKey, sealedValue, err := kv.unwrapV3(agentPrivateKeyPurpose, agentID, data)
 	if err != nil {
 		return "", false, err
 	}
-	rewrapped, err := kv.sealV2(agentPrivateKeyPurpose, agentID, plaintext)
+	// A ciphertext that does not open under its data key is reported, not
+	// carried over to the current master key.
+	if _, err := openSealedValue(agentPrivateKeyPurpose, agentID, dataKey, sealedValue); err != nil {
+		return "", false, err
+	}
+	rewrapped, err := kv.wrapV3(agentPrivateKeyPurpose, agentID, dataKey, sealedValue)
 	if err != nil {
 		return "", false, err
 	}
@@ -477,17 +632,18 @@ func (kv *KeyVault) RewrapPrivateKey(agentID uuid.UUID, encryptedPrivateKey stri
 }
 
 // EncryptPrivateKey encrypts a private key for storage in the agent row with
-// the given ID, using AES-256-GCM with the row bound as additional data.
+// the given ID, in format v3: AES-256-GCM under a new data key, which is
+// sealed under the current master key, with the row bound as additional data.
 func (kv *KeyVault) EncryptPrivateKey(agentID uuid.UUID, privateKeyBase64 string) (string, error) {
-	return kv.sealV2(agentPrivateKeyPurpose, agentID, []byte(privateKeyBase64))
+	return kv.sealV3(agentPrivateKeyPurpose, agentID, []byte(privateKeyBase64))
 }
 
 // DecryptPrivateKey decrypts the private key stored in the agent row with the
-// given ID. agentID must come from the row the ciphertext was loaded from. A
-// ciphertext stored for a different row, or one in the unbound v1 format, is
-// refused.
+// given ID, in format v2 or v3. agentID must come from the row the ciphertext
+// was loaded from. A ciphertext stored for a different row, or one in the
+// unbound v1 format, is refused.
 func (kv *KeyVault) DecryptPrivateKey(agentID uuid.UUID, encryptedPrivateKey string) (string, error) {
-	plaintext, err := kv.openV2(agentPrivateKeyPurpose, agentID, encryptedPrivateKey)
+	plaintext, err := kv.open(agentPrivateKeyPurpose, agentID, encryptedPrivateKey)
 	if err != nil {
 		return "", err
 	}
@@ -495,12 +651,12 @@ func (kv *KeyVault) DecryptPrivateKey(agentID uuid.UUID, encryptedPrivateKey str
 }
 
 // MigrateLegacyPrivateKey re-encrypts a v1 private key (AES-256-GCM with no
-// additional data) to format v2 bound to agentID. A value that is already v2
-// for agentID is returned unchanged with migrated=false. Only the one-time
-// startup migration calls this; request paths use DecryptPrivateKey, which
-// never reads v1.
+// additional data) to format v3 bound to agentID. A value that is already v2
+// or v3 for agentID is returned unchanged with migrated=false. Only the
+// one-time startup migration calls this; request paths use DecryptPrivateKey,
+// which never reads v1.
 func (kv *KeyVault) MigrateLegacyPrivateKey(agentID uuid.UUID, encryptedPrivateKey string) (string, bool, error) {
-	if _, err := kv.openV2(agentPrivateKeyPurpose, agentID, encryptedPrivateKey); err == nil {
+	if _, err := kv.open(agentPrivateKeyPurpose, agentID, encryptedPrivateKey); err == nil {
 		return encryptedPrivateKey, false, nil
 	}
 
@@ -509,7 +665,7 @@ func (kv *KeyVault) MigrateLegacyPrivateKey(agentID uuid.UUID, encryptedPrivateK
 		return "", false, err
 	}
 
-	migrated, err := kv.sealV2(agentPrivateKeyPurpose, agentID, plaintext)
+	migrated, err := kv.sealV3(agentPrivateKeyPurpose, agentID, plaintext)
 	if err != nil {
 		return "", false, err
 	}

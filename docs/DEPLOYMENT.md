@@ -289,11 +289,11 @@ ENABLE_COMPLIANCE_REPORTS=true
 
 ### Rotating `KEYVAULT_MASTER_KEY`
 
-Each stored agent private key carries in its header the storage key id of the master key that encrypted it. The server holds a ring of master keys: it decrypts under any id in the ring, encrypts only under the current id, and refuses to decrypt a key stored under an id outside the ring (`unknown storage key id <id>`).
+The server encrypts each agent private key it stores under a data key of its own, and stores the data key encrypted under a master key; the stored key carries in its header the storage key id of that master key. A key stored in format v2, before data keys, is encrypted under the master key itself and carries its id the same way. The server holds a ring of master keys: it decrypts under any id in the ring, encrypts only under the current id, and refuses to decrypt a key stored under an id outside the ring (`unknown storage key id <id>`).
 
 | Variable | Holds |
 |----------|-------|
-| `KEYVAULT_MASTER_KEY` | The current master key. Every private key the server stores or re-encrypts is encrypted under it. |
+| `KEYVAULT_MASTER_KEY` | The current master key. The data key of every private key the server stores, or moves to the current id, is encrypted under it. |
 | `KEYVAULT_MASTER_KEY_ID` | The storage key id of `KEYVAULT_MASTER_KEY`, a number from 1 to 255. Unset, it is 1, the id of every key a release without the ring stored in format v2. |
 | `KEYVAULT_MASTER_KEY_<id>` | Another master key in the ring under that id, for example `KEYVAULT_MASTER_KEY_1`. The server decrypts under it and never encrypts under it. |
 
@@ -304,13 +304,13 @@ To rotate from id 1 to id 2:
 1. Generate the new key with `openssl rand -base64 32` and store it beside the current one. Keep the current key.
 2. With more than one instance, first set `KEYVAULT_MASTER_KEY_2` to the new key on every instance and restart them, leaving `KEYVAULT_MASTER_KEY` and `KEYVAULT_MASTER_KEY_ID` as they are. Every instance can then read keys stored under id 2 before any instance stores one. A single instance can skip this step.
 3. Make the new key current: set `KEYVAULT_MASTER_KEY` to the new key, `KEYVAULT_MASTER_KEY_ID=2` and `KEYVAULT_MASTER_KEY_1` to the old key, remove `KEYVAULT_MASTER_KEY_2`, and restart. Derived signing keys come from `KEYVAULT_MASTER_KEY`, so this step moves them: read [Server Signing Keys](#server-signing-keys) first.
-4. At each start with more than one key in the ring, after the agent private key format conversion and before the server accepts requests, a sweep re-encrypts each stored private key under another id in the ring to the current id. Each row is rewritten on its own, so a sweep that stops part way continues at the next start. It logs one line of counts and no agent IDs or key material:
+4. At each start with more than one key in the ring, after the agent private key format conversion and before the server accepts requests, a sweep moves each stored private key under another id in the ring to the current id: it encrypts the key's data key under the current master key and leaves the encrypted private key as it is, and it encrypts a key in format v2 again in format v3, under a data key of its own. Each row is rewritten on its own, so a sweep that stops part way continues at the next start. It logs one line of counts and no agent IDs or key material:
 
    ```text
    Agent private key sweep to storage key 2: alreadyCurrent=0 rewritten=3 failures=0 notV2=0 remaining=1:0
    ```
 
-   `remaining` gives, for each other id in the ring and for each id outside the ring that a stored key was found under, how many stored keys are still under that id. `failures` counts keys under an older id in the ring that were not re-encrypted: unreadable for their agent row, changed since the sweep read them, or not written. They stay in `remaining` and are read again at the next start. `notV2` counts stored values with no storage key id.
+   `remaining` gives, for each other id in the ring and for each id outside the ring that a stored key was found under, how many stored keys are still under that id. `failures` counts keys under an older id in the ring that were not moved: unreadable for their agent row, changed since the sweep read them, or not written. They stay in `remaining` and are read again at the next start. `notV2` counts stored values with no storage key id.
 5. Remove `KEYVAULT_MASTER_KEY_1` once a start made after every instance runs the configuration of step 3 logs `remaining=1:0`. Disable the old key in your secret store rather than deleting it, and keep it until every database backup taken before the sweep has expired: restoring one of those backups needs it.
 
 ### Secrets Management
@@ -662,7 +662,9 @@ With `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set, it first creates or up
 - **CREATE on schema `public` is revoked from `PUBLIC` as well as from the application role.** PostgreSQL before 15 grants CREATE on schema `public` to `PUBLIC`, and every role holds what `PUBLIC` holds, so a revoke from the application role alone would leave it able to create tables. On such a server every role that has no grant of its own loses CREATE on `public`; grant it back to a role that needs it (`GRANT CREATE ON SCHEMA public TO <role>`). PostgreSQL 15 and later does not grant it to `PUBLIC`, and the revoke changes nothing there. The command logs the revoke after provisioning.
 - **The password travels in the statement.** The role's password is set with `CREATE ROLE ... PASSWORD '<literal>'` or `ALTER ROLE ... PASSWORD '<literal>'`. With `log_statement` set to `ddl` or `all`, PostgreSQL writes that statement, password included, to its server log. Run the command while statement logging is below `ddl`, or set the password again afterwards from a client that sends a SCRAM verifier instead of the password, such as `\password <role>` in `psql`.
 
-**Upgrading across the agent private key format change.** A release that stores agent private keys in format v2 converts the stored v1 keys once at startup and records completion in `schema_migrations` as `keyvault/agent-private-key-v2`; later starts skip the conversion. An instance of the earlier release that is still running keeps writing v1 keys, and a key written after completion is never converted and is refused on the request path until that agent's credentials are rotated. Stop every instance of the earlier release before the first instance of the new release starts.
+**Upgrading across the agent private key format change.** A release that stores agent private keys bound to their agent row converts the stored v1 keys once at startup, to the format it writes, and records completion in `schema_migrations` as `keyvault/agent-private-key-v2`; later starts skip the conversion. An instance of the earlier release that is still running keeps writing v1 keys, and a key written after completion is never converted and is refused on the request path until that agent's credentials are rotated. Stop every instance of the earlier release before the first instance of the new release starts.
+
+**Upgrading across the agent private key data key change.** A build that encrypts each agent private key under a data key of its own writes format v3, and still reads the keys stored in format v2: the startup sweep moves a v2 key under an older storage key id to format v3, and a v2 key under the current id stays as it is. A build from before that change refuses format v3, so a key it reads in v3 fails on the request path until that agent's credentials are rotated. Stop every instance of the earlier build before the first instance of the new one starts, and take a database backup first if you may roll back.
 
 ---
 
