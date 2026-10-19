@@ -147,8 +147,9 @@ func TestAccountDeletion_DeactivatesTheAccountAndEndsItsSessions(t *testing.T) {
 	status, body = f.call(t, "GET", "/api/v1/auth/me", f.access, nil)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assert.Equal(t, "Token has been revoked: the account is deactivated", body["error"])
-	status, _ = f.requestDeletion(t, issuancePassword)
+	status, body = f.requestDeletion(t, issuancePassword)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
+	assert.NotContains(t, body, "code", "the refused session is not answered as a wrong password")
 	assert.Equal(t, 1, f.users.requests, "a deactivated account's session cannot ask again")
 
 	// Sign-in refuses the deactivated account.
@@ -162,6 +163,7 @@ func TestAccountDeletion_WrongPasswordIsRefusedAndRecorded(t *testing.T) {
 	status, body := f.requestDeletion(t, reauthWrongPassword)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assert.Equal(t, "Invalid password", body["error"])
+	assert.Equal(t, InvalidPasswordCode, body["code"], "the client keeps the session and asks for the password again")
 	assert.Len(t, f.failures.failures, 1, "the wrong password counts toward the lockout")
 
 	assert.Equal(t, 0, f.users.requests)
@@ -178,6 +180,7 @@ func TestAccountDeletion_LockedAccountIsRefused(t *testing.T) {
 	status, body := f.requestDeletion(t, issuancePassword)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assert.Equal(t, "Invalid password", body["error"])
+	assert.Equal(t, InvalidPasswordCode, body["code"])
 	assert.Equal(t, 0, f.users.requests)
 	assert.Equal(t, domain.UserStatusActive, f.users.user.Status)
 }
@@ -189,6 +192,7 @@ func TestAccountDeletion_AccountWithoutAPasswordIsRefused(t *testing.T) {
 	status, body := f.requestDeletion(t, issuancePassword)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assert.Equal(t, "Invalid password", body["error"])
+	assert.Equal(t, InvalidPasswordCode, body["code"])
 	assert.Equal(t, 0, f.users.requests)
 }
 
@@ -235,6 +239,7 @@ func TestAccountDeletion_TokenOfAnotherOrganizationIsRefused(t *testing.T) {
 	status, body := f.call(t, "POST", "/api/v1/auth/delete-account", other, raw)
 	assert.Equal(t, fiber.StatusUnauthorized, status)
 	assert.Equal(t, "Invalid or expired token", body["error"])
+	assert.NotContains(t, body, "code", "the refused session is not answered as a wrong password")
 	assert.Equal(t, 0, f.users.requests)
 	assert.Empty(t, f.failures.failures, "no password was checked")
 }
