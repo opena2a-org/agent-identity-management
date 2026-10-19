@@ -6,13 +6,16 @@ device sign-in: its `aim-sdk login --url http://localhost:8080` prints an
 `http://localhost:8080/auth/login?response_type=code&...` address and waits,
 and the API registers no `/auth/login` route. So the README sentence that
 describes the code says the PyPI release does not yet, and links the issue
-that tracks the publish and the self-hosted install in docs/quick-start.md:
-the SDK archive the dashboard's SDK & docs page downloads, which carries the
-user's sign-in.
+that records the publish and the self-hosted sign-in in docs/quick-start.md:
+the sign-in in the SDK archive the dashboard's SDK & docs page downloads,
+copied to the file the release on PyPI reads it from, or the archive's SDK
+installed in place of that release.
 
-The install steps there are held to what the server and the dashboard send:
-the page and its button, the archive's file name, its top folder and the path
-of the sign-in inside it, each read from the source that produces it.
+The steps there are held to what the server and the dashboard send: the page
+and its button, the archive's file name, its top folder and the path of the
+sign-in inside it, each read from the source that produces it, and to the
+file the SDK reads its sign-in from. What the release on PyPI then sends the
+server is sent by cmd/server's readme_quick_start_pypi_release_integration_test.go.
 
 Everything here runs offline and reads only files in this repository.
 """
@@ -37,8 +40,15 @@ SDK_HANDLER = REPO_ROOT / "apps" / "backend" / "internal" / "interfaces" / "http
 SERVER_DIR = REPO_ROOT / "apps" / "backend" / "cmd" / "server"
 BACKEND_DOCKERFILE = REPO_ROOT / "infrastructure" / "docker" / "Dockerfile.backend"
 
+CREDENTIALS_MODULE = SDK_DIR / "aim_sdk" / "credentials.py"
+
 TRACKING_ISSUE = "https://github.com/opena2a-org/agent-identity-management/issues/789"
-SELF_HOSTED_HEADING = "Install the SDK from your dashboard"
+SELF_HOSTED_HEADING = "Sign in from your dashboard"
+
+# The file the SDK reads its sign-in from before any other. The release on PyPI,
+# aim-sdk 2.0.3, defines it in aim_sdk/credentials.py with the same two lines as
+# this repository's SDK, and its load_sdk_credentials reads it first as well.
+SIGN_IN_FILE = "~/.aim/sdk_credentials.json"
 
 
 def github_anchor(heading):
@@ -95,7 +105,7 @@ def test_the_device_sign_in_sentence_says_the_pypi_release_does_not_yet_and_link
         f"the sentence that says `aim-sdk login` prints a code must say the PyPI release does not yet: {sentence!r}"
     )
     link = f"](docs/quick-start.md#{github_anchor(SELF_HOSTED_HEADING)})"
-    assert link in sentence, f"the sentence must link the self-hosted install, {link!r}: {sentence!r}"
+    assert link in sentence, f"the sentence must link the self-hosted sign-in, {link!r}: {sentence!r}"
     assert f"]({TRACKING_ISSUE})" in sentence, f"the sentence must link {TRACKING_ISSUE}: {sentence!r}"
 
 
@@ -137,6 +147,58 @@ def test_the_self_hosted_install_names_the_page_button_archive_folder_and_sign_i
         f"the install must be editable, so the SDK reads the archive's sign-in from any directory: {commands}"
     )
     assert f"`{folder}/{sign_in.group(1)}/{sign_in.group(2)}`" in prose, "the install must name where the sign-in is"
+
+
+def test_the_self_hosted_sign_in_copies_the_archives_sign_in_to_the_file_the_pypi_release_reads():
+    """The release on PyPI is the SDK the Quick start installs, and its `aim-sdk login --url`
+    cannot sign in to this server. The first fence of the self-hosted sign-in unzips the
+    archive and copies its sign-in to the file that release reads first, and restricts it,
+    with no editable install: the archive's SDK is the alternative, in a fence of its own."""
+    section = doc_section(QUICK_START_DOC, SELF_HOSTED_HEADING)
+    fenced = re.findall(r"^```bash\n(.*?)^```\s*$", "\n".join(section), re.MULTILINE | re.DOTALL)
+    assert fenced, f"docs/quick-start.md has no bash fence under {SELF_HOSTED_HEADING!r}"
+    first = [line.strip() for line in fenced[0].split("\n") if line.strip()]
+
+    handler = SDK_HANDLER.read_text(encoding="utf-8")
+    archive = sprintf_format(handler, "filename").replace("%s", "python", 1).replace("%s", "*", 1)
+    folder = sprintf_format(handler, "zipPrefix").replace("%s", "python")
+    sign_in = re.search(r'credPath := filepath\.Join\(zipPrefix, "([^"]+)", "([^"]+)"\)', handler)
+    assert sign_in, f"{SDK_HANDLER.name} no longer places the sign-in this way"
+
+    unzip = f'unzip "$(ls -t ~/Downloads/{archive} | head -n 1)"'
+    copy = f"mkdir -p ~/.aim && cp {folder}/{sign_in.group(1)}/{sign_in.group(2)} {SIGN_IN_FILE}"
+    restrict = f"chmod 600 {SIGN_IN_FILE}"
+    for command in (unzip, copy, restrict):
+        assert command in first, f"the first fence under {SELF_HOSTED_HEADING!r} must run {command!r}: {first}"
+    assert first.index(unzip) < first.index(copy) < first.index(restrict), (
+        f"the first fence must unzip the archive, then copy its sign-in, then restrict the copy: {first}"
+    )
+    assert not [c for c in first if c.startswith("pip install")], (
+        f"the release on PyPI signs in with the copy alone; the first fence installs nothing: {first}"
+    )
+
+
+def test_the_sdk_reads_the_copied_sign_in_before_the_archives(monkeypatch, tmp_path):
+    """The copy's destination is ~/.aim/sdk_credentials.json, and load_sdk_credentials reads
+    it before the sign-in in the folder that holds the package."""
+    source = CREDENTIALS_MODULE.read_text(encoding="utf-8")
+    assert 'AIM_DIR = Path.home() / ".aim"' in source
+    assert 'SDK_CREDENTIALS_FILE = AIM_DIR / "sdk_credentials.json"' in source
+    assert credentials.SDK_CREDENTIALS_FILE.relative_to(credentials.AIM_DIR.parent).as_posix() == SIGN_IN_FILE[2:]
+
+    copied = {"schemaVersion": "1.0", "type": "sdk_oauth", "aimUrl": "http://localhost:8080",
+              "refreshToken": "copied-not-a-real-token", "sdkTokenId": "not-a-real-token-id"}
+    credentials.SDK_CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    credentials.SDK_CREDENTIALS_FILE.write_text(json.dumps(copied), encoding="utf-8")
+    credentials.SDK_CREDENTIALS_FILE.chmod(0o600)
+    in_archive = dict(copied, refreshToken="archive-not-a-real-token")
+    monkeypatch.setattr(credentials, "_find_sdk_package_credentials",
+                        lambda: (in_archive, tmp_path / "aim-sdk-python" / ".aim" / "sdk_credentials.json"))
+
+    loaded = credentials.load_sdk_credentials()
+    assert loaded is not None and loaded["refreshToken"] == "copied-not-a-real-token", (
+        f"the SDK does not read {SIGN_IN_FILE} first"
+    )
 
 
 def test_the_archive_is_the_sdk_tree_the_server_image_copies():
