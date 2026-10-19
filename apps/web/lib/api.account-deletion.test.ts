@@ -77,7 +77,20 @@ const storedSession = () => ({
   refreshToken: localStorage.getItem("refresh_token"),
 });
 
-// Timers are faked inside a test only after its storage is set up.
+// The client's pending timers. Where the environment runs on jsdom's localStorage,
+// each token the client removes as it signs out schedules jsdom's 0 ms storage-event
+// timer (vitest.setup.ts installs a Storage that schedules nothing only where jsdom
+// exposes none): those are run first, so what is counted is the client's own timer,
+// the redirect to the sign-in page.
+const clientTimerCount = () => {
+  vi.advanceTimersByTime(0);
+  return vi.getTimerCount();
+};
+
+// Timers are faked inside a test only after its storage is set up: jsdom's Storage
+// dispatches its storage event through a 0 ms setTimeout for every key it stores or
+// removes, so a token written under fake timers would be counted as a pending timer
+// of the client.
 beforeEach(() => {
   api.clearToken();
   localStorage.clear();
@@ -173,7 +186,7 @@ describe("api.requestAccountDeletion", () => {
     expect(sent.map((s) => s.path)).toEqual([ROUTE, "/api/v1/auth/refresh", ROUTE]);
     expect(passwordsSent(sent)).toBe(1);
     expect((toast.error as Mock).mock.calls[0][0]).toBe("Session expired");
-    expect(vi.getTimerCount()).toBe(1);
+    expect(clientTimerCount()).toBe(1);
     expect(storedSession()).toEqual({ accessToken: null, refreshToken: null });
   });
 
@@ -190,7 +203,7 @@ describe("api.requestAccountDeletion", () => {
     expect(sent.map((s) => s.path)).toEqual([ROUTE, ROUTE]);
     expect(passwordsSent(sent)).toBe(1);
     expect((toast.error as Mock).mock.calls[0][0]).toBe("Session expired");
-    expect(vi.getTimerCount()).toBe(1);
+    expect(clientTimerCount()).toBe(1);
     expect(storedSession().accessToken).toBeNull();
   });
 
