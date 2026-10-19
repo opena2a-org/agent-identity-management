@@ -87,7 +87,7 @@ func main() {
 	flag.IntVar(&config.MaxAgents, "max-agents", 1000, "Maximum agents allowed")
 	flag.StringVar(&config.DatabaseURL, "database-url", "", "PostgreSQL connection URL (default: the server's POSTGRES_* variables when POSTGRES_HOST is set, else DATABASE_URL)")
 	flag.BoolVar(&config.SkipPrompts, "yes", false, "Skip confirmation prompts")
-	flag.BoolVar(&config.Default, "default", false, "Seed the canonical OpenA2A admin org+admin with a random password (idempotent). Fills in canonical values for unset --admin-*/--org-*/--max-* flags; generates a random --admin-password if empty. Implies --yes and exits 0 without touching existing state if already bootstrapped.")
+	flag.BoolVar(&config.Default, "default", false, "Seed the canonical OpenA2A admin org+admin with a random password (idempotent); the run that creates the admin also adds the default security policies to its organization. Fills in canonical values for unset --admin-*/--org-*/--max-* flags; generates a random --admin-password if empty. Implies --yes and exits 0 without touching existing state if already bootstrapped.")
 	flag.Parse()
 
 	// Print banner
@@ -415,6 +415,8 @@ func isBootstrapped(db *sql.DB) bool {
 // runBootstrap seeds the organization, the admin user and the
 // bootstrap_completed marker in one transaction, writing a numbered line to w
 // for each step and lines indented three spaces under it for what the step did.
+// A --default run that creates the admin also adds defaultPolicies to the
+// admin's organization, in the same transaction.
 func runBootstrap(ctx context.Context, w io.Writer, db *sql.DB, config *BootstrapConfig) error {
 	// Start transaction
 	tx, err := db.Begin()
@@ -532,8 +534,29 @@ func runBootstrap(ctx context.Context, w io.Writer, db *sql.DB, config *Bootstra
 		fmt.Fprintf(w, "   Admin user created (ID: %s)\n", userID)
 	}
 
-	// 4. Mark bootstrap as completed
-	fmt.Fprintln(w, "4. Updating system configuration...")
+	// 4. Add the default security policies (--default, when this run created
+	// the admin). Migrations 015 and 052 add them only when admin@opena2a.org
+	// already exists, and migration 013 no longer creates that user, so on a
+	// fresh database they add none. A run that finds the admin in place adds
+	// none either: a policy an administrator deleted or renamed is not added
+	// back.
+	step := 4
+	if config.Default && !config.adminAlreadyExisted {
+		fmt.Fprintf(w, "%d. Adding default security policies...\n", step)
+		added, err := seedDefaultPolicies(ctx, tx, orgID, userID)
+		if err != nil {
+			return fmt.Errorf("failed to add default security policies: %w", err)
+		}
+		if present := int64(len(defaultPolicies)) - added; present > 0 {
+			fmt.Fprintf(w, "   Added %d default security policies; %d the organization already had are left unchanged\n", added, present)
+		} else {
+			fmt.Fprintf(w, "   Added %d default security policies\n", added)
+		}
+		step++
+	}
+
+	// Mark bootstrap as completed
+	fmt.Fprintf(w, "%d. Updating system configuration...\n", step)
 	query = `
 		INSERT INTO system_config (key, value, description, updated_at)
 		VALUES ('bootstrap_completed', 'true', 'Initial admin bootstrap completed', NOW())

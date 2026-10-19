@@ -98,6 +98,7 @@ func TestSeededTrustScoreLowPoliciesCarryTheThresholdTheEvaluatorReads(t *testin
 		{"migration 015", "migrations/015_add_default_security_policies.sql", trustScoreLowRulesInSQL, 2},
 		{"seed script", "seed/default_security_policies.sql", trustScoreLowRulesInSQL, 1},
 		{"policy backfill", "cmd/backfill_policies/main.go", trustScoreLowRulesInGo, 1},
+		{"bootstrap --default", "cmd/bootstrap/default_policies.go", trustScoreLowRulesInGo, 2},
 	}
 	for _, src := range sources {
 		t.Run(src.name, func(t *testing.T) {
