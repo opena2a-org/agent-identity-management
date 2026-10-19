@@ -69,6 +69,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   JSON error handler, and fails when a record's status, response size or error message differs from the answer the
   client received. On the previous middleware the first three were each recorded with status `200`.
 
+### Added: `OAuthUser` carries the email-verified claim of Google's and Okta's user info, and a missing claim reads as not verified
+
+- `parseUserInfo` in `apps/backend/internal/infrastructure/auth/oauth.go`, which `OAuthService.GetUserInfo` calls, read
+  Google's `id`, `email`, `name` and `picture` and Okta's `sub`, `email` and `name`, and dropped the provider's claim
+  that the email is verified. The `OAuthUser` it returned had `ID`, `Email`, `Name`, `AvatarURL` and `Provider`.
+- `OAuthUser.EmailVerified` is set from Google's `verified_email` and from Okta's `email_verified`. A claim that is
+  missing, or is not a JSON boolean (the test sends the string `"true"`), reads as `false`. The Microsoft case reads no
+  claim and leaves the field `false`. A caller that links or registers an account by the email `GetUserInfo` returns
+  can refuse when the field is `false`; nothing in the backend calls `GetUserInfo` outside its tests.
+- Test: `apps/backend/internal/infrastructure/auth/oauth_email_verified_test.go` checks the field for Google payloads
+  whose `verified_email` is `true`, `false`, the string `"true"` and absent, for Okta payloads whose `email_verified`
+  is `true`, `false` and absent, and for a Microsoft Graph profile, and has `GetUserInfo` read Google JSON answers with
+  `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
+  not compile, as `OAuthUser` had no `EmailVerified`.
+
 ### Fixed — `docs/API.md`'s `POST /api/v1/agents` request sends `agentType` and registers an agent, and its agent answers show `agentType` (#795)
 
 - The `POST /api/v1/agents` section of `docs/API.md` gave the agent's type as `"type": "ai_agent"` in its request

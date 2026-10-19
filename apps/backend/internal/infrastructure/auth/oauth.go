@@ -40,6 +40,11 @@ type OAuthUser struct {
 	Name      string
 	AvatarURL string
 	Provider  string
+	// EmailVerified is the provider's claim that Email is verified: Google's
+	// verified_email, Okta's email_verified. It is false when the provider
+	// sends no such claim or sends one that is not a JSON boolean, so a caller
+	// that links or registers an account by Email must refuse when it is false.
+	EmailVerified bool
 }
 
 // OAuthService handles OAuth2 authentication
@@ -198,6 +203,7 @@ func (s *OAuthService) parseUserInfo(provider OAuthProvider, info map[string]int
 		user.Email = getStringField(info, "email")
 		user.Name = getStringField(info, "name")
 		user.AvatarURL = getStringField(info, "picture")
+		user.EmailVerified = getBoolField(info, "verified_email")
 
 	case ProviderMicrosoft:
 		user.ID = getStringField(info, "id")
@@ -206,11 +212,13 @@ func (s *OAuthService) parseUserInfo(provider OAuthProvider, info map[string]int
 			user.Email = getStringField(info, "mail")
 		}
 		user.Name = getStringField(info, "displayName")
+		// No email-verified claim is read for Microsoft, so EmailVerified stays false.
 
 	case ProviderOkta:
 		user.ID = getStringField(info, "sub")
 		user.Email = getStringField(info, "email")
 		user.Name = getStringField(info, "name")
+		user.EmailVerified = getBoolField(info, "email_verified")
 	}
 
 	if user.ID == "" || user.Email == "" {
@@ -226,6 +234,13 @@ func getStringField(m map[string]interface{}, key string) string {
 		return val
 	}
 	return ""
+}
+
+// getBoolField reports whether a field of the map is the JSON boolean true; a
+// missing field or a value of another type reads as false.
+func getBoolField(m map[string]interface{}, key string) bool {
+	val, ok := m[key].(bool)
+	return ok && val
 }
 
 // GenerateState generates a random state for CSRF protection
