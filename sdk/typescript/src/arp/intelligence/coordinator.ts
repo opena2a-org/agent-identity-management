@@ -413,8 +413,9 @@ export class IntelligenceCoordinator {
     const minSev = this.config.minSeverityForLlm ?? 'medium';
     if (severityIndex(event.severity) < severityIndex(minSev)) return false;
 
-    // The budget is not checked here: callWithinBudget reserves it when the call is
-    // made, which for a batched event is when its batch is sent.
+    // The budget is not reserved here: callWithinBudget reserves it when the call is
+    // made, which for a batched event is when its batch is sent. queueForBatch checks
+    // that the budget could pay for the batch before it queues the event.
     return true;
   }
 
@@ -478,6 +479,12 @@ export class IntelligenceCoordinator {
   }
 
   private queueForBatch(event: ARPEvent): null {
+    // Queue the event only while the budget could pay for its batch. The batch still
+    // takes its reservation when it is sent. Without this check, an event analyzed while
+    // the budget or the hour's calls are used up is held in the queue until the window
+    // closes or stop() is called, and dropped if the batch's reservation is refused then.
+    if (!this.canPayForBatch()) return null;
+
     this.batchQueue.push(event);
 
     if (!this.batchTimer) {
@@ -495,12 +502,31 @@ export class IntelligenceCoordinator {
     return null; // Assessment will come later
   }
 
+  /**
+   * Whether the budget could pay now for a batch call, without reserving it. An
+   * `estimateCost` that throws counts as no, as it does when the batch is sent.
+   */
+  private canPayForBatch(): boolean {
+    const adapter = this.adapter;
+    if (!adapter) return false;
+    try {
+      return this.budget.canReserve(adapter.estimateCost(ESTIMATED_PROMPT_TOKENS, this.batchMaxTokens()));
+    } catch {
+      return false;
+    }
+  }
+
+  /** Output tokens for a batch call: twice `maxTokensPerCall`, at most 1000. */
+  private batchMaxTokens(): number {
+    return Math.min((this.config.maxTokensPerCall ?? 300) * 2, 1000);
+  }
+
   private async flushBatch(): Promise<void> {
     if (this.batchQueue.length === 0 || !this.adapter) return;
 
     const events = this.batchQueue.splice(0);
     const prompt = buildBatchPrompt(this.agentContext, events);
-    const maxTokens = Math.min((this.config.maxTokensPerCall ?? 300) * 2, 1000);
+    const maxTokens = this.batchMaxTokens();
 
     try {
       // One call for the whole batch, so one reservation, taken when the batch is sent.
