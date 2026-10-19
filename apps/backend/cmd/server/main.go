@@ -34,9 +34,11 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/database"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/email"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/oauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/registry"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	infrasecrets "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/secrets"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 	recordstore "github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/store"
@@ -714,6 +716,7 @@ type Repositories struct {
 	NanoMindTME          *repository.NanoMindTMERepository          // TME enrichment of security alerts
 	BootstrapToken       *repository.BootstrapTokenRepository       // Onboarding bootstrap tokens (one agent registration each)
 	OnboardingEvent      *repository.OnboardingEventRepository      // Onboarding telemetry (organization, event, time; no user data)
+	OIDCSignInConfig     *repository.OIDCSignInConfigRepository     // Each organization's OIDC sign-in provider (client secret sealed)
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -778,6 +781,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		NanoMindTME:          repository.NewNanoMindTMERepository(db),
 		BootstrapToken:       repository.NewBootstrapTokenRepository(db),
 		OnboardingEvent:      repository.NewOnboardingEventRepository(db),
+		OIDCSignInConfig:     repository.NewOIDCSignInConfigRepository(db),
 	}, oauthRepo
 }
 
@@ -811,6 +815,7 @@ type Services struct {
 	A2A               *application.A2AService               // ✅ For A2A (Agent-to-Agent) protocol
 	A2ADelegation     *application.A2ADelegationService     // For A2A delegations and delegation chain verification
 	DeviceAuth        *application.DeviceAuthService        // For OAuth Device Authorization Grant (RFC 8628)
+	OIDCSignIn        *application.OIDCSignInService        // Sign-in through each organization's OIDC provider
 	RegistryBridge    *application.RegistryBridgeService    // For OpenA2A Registry attestation contribution
 	Remediation       *application.RemediationService       // For remediation tracking (agentpwn + HMA)
 	Secrets           *application.SecretsService           // For identity-native secrets management
@@ -1151,6 +1156,19 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		cfg.Server.FrontendURL,
 	)
 
+	// Sign-in through an organization's OIDC provider. The provider redirects
+	// the browser to the dashboard (FRONTEND_URL), whose /auth/oidc/callback
+	// page completes the sign-in. Every request to the provider goes through
+	// the egress client: the issuer is a URL an organization's admin supplied.
+	oidcSignInService := application.NewOIDCSignInService(
+		repos.OIDCSignInConfig,
+		repos.Organization,
+		repos.User,
+		keyVault,
+		oauth.NewOIDCClient(utils.NewEgressClient(10*time.Second)),
+		cfg.Server.FrontendURL,
+	)
+
 	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry,
 	// built only with REGISTRY_BRIDGE_ENABLED=true.
 	registryBridgeService := newRegistryBridgeService(cfg.Registry, repos)
@@ -1337,6 +1355,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		A2A:               a2aService,                                           // ✅ For A2A (Agent-to-Agent) protocol
 		A2ADelegation:     a2aDelegationService,                                 // For A2A delegations and delegation chain verification
 		DeviceAuth:        deviceAuthService,                                    // For OAuth Device Authorization Grant (RFC 8628)
+		OIDCSignIn:        oidcSignInService,                                    // Sign-in through each organization's OIDC provider
 		RegistryBridge:    registryBridgeService,                                // For OpenA2A Registry attestation contribution
 		Remediation:       application.NewRemediationService(repos.Remediation), // For remediation tracking
 		Secrets:           secretsService,                                       // For identity-native secrets management
@@ -1394,6 +1413,7 @@ type Handlers struct {
 	OAuthToken         *handlers.OAuthTokenHandler         // For OAuth 2.0 token endpoint (RFC 6749)
 	Lifecycle          *handlers.LifecycleHandler          // For agent lifecycle (heartbeat, revocations, bulk status)
 	DeviceAuth         *handlers.DeviceAuthHandler         // For OAuth Device Authorization Grant (RFC 8628)
+	OIDCSignIn         *handlers.OIDCSignInHandler         // Sign-in through each organization's OIDC provider, and its administration
 	RegistryBridge     *handlers.RegistryBridgeHandler     // For OpenA2A Registry attestation contribution
 	AIP                *handlers.AIPHandler                // For AIP discovery and DID resolution
 	JWKS               *handlers.JWKSHandler               // Serves the published server signing keys
@@ -1616,6 +1636,11 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			jwtService,
 			services.Audit,
 		),
+		OIDCSignIn: handlers.NewOIDCSignInHandler(
+			services.OIDCSignIn,
+			jwtService,
+			services.Audit,
+		),
 		RegistryBridge: handlers.NewRegistryBridgeHandler(
 			services.RegistryBridge,
 		),
@@ -1818,6 +1843,13 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	auth.Post("/login/local", h.Auth.LocalLogin)     // Local email/password login
 	auth.Post("/logout", h.Auth.Logout)
 	auth.Post("/refresh", h.AuthRefresh.RefreshToken) // Refresh access token (with token rotation)
+	// Sign-in through the organization's OIDC provider: the login route answers
+	// the provider's authorization URL and the sealed flow, the callback route
+	// takes the code and state the provider redirected the dashboard with and
+	// answers a login pair. Registered before authProtected's Use(), which
+	// would put the session check in front of them.
+	auth.Post("/oidc/:organizationId/login", h.OIDCSignIn.StartSignIn)
+	auth.Post("/oidc/callback", h.OIDCSignIn.CompleteSignIn)
 
 	// Authenticated auth routes (authentication required)
 	authProtected := v1.Group("/auth")
@@ -2019,6 +2051,11 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Enforcement settings (Security → Enforcement Mode)
 	admin.Get("/enforcement-settings", h.Admin.GetEnforcementSettings)
 	admin.Put("/enforcement-settings", h.Admin.UpdateEnforcementSettings)
+
+	// The organization's OIDC sign-in provider (issuer, client id, client secret)
+	admin.Get("/oidc-sign-in", h.OIDCSignIn.GetConfiguration)
+	admin.Put("/oidc-sign-in", h.OIDCSignIn.PutConfiguration)
+	admin.Delete("/oidc-sign-in", h.OIDCSignIn.DeleteConfiguration)
 
 	// Audit logs
 	admin.Get("/audit-logs", h.Admin.GetAuditLogs)

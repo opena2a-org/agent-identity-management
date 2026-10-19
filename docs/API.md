@@ -191,6 +191,88 @@ A request without a password answers `400`. A wrong password, a locked account a
 
 ---
 
+#### Sign-in through the organization's OpenID Connect provider
+
+An administrator stores the OpenID Connect provider the users of the organization sign in through: the provider's issuer, and the client id and client secret the provider registered for this deployment. An organization has at most one. A user then signs in at the provider with the authorization code flow and PKCE (`S256`), and the server answers a login pair for the user of that organization whose email the provider asserts.
+
+`PUT /api/v1/admin/oidc-sign-in` (admin role) stores the provider of the caller's organization, in place of any earlier one.
+
+**Request:**
+```json
+{
+  "issuer": "https://idp.example.com",
+  "clientId": "<the client id the provider registered>",
+  "clientSecret": "<the client secret the provider issued>"
+}
+```
+
+The issuer must be an `https` URL with no query or fragment. Before it stores anything, the server reads the provider's configuration document, `<issuer>/.well-known/openid-configuration`, and answers `400` when the document cannot be read, names another issuer, or names an authorization, token or key set endpoint that is not an `https` URL. Every request to the provider is sent with the server's egress client, which refuses internal addresses such as loopback. The client secret is stored encrypted with the key vault's master key (`KEYVAULT_MASTER_KEY`) and bound to the organization. No answer and no audit row carries it.
+
+**Response** (200):
+```json
+{
+  "configured": true,
+  "issuer": "https://idp.example.com",
+  "clientId": "<the client id>",
+  "clientSecretSet": true,
+  "redirectUrl": "https://aim.example.com/auth/oidc/callback",
+  "updatedBy": "550e8400-e29b-41d4-a716-446655440000",
+  "updatedAt": "2026-10-19T08:00:00Z"
+}
+```
+
+`GET /api/v1/admin/oidc-sign-in` answers the same, or `{"configured": false, "redirectUrl": "..."}` when the organization has no provider. `DELETE /api/v1/admin/oidc-sign-in` removes the provider and answers `204`; a sign-in started before the removal is then refused. A stored provider and a removal are recorded in the audit log as `update` and `delete` of the resource type `oidc_sign_in_config`.
+
+`redirectUrl` is the `/auth/oidc/callback` page under `FRONTEND_URL`, the redirect URI every authorization request names; register it with the provider. The dashboard does not serve that page yet: until it does, a client that signs a user in this way takes the `code` and `state` of the provider's redirect itself and posts them to the callback route.
+
+`POST /api/v1/auth/oidc/{organizationId}/login` starts a sign-in. It takes no body and no credentials.
+
+**Response** (200):
+```json
+{
+  "authorizationUrl": "https://idp.example.com/authorize?client_id=...&code_challenge=...&code_challenge_method=S256&nonce=...&redirect_uri=...&response_type=code&scope=openid+email+profile&state=...",
+  "flow": "<organization id>.<sealed flow>",
+  "expiresAt": "2026-10-19T08:10:00Z"
+}
+```
+
+The browser goes to `authorizationUrl`. The client keeps `flow`, which holds the sign-in's state, nonce and PKCE code verifier encrypted with the key vault's master key and bound to the organization; the server keeps nothing between the two routes. An organization that has no provider, or is not active, answers `404`, and a provider whose configuration document cannot be read answers `502`.
+
+`POST /api/v1/auth/oidc/callback` completes the sign-in, within 10 minutes of its start, with the `code` and `state` the provider redirected with.
+
+**Request:**
+```json
+{
+  "code": "<the code of the redirect>",
+  "state": "<the state of the redirect>",
+  "flow": "<the flow of the login answer>"
+}
+```
+
+**Response** (200): the answer of `POST /api/v1/auth/login/local`, `accessToken`, `refreshToken` and `user`. The sign-in is recorded in the audit log as a `login` with `method` `oidc`.
+
+The server redeems the code at the provider's token endpoint with the code verifier, authenticating with `client_secret_basic`, or with `client_secret_post` when the provider's configuration document lists it and not `client_secret_basic`. It accepts the ID token the provider answers only when the token is signed by a key of the provider's key set with RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or ES512; names the configured issuer exactly; has the client id among its audiences, and as its `azp` when it names one or has more than one audience; carries an `exp` that has not passed and an `iat` that is not ahead of the server's clock, each with 30 seconds of leeway, and an `nbf`, when it has one, that has passed; carries a subject; and carries the sign-in's nonce. The user is the user of the organization whose email equals the token's `email`, compared without regard to case, when the token's `email_verified` is `true`. Only the users of the organization the sign-in started for are compared: a provider stored for one organization never signs in a user of another, and the sign-in creates no user.
+
+A refused sign-in answers `401` with `{"error": "Sign-in through the identity provider was refused", "code": "<reason>"}`:
+
+| `code` | The sign-in was refused because |
+|--------|---------------------------------|
+| `flow_invalid` | the flow is not one this server sealed for the organization it names |
+| `flow_expired` | the sign-in started more than 10 minutes ago |
+| `state_mismatch` | `state` is not the state the sign-in started with |
+| `provider_changed` | the organization's provider was removed, or its issuer or client id changed, since the start |
+| `organization_inactive` | the organization cannot be read or is not active |
+| `code_refused` | the provider's token endpoint refused the code |
+| `id_token_invalid` | the ID token failed one of the checks above |
+| `email_not_verified` | the ID token carries no email, or its `email_verified` is not `true` |
+| `no_user` | no user of the organization has the email |
+| `ambiguous_user` | more than one user of the organization has the email |
+| `account_inactive` | the user is suspended, deactivated or deleted |
+
+A request without `code`, `state` or `flow` answers `400`, and a provider that cannot be reached answers `502`. Both routes count toward the credential routes' rate limit.
+
+---
+
 ### Agents Endpoints
 
 #### POST /api/v1/agents
@@ -968,7 +1050,7 @@ An error answers with an HTTP status and a JSON body whose `error` member is a m
 Requests are counted per signed-in user when the server knows the user before the limiter runs, and per client IP address otherwise, over a one-minute window:
 
 - **Most routes**: 100 requests per minute.
-- **Credential routes**: 10 requests per minute. These are sign-in, sign-out, token refresh, re-authentication, account deletion requests, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
+- **Credential routes**: 10 requests per minute. These are sign-in, with a password or through the organization's OpenID Connect provider, sign-out, token refresh, re-authentication, account deletion requests, `GET /api/v1/auth/me`, password change and reset, registration and access requests, the OAuth token and device-code routes, SDK token recovery, and bootstrap-token mint and exchange.
 
 Responses carry the limiter's headers. `X-RateLimit-Reset` is the number of seconds until the window resets:
 
