@@ -40,6 +40,14 @@ const (
 	// permit it to act (suspended, revoked). Written only after the signature
 	// verifies.
 	AuditActionVerificationRefused AuditAction = "verification_refused"
+	// AuditActionAccountDeletionRequested: the user asked for the deletion of
+	// their own account; the account was deactivated, and the account deletion
+	// purge deletes it AccountDeletionDelay later.
+	AuditActionAccountDeletionRequested AuditAction = "account_deletion_requested"
+	// AuditActionAccountDeleted: the account deletion purge deleted an account
+	// whose user had asked for its deletion. The row names no user, and its
+	// resource id is the deleted user's id.
+	AuditActionAccountDeleted AuditAction = "account_deleted"
 
 	// Agent actions
 	AuditActionCreate AuditAction = "create"

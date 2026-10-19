@@ -343,14 +343,15 @@ func (r *UserRepository) Update(user *domain.User) error {
 }
 
 // GetSessionState reads the part of a user record an authenticated request
-// checks on every request: when the password last changed and whether a
-// change is required. It answers domain.ErrUserNotFound when no user has the
-// ID. force_password_change is nullable in the schema; NULL reads as false,
-// as the column's default.
+// checks on every request: when the password last changed, whether a change
+// is required, and whether the account is deactivated (status deactivated, or
+// deleted_at set, the two states sign-in refuses). It answers
+// domain.ErrUserNotFound when no user has the ID. force_password_change is
+// nullable in the schema; NULL reads as false, as the column's default.
 func (r *UserRepository) GetSessionState(ctx context.Context, id uuid.UUID) (*domain.UserSessionState, error) {
-	query := `SELECT password_changed_at, COALESCE(force_password_change, FALSE) FROM users WHERE id = $1`
+	query := `SELECT password_changed_at, COALESCE(force_password_change, FALSE), (status = 'deactivated' OR deleted_at IS NOT NULL) FROM users WHERE id = $1`
 	state := &domain.UserSessionState{}
-	err := r.db.QueryRowContext(ctx, query, id).Scan(&state.PasswordChangedAt, &state.ForcePasswordChange)
+	err := r.db.QueryRowContext(ctx, query, id).Scan(&state.PasswordChangedAt, &state.ForcePasswordChange, &state.Deactivated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrUserNotFound
 	}

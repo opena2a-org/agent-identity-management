@@ -72,6 +72,9 @@ type UserSessionState struct {
 	// ForcePasswordChange is set while the account must change its password
 	// before it may do anything else.
 	ForcePasswordChange bool
+	// Deactivated is set while the account is deactivated: its status is
+	// deactivated, or it carries deleted_at. Sign-in refuses both.
+	Deactivated bool
 }
 
 // ErrUserNotFound is returned when no user has the requested ID.

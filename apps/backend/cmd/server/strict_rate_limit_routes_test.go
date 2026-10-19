@@ -49,6 +49,8 @@ var strictRateLimitedRoutes = []string{
 	// Re-authentication verifies a password. Its route adds no limiter of its
 	// own: the /auth group's reaches it.
 	"POST /api/v1/auth/reauth",
+	// A deletion request verifies a password too, under the same limiter.
+	"POST /api/v1/auth/delete-account",
 }
 
 // strictCensusApp mounts every /api/v1 route through mountAPIRoutes, the call

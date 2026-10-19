@@ -406,21 +406,24 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 40 migrations, `098_mcp_manifest_baselines.sql` to
-`138_user_delete_removes_email_from_access_review_evidence.sql`. Measured on 2026-10-19 on an Apple M4 Max laptop
-with PostgreSQL 18.3: a database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own
-transaction and recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. Then
-`aim-server migrate`, built from a tree whose last migration is
-`138_user_delete_removes_email_from_access_review_evidence.sql`, was timed against it with `/usr/bin/time -p`,
-three runs on separate copies by a binary that had already run on that laptop, while the laptop ran other work and its
-one-minute load average read 8.47 before the runs and 8.51 after them. Each run logged
-`Successfully applied 40 pending migration(s)`:
+Upgrading from 1.0.0 applies 41 migrations, `098_mcp_manifest_baselines.sql` to `139_user_deletion_requests.sql`.
+Measured on 2026-10-19 on an Apple M4 Max laptop with PostgreSQL 18.3: a database was migrated with the 97 migration
+files of `platform-v1.0.0`, each applied in its own transaction and recorded in `schema_migrations` by file name, as
+the 1.0.0 server does at start. Then `aim-server migrate`, built from a tree whose last migration is
+`139_user_deletion_requests.sql`, was timed against it with `/usr/bin/time -p`, three runs on separate copies, each
+copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that laptop, while the laptop ran
+other work and its one-minute load average read 17.93 before the runs and 13.57 after them. Each run logged
+`Successfully applied 41 pending migration(s)`:
 
 | 1.0.0 database | Wall time, three runs |
 |----------------|-----------------------|
-| only the rows the migrations write, 14 MB | 0.16 s, 0.14 s, 0.15 s |
-| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 596 MB | 0.93 s, 1.31 s, 0.92 s |
-| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 594 MB | 1.78 s, 2.24 s, 3.46 s |
+| only the rows the migrations write, 14 MB | 0.27 s, 0.12 s, 0.13 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 597 MB | 1.43 s, 0.91 s, 1.20 s |
+| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 599 MB | 3.00 s, 1.49 s, 1.53 s |
+
+Two earlier sets of the same nine runs that day, the first without the `CHECKPOINT`, took 0.10 s to 0.55 s on the
+first database, 0.66 s to 2.81 s on the second and 1.94 s to 11.14 s on the third; the load average read 6.83 before
+the first set and 6.21 after it, and 6.08 before the second and 21.07 after it.
 
 The time grows with the size of the tables the migrations alter or index. The third database is the second with
 10,000 of its `audit_logs` rows written as such role changes;
