@@ -197,8 +197,10 @@ func (s *OIDCSignInService) Configuration(ctx context.Context, organizationID uu
 
 // OIDCSignInConfigInput is a configuration an administrator stores.
 type OIDCSignInConfigInput struct {
-	Issuer       string
-	ClientID     string
+	Issuer   string
+	ClientID string
+	// ClientSecret empty, or only spaces, keeps the stored configuration's
+	// client secret when that configuration has the same issuer and client id.
 	ClientSecret string
 	// Provisioning is stored only when it is enabled.
 	Provisioning OIDCProvisioningInput
@@ -217,22 +219,28 @@ type OIDCProvisioningInput struct {
 }
 
 // Configure stores in as the organization's configuration, in place of any
-// earlier one, with the client secret sealed to the organization. It refuses
-// an issuer, client id or client secret that breaks its rule with
-// ErrOIDCIssuerInvalid, ErrOIDCClientIDInvalid or ErrOIDCClientSecretInvalid,
-// an enabled provisioning whose role or domains break their rule with
-// ErrOIDCProvisioningRoleInvalid or ErrOIDCProvisioningDomainsInvalid, and an
-// issuer whose configuration document cannot be read or names another issuer
-// with an error that wraps oauth.ErrOIDCProviderUnavailable.
+// earlier one, with the client secret sealed to the organization. A
+// configuration without a client secret keeps the sealed secret of the stored
+// configuration when that one has the same issuer and client id, so an
+// administrator can change the provisioning or the requirement without the
+// secret; a secret is never kept for another issuer or client. It refuses an
+// issuer, client id or client secret that breaks its rule, or a missing
+// secret it cannot keep, with ErrOIDCIssuerInvalid, ErrOIDCClientIDInvalid or
+// ErrOIDCClientSecretInvalid, an enabled provisioning whose role or domains
+// break their rule with ErrOIDCProvisioningRoleInvalid or
+// ErrOIDCProvisioningDomainsInvalid, and an issuer whose configuration
+// document cannot be read or names another issuer with an error that wraps
+// oauth.ErrOIDCProviderUnavailable.
 func (s *OIDCSignInService) Configure(ctx context.Context, organizationID, actorID uuid.UUID, in OIDCSignInConfigInput) (*domain.OIDCSignInConfig, error) {
 	issuer := strings.TrimSpace(in.Issuer)
 	clientID := strings.TrimSpace(in.ClientID)
+	keepSecret := strings.TrimSpace(in.ClientSecret) == ""
 	switch {
 	case issuer == "" || len(issuer) > maxOIDCIssuerLength:
 		return nil, ErrOIDCIssuerInvalid
 	case clientID == "" || len(clientID) > maxOIDCClientIDLength:
 		return nil, ErrOIDCClientIDInvalid
-	case strings.TrimSpace(in.ClientSecret) == "" || len(in.ClientSecret) > maxOIDCClientSecretLength:
+	case len(in.ClientSecret) > maxOIDCClientSecretLength:
 		return nil, ErrOIDCClientSecretInvalid
 	}
 	provisioning, err := checkOIDCProvisioning(in.Provisioning)
@@ -242,13 +250,29 @@ func (s *OIDCSignInService) Configure(ctx context.Context, organizationID, actor
 	if err := oauth.CheckOIDCIssuer(issuer); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrOIDCIssuerInvalid, err)
 	}
+	// The secret to keep is read before the issuer is asked for anything, so
+	// a missing secret that cannot be kept sends no request.
+	var sealed string
+	if keepSecret {
+		stored, err := s.configs.Get(ctx, organizationID)
+		switch {
+		case errors.Is(err, domain.ErrOIDCSignInNotConfigured):
+			return nil, ErrOIDCClientSecretInvalid
+		case err != nil:
+			return nil, err
+		case stored.Issuer != issuer || stored.ClientID != clientID || stored.SealedClientSecret == "":
+			return nil, ErrOIDCClientSecretInvalid
+		}
+		sealed = stored.SealedClientSecret
+	}
 	if _, err := s.client.Discover(ctx, issuer); err != nil {
 		return nil, err
 	}
 
-	sealed, err := s.sealer.SealOIDCClientSecret(organizationID, in.ClientSecret)
-	if err != nil {
-		return nil, fmt.Errorf("sealing the client secret: %w", err)
+	if !keepSecret {
+		if sealed, err = s.sealer.SealOIDCClientSecret(organizationID, in.ClientSecret); err != nil {
+			return nil, fmt.Errorf("sealing the client secret: %w", err)
+		}
 	}
 	if err := s.configs.Put(ctx, &domain.OIDCSignInConfig{
 		OrganizationID:        organizationID,

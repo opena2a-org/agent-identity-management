@@ -22,6 +22,8 @@ export const ROUTE_PERMISSIONS: Record<string, UserRole[]> = {
   "/dashboard/admin/alerts": ["admin", "manager"],
   "/dashboard/admin/audit": ["admin", "manager"],
   "/dashboard/admin/security-policies": ["admin"],
+  // The organization's OpenID Connect provider; /api/v1/admin/oidc-sign-in sits in the admin group.
+  "/dashboard/admin/identity-provider": ["admin"],
   "/dashboard/admin/capability-requests": ["admin"],
   "/dashboard/security": ["admin", "manager", "member"],
   // Moved out from under /dashboard/admin, so it names its own roles: the same admin-only

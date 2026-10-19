@@ -13,9 +13,11 @@ import { safeReturnUrl } from "@/lib/return-url";
 import { SIGN_IN_NEUTRAL_MESSAGE, signInFailure, type SignInFailure } from "@/lib/sign-in-failure";
 import {
   OIDC_PROVIDER_ADDRESS_REFUSED_MESSAGE,
+  PROVIDER_SIGN_IN_REQUIRED_MESSAGE,
   oidcStartFailure,
   organizationIdParam,
   providerAuthorizationUrl,
+  providerSignInRequiredOrganization,
   rememberOidcSignIn,
 } from "@/lib/oidc-sign-in";
 
@@ -26,6 +28,11 @@ function LoginPageContent() {
   // An organization's sign-in link carries its id; the page then offers sign-in through
   // that organization's identity provider beside the password form.
   const organizationId = organizationIdParam(searchParams.get("organization"));
+  // A password sign-in refused because the user's organization requires its identity
+  // provider names that organization, and the page offers its provider from then on,
+  // in place of the link's: the refusal names the organization the account belongs to.
+  const [requiredOrganizationId, setRequiredOrganizationId] = useState<string | null>(null);
+  const providerOrganizationId = requiredOrganizationId ?? organizationId;
   const [isStartingProviderSignIn, setIsStartingProviderSignIn] = useState(false);
   const [isLoadingPassword, setIsLoadingPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -110,7 +117,13 @@ function LoginPageContent() {
         }
       }
     } catch (error) {
-      setFailure(signInFailure(error));
+      const requiredBy = providerSignInRequiredOrganization(error);
+      if (requiredBy) {
+        setRequiredOrganizationId(requiredBy);
+        setFailure({ message: PROVIDER_SIGN_IN_REQUIRED_MESSAGE, marksCredentials: false });
+      } else {
+        setFailure(signInFailure(error));
+      }
     } finally {
       setIsLoadingPassword(false);
     }
@@ -119,11 +132,11 @@ function LoginPageContent() {
   // The flow goes into this tab's storage before the browser leaves for the provider:
   // the callback page sends it back, and a tab that holds none completes no sign-in.
   const handleProviderSignIn = async () => {
-    if (!organizationId) return;
+    if (!providerOrganizationId) return;
     setFailure(null);
     setIsStartingProviderSignIn(true);
     try {
-      const start = await api.startOidcSignIn(organizationId);
+      const start = await api.startOidcSignIn(providerOrganizationId);
       const destination = providerAuthorizationUrl(start?.authorizationUrl);
       const flow = typeof start?.flow === "string" ? start.flow : "";
       if (!destination || !flow) {
@@ -132,7 +145,7 @@ function LoginPageContent() {
         setIsStartingProviderSignIn(false);
         return;
       }
-      rememberOidcSignIn({ organizationId, flow, returnUrl });
+      rememberOidcSignIn({ organizationId: providerOrganizationId, flow, returnUrl });
       // The button stays disabled while the browser leaves the page.
       window.location.assign(destination);
     } catch (error) {
@@ -170,7 +183,7 @@ function LoginPageContent() {
               <AlertDescription id="sign-in-failure">{failure.message}</AlertDescription>
             </Alert>
           )}
-          {organizationId && (
+          {providerOrganizationId && (
             <>
               <Button
                 type="button"

@@ -102,6 +102,20 @@ export const OIDC_PROVIDER_ANSWER_INCOMPLETE_MESSAGE =
 export const OIDC_PROVIDER_ADDRESS_REFUSED_MESSAGE =
   "The server answered an identity provider address that is not an https URL, so the browser was not sent there. Contact your administrator.";
 
+export const PROVIDER_SIGN_IN_REQUIRED_MESSAGE =
+  'Your organization requires you to sign in through its identity provider. Choose "Sign in with your identity provider" to continue.';
+
+/**
+ * The organization whose identity provider a refused password sign-in sends the user to:
+ * the organizationId, in lower case, of a 403 with the code provider_sign_in_required. Null
+ * for any other failure, and for that refusal when it names no organization id.
+ */
+export function providerSignInRequiredOrganization(error: unknown): string | null {
+  const failure = error as ApiRequestError | null;
+  if (failure?.status !== 403 || failure.code !== "provider_sign_in_required") return null;
+  return organizationIdParam(typeof failure.organizationId === "string" ? failure.organizationId : null);
+}
+
 // The server's reason for a refused callback (the code of its 401), in the words of the
 // person signing in. docs/API.md lists the reasons.
 const CALLBACK_REFUSALS: Record<string, string> = {

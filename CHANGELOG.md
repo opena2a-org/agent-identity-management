@@ -189,6 +189,38 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   refusal records, and `apps/backend/internal/infrastructure/repository/oidc_sign_in_config_repository_requirement_test.go`
   the stored document.
 
+### Added: an administrator sets up the organization's OpenID Connect sign-in in the dashboard, and the sign-in page offers the provider to a user the requirement refuses
+
+- The dashboard's identity provider page, `/dashboard/admin/identity-provider` (the Identity provider tab of
+  Organization, for administrators), reads the organization's provider with `GET /api/v1/admin/oidc-sign-in`, stores it
+  with `PUT` and removes it with `DELETE` after a confirmation. It shows the redirect URI to register with the provider
+  and, once a provider is stored, the organization's sign-in link, each with a copy button. Its form takes the issuer,
+  the client ID and the client secret, whether a sign-in creates an account (with the role and the email domains), and
+  whether the organization requires sign-in through the provider. Before it sends anything it checks that the issuer
+  is an `https` URL, that the client ID and a client secret it cannot keep are given, and that provisioning lists 1 to
+  20 domains. A `400` from the route is shown in the route's words; another failure is described from its status.
+- `PUT /api/v1/admin/oidc-sign-in` keeps the stored client secret when the body leaves `clientSecret` out, or sends it
+  empty or as spaces, and names the stored provider's issuer and client id, so the page changes the provisioning or the
+  requirement without the secret. A body that names another issuer or client id, or comes from an organization with no
+  stored provider, needs the secret and is answered `400` without it. The audit row of a stored configuration names
+  `clientSecretKept`.
+- When a password sign-in on the sign-in page is answered `403` with the code `provider_sign_in_required`, the page says
+  that the organization requires sign-in through its identity provider and shows the "Sign in with your identity
+  provider" button for the organization the refusal names, also on a page opened without a sign-in link, and in place
+  of the organization a sign-in link names. The dashboard's API client keeps a refusal's `organizationId` on the error
+  it throws.
+- Tests: `apps/web/app/dashboard/admin/identity-provider/page.test.tsx` stores a provider, changes a setting with the
+  client secret left empty, asks for the secret when the client ID or the issuer changes, checks the fields, shows a
+  refusal, removes the provider after a confirmation and copies both values.
+  `apps/web/app/auth/login/page.provider-sign-in-required.test.tsx` offers the refused account's provider and starts its
+  sign-in. `apps/web/lib/identity-provider-settings.test.ts` holds the form's rules and body, and
+  `apps/web/lib/api.oidc-sign-in-settings.test.ts` the three requests and the refusal's organization.
+  `apps/backend/internal/application/oidc_sign_in_client_secret_test.go` and
+  `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_handler_client_secret_test.go` keep the secret for the
+  same issuer and client id, sign in with it through the stub provider on 127.0.0.1, and refuse a missing secret for
+  another issuer or client id. On the commit this builds on, the two backend tests that keep the secret fail, the route
+  answering `400`, and each of the four web test files fails.
+
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
 - With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and

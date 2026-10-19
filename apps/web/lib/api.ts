@@ -10,9 +10,16 @@ import { INVALID_PASSWORD_CODE } from "./account-deletion";
 
 /**
  * An Error thrown for a non-2xx response, carrying the status, the backend's code when it
- * sent one, and the seconds its Retry-After header asked the client to wait.
+ * sent one, the seconds its Retry-After header asked the client to wait, and the
+ * organization the refusal names (a password sign-in refused with the code
+ * provider_sign_in_required names the user's organization).
  */
-export type ApiRequestError = Error & { status?: number; code?: string; retryAfterSeconds?: number };
+export type ApiRequestError = Error & {
+  status?: number;
+  code?: string;
+  retryAfterSeconds?: number;
+  organizationId?: string;
+};
 
 /**
  * The seconds a Retry-After header asks for: its delay-seconds form, or the time until its
@@ -222,6 +229,45 @@ export interface OidcSignInAnswer {
   accessToken: string;
   refreshToken: string;
   user: Pick<User, "id" | "email" | "name" | "role" | "organizationId" | "forcePasswordChange">;
+}
+
+/** The role an OpenID Connect sign-in gives a user it creates; never admin. */
+export type OidcProvisionedRole = "viewer" | "member" | "manager";
+
+/** What an organization's OpenID Connect sign-in does for an email no user of it has. */
+export interface OidcProvisioning {
+  enabled: boolean;
+  role?: OidcProvisionedRole;
+  emailDomains?: string[];
+}
+
+/**
+ * The answer of GET and PUT /api/v1/admin/oidc-sign-in: the organization's provider, or
+ * configured false. It never carries the client secret, only whether one is stored.
+ */
+export interface OidcSignInConfiguration {
+  configured: boolean;
+  /** The redirect URI to register with the provider. */
+  redirectUrl: string;
+  issuer?: string;
+  clientId?: string;
+  clientSecretSet?: boolean;
+  provisioning?: OidcProvisioning;
+  requireProviderSignIn?: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+/**
+ * The body of PUT /api/v1/admin/oidc-sign-in. An empty clientSecret keeps the stored client
+ * secret when the stored provider has the same issuer and client id.
+ */
+export interface OidcSignInConfigurationInput {
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  provisioning: OidcProvisioning;
+  requireProviderSignIn: boolean;
 }
 
 export interface APIKey {
@@ -980,6 +1026,9 @@ class APIClient {
       if (reasonCode) {
         requestError.code = reasonCode;
       }
+      if (typeof error?.organizationId === "string" && error.organizationId) {
+        requestError.organizationId = error.organizationId;
+      }
       const retryAfter = retryAfterSeconds(response.headers.get("Retry-After"));
       if (retryAfter !== undefined) {
         requestError.retryAfterSeconds = retryAfter;
@@ -1247,6 +1296,22 @@ class APIClient {
       this.setToken(response.accessToken, response.refreshToken, "new-session");
     }
     return response;
+  }
+
+  // The administration of the caller's organization's OpenID Connect provider (admin role).
+  async getOidcSignInConfiguration(): Promise<OidcSignInConfiguration> {
+    return this.request<OidcSignInConfiguration>("/api/v1/admin/oidc-sign-in");
+  }
+
+  async saveOidcSignInConfiguration(input: OidcSignInConfigurationInput): Promise<OidcSignInConfiguration> {
+    return this.request<OidcSignInConfiguration>("/api/v1/admin/oidc-sign-in", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  }
+
+  async removeOidcSignInConfiguration(): Promise<void> {
+    await this.request<void>("/api/v1/admin/oidc-sign-in", { method: "DELETE" });
   }
 
   async checkRegistrationStatus(requestId: string): Promise<{
