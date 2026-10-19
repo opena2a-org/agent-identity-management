@@ -6,6 +6,7 @@ import { forgetOnboardingViewed } from "./onboarding-viewed";
 import { normalizeViolation, type SecurityViolation } from "./violations";
 import { SERVER_ERROR_MESSAGE, isServerErrorStatus } from "./error-messages";
 import { withStorageLease } from "./storage-lease";
+import { INVALID_PASSWORD_CODE } from "./account-deletion";
 
 /**
  * An Error thrown for a non-2xx response, carrying the status, the backend's code when it
@@ -193,6 +194,15 @@ export interface User {
   requestedAt?: string;
   pictureUrl?: string;
   isRegistrationRequest?: boolean;
+}
+
+// An accepted request for the deletion of the signed-in user's account: the account
+// is deactivated, and the server deletes it from deletionDueAt, 29 days after
+// deletionRequestedAt.
+export interface AccountDeletion {
+  status: "deactivated";
+  deletionRequestedAt: string;
+  deletionDueAt: string;
 }
 
 export interface APIKey {
@@ -1064,6 +1074,79 @@ class APIClient {
     }
 
     return data_response;
+  }
+
+  // Asks for the deletion of the signed-in user's account, confirmed by the user's
+  // password. The server answers a password it refuses with 401 and
+  // INVALID_PASSWORD_CODE, which is thrown here with the session kept: request()
+  // takes any 401 for a refused session, so it would refresh, send the password a
+  // second time and sign out. A 401 without the code refuses the session: the session
+  // is refreshed and the request sent once more, and a session still refused is
+  // signed out as request() does. An accepted request deactivates the account, whose
+  // sessions the server refuses from then on, so the stored session is cleared.
+  async requestAccountDeletion(password: string): Promise<AccountDeletion> {
+    const path = "/api/v1/auth/delete-account";
+    const attempt = async (token: string | null) => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await fetch(`${this.baseURL}${path}`, {
+        method: "POST",
+        headers,
+        credentials: "omit", // the session travels only in the Authorization header
+        body: JSON.stringify({ password }),
+      });
+      return { response, body: await response.json().catch(() => null) };
+    };
+    const sessionRefused = (answer: { response: Response; body: any }) =>
+      answer.response.status === 401 && answer.body?.code !== INVALID_PASSWORD_CODE;
+
+    const token = this.getToken();
+    let answer = await attempt(token);
+    if (sessionRefused(answer)) {
+      const refreshed = await this.refreshAccessToken(token);
+      if (refreshed) {
+        answer = await attempt(this.getToken());
+      }
+      if (!refreshed || sessionRefused(answer)) {
+        // request() signs the session out and says so when the server refuses it.
+        // The password is not sent again.
+        return this.request<AccountDeletion>(path, { method: "POST" }, true);
+      }
+    }
+
+    const { response, body } = answer;
+    if (response.ok) {
+      // A success without the request's times, such as a proxy's page, does not
+      // show that the server took the request, so the session is kept.
+      if (typeof body?.deletionRequestedAt !== "string" || typeof body?.deletionDueAt !== "string") {
+        throw serverError(response.status);
+      }
+      this.clearToken();
+      return body as AccountDeletion;
+    }
+    if (isServerErrorStatus(response.status)) {
+      throw serverError(response.status);
+    }
+    const message =
+      (typeof body?.error === "string" && body.error) ||
+      (typeof body?.message === "string" && body.message) ||
+      `HTTP ${response.status}`;
+    const requestError = new Error(message) as ApiRequestError;
+    requestError.status = response.status;
+    const reasonCode =
+      (typeof body?.reasonCode === "string" && body.reasonCode) ||
+      (typeof body?.code === "string" && body.code) ||
+      undefined;
+    if (reasonCode) {
+      requestError.code = reasonCode;
+    }
+    const retryAfter = retryAfterSeconds(response.headers.get("Retry-After"));
+    if (retryAfter !== undefined) {
+      requestError.retryAfterSeconds = retryAfter;
+    }
+    throw requestError;
   }
 
   // Public Registration & Login (Email/Password)

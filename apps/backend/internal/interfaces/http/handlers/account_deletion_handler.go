@@ -16,6 +16,11 @@ import (
 // users who are not deactivated.
 const LastActiveAdminCode = "lastActiveAdmin"
 
+// InvalidPasswordCode is the code of the 401 that refuses the password. A 401
+// without it refuses the session, so a client tells a wrong password, which
+// the user can correct, from a session to refresh or end.
+const InvalidPasswordCode = "invalidPassword"
+
 // AccountDeletionHandler serves POST /api/v1/auth/delete-account: a signed-in
 // user asks for the deletion of their own account.
 type AccountDeletionHandler struct {
@@ -88,11 +93,12 @@ func (h *AccountDeletionHandler) RequestDeletion(c fiber.Ctx) error {
 	// The password is verified as at sign-in: a lockout, a deactivated
 	// account and an account without a password are refused there, and a
 	// wrong password is recorded as a failed attempt that counts toward a
-	// lockout. Every refusal answers the same line.
+	// lockout. Every refusal answers the same line and code.
 	verified, err := h.authService.LoginWithPasswordExtended(c.Context(), user.Email, req.Password, c.IP(), c.Get("User-Agent"))
 	if err != nil || verified == nil || verified.ID != user.ID {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Invalid password",
+			"code":  InvalidPasswordCode,
 		})
 	}
 

@@ -244,7 +244,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   other rows, and the deletion as an `account_deleted` row that names no user and whose resource is the deleted
   user's id.
 - The route shares the strict rate limit of the other `/api/v1/auth` routes (10 requests a minute), and `docs/API.md`
-  documents it. The dashboard does not offer it yet.
+  documents it.
+- The refused password's `401` carries the code `invalidPassword`. The route's other `401` answers, which refuse the
+  access token, carry no code.
+- The dashboard offers the request: the account menu's Delete account entry opens `/auth/delete-account`, which says
+  what the request does, takes the password and, once the request is accepted, shows the time from which the account
+  is deleted and clears the session the browser stores. The page sends the request through
+  `api.requestAccountDeletion`, which throws a refused password to the form and keeps the session. `request()` in
+  `apps/web/lib/api.ts` takes any `401` for a refused session: used for this route, it refreshed the session, sent
+  the password a second time and signed the user out. After a `401` without the code, the session is refreshed and the
+  request sent once more, and a session still refused is signed out by a request that carries no password. The only
+  active admin's `409` links to the Users page, where another user is made an admin.
 - Tests: `apps/backend/internal/interfaces/http/handlers/account_deletion_handler_test.go`,
   `apps/backend/internal/application/account_deletion_service_test.go`,
   `apps/backend/cmd/server/account_deletion_purge_job_test.go`, the deactivated account cases of
@@ -252,7 +262,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `TestStrictRateLimiterCoversExactlyTheCredentialRoutes`; against PostgreSQL,
   `apps/backend/internal/infrastructure/repository/user_deletion_request_integration_test.go` and
   `apps/backend/internal/interfaces/http/middleware/auth_deactivated_account_integration_test.go`, which fails on the
-  code before this change: the deactivated account's access token was admitted.
+  code before this change: the deactivated account's access token was admitted. In the dashboard,
+  `apps/web/lib/api.account-deletion.test.ts`, `apps/web/lib/account-deletion.test.ts`,
+  `apps/web/app/auth/delete-account/page.test.tsx` and `apps/web/components/dashboard-header.test.tsx`.
 
 ### Fixed: deleting an admin removes the admin's email from the admin access reviews kept as compliance evidence
 

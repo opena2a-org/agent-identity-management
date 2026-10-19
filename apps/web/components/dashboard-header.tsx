@@ -4,8 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { decodeJwtPayload } from "@/lib/jwt-payload";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Bell, ChevronDown, Loader2, Lock, LogOut } from "lucide-react";
+import { Bell, ChevronDown, Loader2, Lock, LogOut, UserX } from "lucide-react";
 import { api } from "@/lib/api";
+import { DELETE_ACCOUNT_PATH } from "@/lib/account-deletion";
 import { getRoleInfo, type UserRole } from "@/lib/permissions";
 import { eventEmitter } from "@/lib/event-emitter";
 import { AimLogo } from "@/components/sidebar";
@@ -211,6 +212,18 @@ export function DashboardHeader() {
                     <span>Change password</span>
                   </button>
                 )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    router.push(DELETE_ACCOUNT_PATH);
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-nav px-3 py-2 text-sm font-medium text-ink-body hover:bg-glass-inset-gray hover:text-ink"
+                >
+                  <UserX className="h-4 w-4 text-ink-tertiary" aria-hidden="true" />
+                  <span>Delete account</span>
+                </button>
                 <button
                   type="button"
                   role="menuitem"
