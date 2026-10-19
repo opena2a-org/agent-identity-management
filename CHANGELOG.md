@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: `aim-bootstrap --default` adds the default security policies a fresh database did not receive
+
+- Migrations `015_add_default_security_policies.sql` and `052_add_default_mcp_policies.sql` insert the OpenA2A Admin
+  organization's default policies only when the user `admin@opena2a.org` already exists. Migration
+  `013_create_default_admin_user.sql` no longer creates that user; `aim-bootstrap --default` does, after the migrations
+  have run, so on a fresh database neither migration inserted a row. Measured on PostgreSQL 18.3: after the 133
+  migrations and `aim-bootstrap --default`, `security_policies` held no row.
+- A `--default` run that creates the admin now adds those twelve policies to the admin's organization, created by the
+  admin, in the transaction that creates the admin: the six from migration 015 enabled, and the six MCP policies from
+  migration 052 disabled, with the values migrations 105, 114 and 130 give them. A run that finds the admin in place
+  adds none, so a policy an administrator deleted is not added back, and a bootstrap without `--default` adds none.
+  Measured on PostgreSQL 18.3: after the 133 migrations, the first `aim-bootstrap --default` left twelve rows,
+  identical to the rows the migrations leave on a database where the admin existed before migration 015 ran, and a
+  second run left the same twelve.
+- Tests: `apps/backend/cmd/bootstrap/default_policies_integration_test.go` runs the bootstrap twice against PostgreSQL
+  and checks the policies it leaves against the names migrations 015 and 052 insert; run against the bootstrap before
+  this change, it found no policy. It also applies the migrations for an organization whose admin exists and compares
+  every column the bootstrap writes with theirs. `run_bootstrap_test.go` holds the statement order, the organization and
+  admin each policy carries, and the rollback when a policy is refused, and
+  `security_policy_seed_threshold_test.go` reads the bootstrap's two trust-score policies with the other places that
+  seed one.
+
 ### Fixed — `docs/API.md`'s `POST /api/v1/agents` request sends `agentType` and registers an agent, and its agent answers show `agentType` (#795)
 
 - The `POST /api/v1/agents` section of `docs/API.md` gave the agent's type as `"type": "ai_agent"` in its request

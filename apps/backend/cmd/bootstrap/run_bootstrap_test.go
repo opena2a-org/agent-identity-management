@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql/driver"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -83,7 +86,7 @@ func TestRunBootstrap_FreshDatabasePrintsTheGuidesSteps(t *testing.T) {
 	// The configuration of the guide's Step 2 command.
 	cfg := &BootstrapConfig{
 		AdminEmail:    "admin@company.com",
-		AdminPassword: "ExampleOnlyP@ssword1",
+		AdminPassword: "FAKE-pass-1234",
 		AdminName:     "System Administrator",
 		OrgName:       "My Company",
 		OrgDomain:     "localhost",
@@ -119,7 +122,7 @@ func TestRunBootstrap_ExistingOrganizationAndAdminAreIndentedUnderTheirSteps(t *
 
 	cfg := &BootstrapConfig{
 		AdminEmail:    defaultAdminEmail,
-		AdminPassword: "ExampleOnlyP@ssword1",
+		AdminPassword: "FAKE-pass-1234",
 		AdminName:     "System Administrator",
 		OrgName:       defaultOrgName,
 		OrgDomain:     defaultOrgDomain,
@@ -150,5 +153,151 @@ func TestRunBootstrap_ExistingOrganizationAndAdminAreIndentedUnderTheirSteps(t *
 	}, "\n") + "\n"
 	if got := out.String(); got != want {
 		t.Errorf("runBootstrap printed:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// sameValue matches the first value it is compared with and, after that, only
+// a value equal to it, so that statements can be required to carry the ID
+// runBootstrap generates for the admin.
+type sameValue struct{ seen *driver.Value }
+
+func newSameValue() sameValue { return sameValue{seen: new(driver.Value)} }
+
+func (s sameValue) Match(v driver.Value) bool {
+	if *s.seen == nil {
+		*s.seen = v
+		return true
+	}
+	return *s.seen == v
+}
+
+// canonicalDefaultConfig is the configuration `aim-bootstrap --default` runs
+// with when no flag overrides a canonical value.
+func canonicalDefaultConfig() *BootstrapConfig {
+	return &BootstrapConfig{
+		AdminEmail:    defaultAdminEmail,
+		AdminPassword: "FAKE-pass-1234",
+		AdminName:     defaultAdminName,
+		OrgName:       defaultOrgName,
+		OrgDomain:     defaultOrgDomain,
+		MaxUsers:      defaultMaxUsers,
+		MaxAgents:     defaultMaxAgents,
+		Default:       true,
+	}
+}
+
+// expectDefaultRunCreatingTheAdmin queues the statements of a --default run
+// that finds the organization orgID and creates the admin. Each default
+// policy INSERT must carry orgID and the ID the admin INSERT carried; the
+// last present of them answer that they added no row.
+func expectDefaultRunCreatingTheAdmin(mock sqlmock.Sqlmock, orgDomain, orgID string, present int) {
+	admin := newSameValue()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM organizations WHERE domain = $1`)).
+		WithArgs(orgDomain).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(orgID))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).
+		WithArgs(admin, orgID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	for i, p := range defaultPolicies {
+		var added int64 = 1
+		if i >= len(defaultPolicies)-present {
+			added = 0
+		}
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO security_policies`)).
+			WithArgs(orgID, p.Name, p.Description, p.PolicyType, p.EnforcementAction,
+				p.SeverityThreshold, p.Rules, p.IsEnabled, p.Priority, admin).
+			WillReturnResult(sqlmock.NewResult(0, added))
+	}
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO system_config`)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+}
+
+// A --default run that creates the admin adds the default security policies
+// to the organization it found, as created by that admin, in the transaction
+// and before the bootstrap_completed marker, and prints how many it added. A
+// policy the organization already had is counted apart.
+func TestRunBootstrap_DefaultRunThatCreatesTheAdminAddsTheDefaultPolicies(t *testing.T) {
+	t.Parallel()
+
+	const orgID = "6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+	all := len(defaultPolicies)
+	for _, tc := range []struct {
+		name    string
+		present int
+		result  string
+	}{
+		{"organization without policies", 0, fmt.Sprintf("   Added %d default security policies", all)},
+		{"organization with two of them", 2, fmt.Sprintf("   Added %d default security policies; 2 the organization already had are left unchanged", all-2)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			if err != nil {
+				t.Fatalf("sqlmock.New: %v", err)
+			}
+			defer db.Close()
+
+			cfg := canonicalDefaultConfig()
+			expectDefaultRunCreatingTheAdmin(mock, cfg.OrgDomain, orgID, tc.present)
+
+			var out bytes.Buffer
+			if err := runBootstrap(context.Background(), &out, db, cfg); err != nil {
+				t.Fatalf("runBootstrap: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatalf("statements: %v", err)
+			}
+
+			want := withoutIDs(strings.Join([]string{
+				"1. Checking organization...",
+				"   Organization exists (ID: " + orgID + ")",
+				"2. Hashing password...",
+				"   Password hashed",
+				"3. Creating admin user...",
+				"   Admin user created (ID: <id>)",
+				"4. Adding default security policies...",
+				tc.result,
+				"5. Updating system configuration...",
+				"   System configuration updated",
+			}, "\n") + "\n")
+			if got := withoutIDs(out.String()); got != want {
+				t.Errorf("runBootstrap printed:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+// When the database refuses a default policy, the run fails and its
+// transaction is rolled back: the admin it inserted is not committed and the
+// bootstrap_completed marker is not set.
+func TestRunBootstrap_RefusedDefaultPolicyRollsTheRunBack(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	cfg := canonicalDefaultConfig()
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM organizations WHERE domain = $1`)).
+		WithArgs(cfg.OrgDomain).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO security_policies`)).
+		WillReturnError(errors.New("refused by the test"))
+	mock.ExpectRollback()
+
+	var out bytes.Buffer
+	err = runBootstrap(context.Background(), &out, db, cfg)
+	if err == nil || !strings.Contains(err.Error(), "failed to add default security policies") {
+		t.Fatalf("runBootstrap returned %v, want the refused policy's error", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("statements: %v", err)
 	}
 }

@@ -76,6 +76,17 @@ go run cmd/bootstrap/main.go --default --admin-password='OperatorChoiceP@ss1'
 command exits successfully without changing the existing admin. This makes it
 safe to wire into deployment scripts that may run on every container start.
 
+A `--default` run that creates the admin also adds twelve default security
+policies to the admin's organization, in the same transaction: the six policies
+migration `015_add_default_security_policies.sql` defines, enabled, and the six
+MCP policies migration `052_add_default_mcp_policies.sql` defines, disabled as
+migration 105 leaves them, each with the values the later migrations give it.
+Those two migrations add the policies only when the user `admin@opena2a.org`
+already exists, and migration 013 no longer creates that user, so on a fresh
+database they add none. A run that finds the admin already in place adds no
+policy, so a policy you delete or rename is not added back. A bootstrap without
+`--default` adds no policies.
+
 Inside the docker-compose image (post-B2), the binary is shipped as
 `/app/aim-bootstrap`. The repository's `docker-compose.yml` runs it with
 `--default` as the one-shot `bootstrap` service. Run it once the backend is
@@ -389,6 +400,16 @@ INSERT INTO users (
 ```sql
 INSERT INTO system_config (key, value, description)
 VALUES ('bootstrap_completed', 'true', 'Initial admin bootstrap completed');
+```
+
+### 4. Default Security Policies (`--default` only)
+The `--default` run that creates the admin adds twelve rows to
+`security_policies` for the admin's organization, each created by that admin:
+six enabled policies and six disabled MCP policies. To list them:
+```sql
+SELECT name, policy_type, enforcement_action, is_enabled
+FROM security_policies
+ORDER BY priority DESC;
 ```
 
 ---
