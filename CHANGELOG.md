@@ -11,6 +11,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: `trust_score.changed` is sent for the scores a trust score calculation, a capability grant or revocation, and a drift penalty store
+
+- The trust calculator, the capability service and the drift detection service store trust scores of their own and
+  had no webhook service to send through. On the commit before this change, `POST /api/v1/agents/:id/trust-score/recalculate`,
+  `POST /api/v1/trust-score/calculate/:id`, the recalculation after a capability is granted or revoked, and the drift
+  penalty for a verification event that reports an MCP server the agent is not registered to talk to stored a new
+  score and sent no event.
+- The server now gives the three its webhook service. Each sends `trust_score.changed` when it has stored a score
+  that differs from the agent's at the two decimal places `agents.trust_score` keeps, and the event carries both
+  scores at that precision. A calculation counts as stored once both of its writes, the trust score history row and
+  the agent's score, succeeded, and a drift penalty once the agent's score was written. After a grant or a revocation
+  the score counts as stored when the agent's row or its history row was written, as the history insert sets
+  `agents.trust_score`. The trust score policy does not run after these changes, so none of them sends
+  `trust_score.low`.
+- `docs/API.md` and the events offered in the dashboard's webhook dialog say when the two events are sent. Tests:
+  `apps/backend/internal/application/trust_score_senders_test.go` fails to build on the commit before this change,
+  where the three services have no webhook service, and `TestInitServices_SetsTheWebhookServiceOnTheEventServices`
+  in `apps/backend/cmd/server/webhook_wiring_test.go` fails there with three of the six services given the webhook
+  service.
+
 ### Fixed: HTTP request metrics count a request a route served under that route's path, so the values a caller puts in a path add no series
 
 - `PrometheusMiddleware` labelled a request a route handler served with the path the caller sent, after replacing

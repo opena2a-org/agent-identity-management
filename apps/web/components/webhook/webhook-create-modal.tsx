@@ -53,13 +53,13 @@ export const AVAILABLE_EVENTS = [
     id: 'trust_score.changed',
     label: 'Trust Score Changed',
     description:
-      "An administrator sets an agent's trust score through PUT /api/v1/agents/:id/trust-score, or a capability violation lowers it, and the stored score differs from the one before. Other trust score changes, including POST /api/v1/agents/:id/trust-score/recalculate, send no event.",
+      "An administrator sets an agent's trust score through PUT /api/v1/agents/:id/trust-score, or a capability violation lowers it, and the stored score differs from the one before; or a score that differs from the agent's at two decimal places is stored by a trust score calculation, such as POST /api/v1/agents/:id/trust-score/recalculate or POST /api/v1/trust-score/calculate/:id, by the recalculation after a capability is granted or revoked, by the drift penalty for a verification event that reports an MCP server the agent is not registered to talk to, or by the trust re-evaluation job. Other trust score changes, such as the recalculation after an agent is updated, verified or suspended, send no event.",
   },
   {
     id: 'trust_score.low',
     label: 'Trust Score Low',
     description:
-      "After one of the changes trust_score.changed names, the trust score policy finds that a verified or pending agent's score fell and ends below 70%. severity is critical below 50%, where the policy also suspends the agent, and warning otherwise.",
+      "After an administrator sets an agent's trust score through PUT /api/v1/agents/:id/trust-score, or a capability violation lowers it, the trust score policy finds that a verified or pending agent's score fell and ends below 70%. severity is critical below 50%, where the policy also suspends the agent, and warning otherwise.",
   },
   {
     id: 'alert.created',

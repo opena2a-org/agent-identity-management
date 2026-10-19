@@ -37,6 +37,7 @@ type TrustCalculator struct {
 	userFeedbackRepo      domain.UserFeedbackRepository
 	tmeProvider           NanoMindTMEProvider
 	mcpConnRepo           MCPConnectionLister
+	webhooks              webhookEventDispatcher // Optional: sends trust_score.changed; set by SetWebhookService
 }
 
 // MCPConnectionLister resolves the MCP servers an agent is connected to. The drift
@@ -124,6 +125,13 @@ func (c *TrustCalculator) SetMCPConnectionRepo(repo MCPConnectionLister) {
 // Optional; when not set, TME has no effect on scoring.
 func (c *TrustCalculator) SetTMEProvider(provider NanoMindTMEProvider) {
 	c.tmeProvider = provider
+}
+
+// SetWebhookService wires the webhook service that trust_score.changed is sent
+// to when CalculateTrustScore stores a score that differs from the agent's.
+// When unset, no event is sent.
+func (c *TrustCalculator) SetWebhookService(webhookService *WebhookService) {
+	c.webhooks = asWebhookEventDispatcher(webhookService)
 }
 
 // Calculate calculates trust score for an agent
@@ -860,6 +868,9 @@ func (c *TrustCalculator) CalculateTrustScore(ctx context.Context, agentID uuid.
 	if err := c.agentRepo.UpdateTrustScore(agentID, score.Score); err != nil {
 		return nil, fmt.Errorf("failed to update agent trust score: %w", err)
 	}
+
+	// agent was read before the calculation, so it holds the score stored until now.
+	sendStoredTrustScoreChange(c.webhooks, agent, agent.TrustScore, score.Score)
 
 	return score, nil
 }

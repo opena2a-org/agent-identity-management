@@ -121,7 +121,7 @@ func (s *AgentService) sendTrustScoreChanged(agent *domain.Agent, previousScore,
 // moves by less sends nothing. When no webhook service is set, nothing is
 // sent.
 func (s *AgentService) NotifyTrustScoreChanged(agent *domain.Agent, previousScore, newScore float64) {
-	s.sendTrustScoreChanged(agent, storedTrustScore(previousScore), storedTrustScore(newScore))
+	sendStoredTrustScoreChange(s.webhooks, agent, previousScore, newScore)
 }
 
 // storedTrustScore rounds a score to the precision of agents.trust_score,

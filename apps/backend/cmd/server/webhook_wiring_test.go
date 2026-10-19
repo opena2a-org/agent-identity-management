@@ -31,7 +31,9 @@ func servicesFields(t *testing.T, fn *ast.FuncDecl) map[string]string {
 
 // The alert, agent and API key services the server hands to its handlers send
 // their webhook events through the webhook service the server builds, which
-// bounds the delivery.
+// bounds the delivery, and so do the trust calculator, the capability service
+// and the drift detection service the verification event service runs, which
+// send trust_score.changed for the scores they store.
 func TestInitServices_SetsTheWebhookServiceOnTheEventServices(t *testing.T) {
 	initServices := funcDecl(t, "main.go", "initServices")
 
@@ -59,11 +61,23 @@ func TestInitServices_SetsTheWebhookServiceOnTheEventServices(t *testing.T) {
 			"%s.SetWebhookService is given the server's webhook service", identName(sel.X))
 		receivers[identName(sel.X)] = true
 	}
-	assert.Equal(t, map[string]bool{"alertService": true, "agentService": true, "apiKeyService": true}, receivers)
+	assert.Equal(t, map[string]bool{
+		"alertService": true, "agentService": true, "apiKeyService": true,
+		"trustCalculator": true, "capabilityService": true, "driftDetectionService": true,
+	}, receivers)
+
+	var driftDetectionUsed bool
+	for _, call := range callsIn(initServices.Body, "NewVerificationEventService") {
+		require.Len(t, call.Args, 3)
+		driftDetectionUsed = identName(call.Args[2]) == "driftDetectionService"
+	}
+	assert.True(t, driftDetectionUsed, "the verification event service runs the drift detection service given the webhook service")
 
 	fields := servicesFields(t, initServices)
 	assert.Equal(t, "alertService", fields["Alert"])
 	assert.Equal(t, "agentService", fields["Agent"])
+	assert.Equal(t, "trustCalculator", fields["Trust"])
+	assert.Equal(t, "capabilityService", fields["Capability"])
 	assert.Equal(t, "apiKeyService", fields["APIKey"])
 	assert.Equal(t, "webhookService", fields["Webhook"])
 }
