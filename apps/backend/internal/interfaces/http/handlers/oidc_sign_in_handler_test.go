@@ -114,6 +114,31 @@ func (m *oidcHandlerUsers) UpdateLastLogin(id uuid.UUID, at time.Time) error {
 	return nil
 }
 
+func (m *oidcHandlerUsers) EmailInUseOutsideOrganization(email string, orgID uuid.UUID) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.rows {
+		if u.OrganizationID != orgID && strings.EqualFold(u.Email, email) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Create adds the user, refusing a second user of an organization with the
+// same email as the users table does.
+func (m *oidcHandlerUsers) Create(user *domain.User) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.rows {
+		if u.OrganizationID == user.OrganizationID && u.Email == user.Email {
+			return errors.New(`duplicate key value violates unique constraint "users_organization_id_email_key"`)
+		}
+	}
+	m.rows[user.ID] = *user
+	return nil
+}
+
 // oidcAuditRepo records every audit row the handler writes.
 type oidcAuditRepo struct {
 	domain.AuditLogRepository

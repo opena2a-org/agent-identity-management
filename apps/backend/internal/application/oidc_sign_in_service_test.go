@@ -73,6 +73,47 @@ type memoryUsers struct {
 	mu         sync.Mutex
 	rows       map[uuid.UUID]domain.User
 	lastLogins map[uuid.UUID]int
+	// creates counts the calls to Create, refused ones included.
+	creates int
+	// beforeCreate, when set, runs at the start of Create, before the user
+	// is checked against the others.
+	beforeCreate func(user *domain.User)
+}
+
+// EmailInUseOutsideOrganization reports whether a user of an organization
+// other than orgID has the email, compared without regard to case, deleted
+// users included, as the repository's query does.
+func (m *memoryUsers) EmailInUseOutsideOrganization(email string, orgID uuid.UUID) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.rows {
+		if u.OrganizationID != orgID && strings.EqualFold(u.Email, email) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Create adds the user. It refuses a second user of an organization with the
+// same email, or a second user with the same provider and provider id, as
+// the users table's unique constraints do.
+func (m *memoryUsers) Create(user *domain.User) error {
+	if m.beforeCreate != nil {
+		m.beforeCreate(user)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.creates++
+	for _, u := range m.rows {
+		if u.OrganizationID == user.OrganizationID && u.Email == user.Email {
+			return errors.New(`duplicate key value violates unique constraint "users_organization_id_email_key"`)
+		}
+		if u.Provider == user.Provider && u.ProviderID == user.ProviderID {
+			return errors.New(`duplicate key value violates unique constraint "users_provider_provider_id_key"`)
+		}
+	}
+	m.rows[user.ID] = *user
+	return nil
 }
 
 func newMemoryUsers(users ...domain.User) *memoryUsers {
@@ -192,7 +233,15 @@ func (f *oidcSignInFixture) start(t *testing.T, org uuid.UUID, id oidctest.Ident
 func (f *oidcSignInFixture) signIn(t *testing.T, org uuid.UUID, id oidctest.Identity) (*domain.User, error) {
 	t.Helper()
 	start, code, state := f.start(t, org, id)
-	return f.service.CompleteSignIn(context.Background(), code, state, start.Flow)
+	return userOf(f.service.CompleteSignIn(context.Background(), code, state, start.Flow))
+}
+
+// userOf returns the user a completed sign-in signed in.
+func userOf(result *OIDCSignInResult, err error) (*domain.User, error) {
+	if err != nil {
+		return nil, err
+	}
+	return result.User, nil
 }
 
 func refusalReason(t *testing.T, err error) string {
@@ -220,7 +269,7 @@ func TestOIDCSignInEndsAsTheUserOfTheConfiguredOrganization(t *testing.T) {
 	assert.True(t, strings.HasPrefix(start.Flow, f.orgA.String()+"."))
 	assert.WithinDuration(t, time.Now().Add(10*time.Minute), start.ExpiresAt, time.Minute)
 
-	user, err := f.service.CompleteSignIn(context.Background(), code, state, start.Flow)
+	user, err := userOf(f.service.CompleteSignIn(context.Background(), code, state, start.Flow))
 	require.NoError(t, err)
 	assert.Equal(t, alice.ID, user.ID)
 	assert.Equal(t, f.orgA, user.OrganizationID)
@@ -315,10 +364,10 @@ func TestOIDCSignInFlowIsBoundToItsOrganization(t *testing.T) {
 	assert.Equal(t, OIDCSignInRefusedStateMismatch, refusalReason(t, err))
 	assert.Zero(t, f.stub.Redeemed()+stubB.Redeemed(), "no code was redeemed")
 
-	user, err := f.service.CompleteSignIn(context.Background(), codeA, stateA, startA.Flow)
+	user, err := userOf(f.service.CompleteSignIn(context.Background(), codeA, stateA, startA.Flow))
 	require.NoError(t, err)
 	assert.Equal(t, aliceA.ID, user.ID)
-	user, err = f.service.CompleteSignIn(context.Background(), codeB, stateB, startB.Flow)
+	user, err = userOf(f.service.CompleteSignIn(context.Background(), codeB, stateB, startB.Flow))
 	require.NoError(t, err)
 	assert.Equal(t, aliceB.ID, user.ID)
 }

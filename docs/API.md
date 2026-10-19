@@ -193,7 +193,7 @@ A request without a password answers `400`. A wrong password, a locked account a
 
 #### Sign-in through the organization's OpenID Connect provider
 
-An administrator stores the OpenID Connect provider the users of the organization sign in through: the provider's issuer, and the client id and client secret the provider registered for this deployment. An organization has at most one. A user then signs in at the provider with the authorization code flow and PKCE (`S256`), and the server answers a login pair for the user of that organization whose email the provider asserts.
+An administrator stores the OpenID Connect provider the users of the organization sign in through: the provider's issuer, and the client id and client secret the provider registered for this deployment. An organization has at most one. A user then signs in at the provider with the authorization code flow and PKCE (`S256`), and the server answers a login pair for the user of that organization whose email the provider asserts. A configuration can also provision users: the first sign-in of an email that no user of the organization has then creates that user.
 
 `PUT /api/v1/admin/oidc-sign-in` (admin role) stores the provider of the caller's organization, in place of any earlier one.
 
@@ -202,9 +202,16 @@ An administrator stores the OpenID Connect provider the users of the organizatio
 {
   "issuer": "https://idp.example.com",
   "clientId": "<the client id the provider registered>",
-  "clientSecret": "<the client secret the provider issued>"
+  "clientSecret": "<the client secret the provider issued>",
+  "provisioning": {
+    "enabled": true,
+    "role": "viewer",
+    "emailDomains": ["example.com"]
+  }
 }
 ```
+
+`provisioning` is optional. A body without it, or with `enabled` `false`, stores a configuration that provisions no user, and the role and domains of a provisioning that is not enabled are not stored. With `enabled` `true`, `role` is `viewer`, `member` or `manager`, and `viewer` when it is left out; `admin` is refused, so a provider's assertion never makes a user an administrator. `emailDomains` holds 1 to 20 domain names, such as `example.com`, stored in lower case without a final dot; a wildcard, an address, a URL and a name of one label are refused. A role or domains outside these rules answer `400`.
 
 The issuer must be an `https` URL with no query or fragment. Before it stores anything, the server reads the provider's configuration document, `<issuer>/.well-known/openid-configuration`, and answers `400` when the document cannot be read, names another issuer, or names an authorization, token or key set endpoint that is not an `https` URL. Every request to the provider is sent with the server's egress client, which refuses internal addresses such as loopback. The client secret is stored encrypted with the key vault's master key (`KEYVAULT_MASTER_KEY`) and bound to the organization. No answer and no audit row carries it.
 
@@ -215,13 +222,18 @@ The issuer must be an `https` URL with no query or fragment. Before it stores an
   "issuer": "https://idp.example.com",
   "clientId": "<the client id>",
   "clientSecretSet": true,
+  "provisioning": {
+    "enabled": true,
+    "role": "viewer",
+    "emailDomains": ["example.com"]
+  },
   "redirectUrl": "https://aim.example.com/auth/oidc/callback",
   "updatedBy": "550e8400-e29b-41d4-a716-446655440000",
   "updatedAt": "2026-10-19T08:00:00Z"
 }
 ```
 
-`GET /api/v1/admin/oidc-sign-in` answers the same, or `{"configured": false, "redirectUrl": "..."}` when the organization has no provider. `DELETE /api/v1/admin/oidc-sign-in` removes the provider and answers `204`; a sign-in started before the removal is then refused. A stored provider and a removal are recorded in the audit log as `update` and `delete` of the resource type `oidc_sign_in_config`.
+`provisioning` is `{"enabled": false}` for a configuration that provisions no user. `GET /api/v1/admin/oidc-sign-in` answers the same, or `{"configured": false, "redirectUrl": "..."}` when the organization has no provider. `DELETE /api/v1/admin/oidc-sign-in` removes the provider and answers `204`; a sign-in started before the removal is then refused. A stored provider and a removal are recorded in the audit log as `update` and `delete` of the resource type `oidc_sign_in_config`; the metadata of the `update` row names the issuer, the client id and the provisioning.
 
 `redirectUrl` is the `/auth/oidc/callback` page under `FRONTEND_URL`, the redirect URI every authorization request names; register it with the provider. The dashboard does not serve that page yet: until it does, a client that signs a user in this way takes the `code` and `state` of the provider's redirect itself and posts them to the callback route.
 
@@ -251,7 +263,9 @@ The browser goes to `authorizationUrl`. The client keeps `flow`, which holds the
 
 **Response** (200): the answer of `POST /api/v1/auth/login/local`, `accessToken`, `refreshToken` and `user`. The sign-in is recorded in the audit log as a `login` with `method` `oidc`.
 
-The server redeems the code at the provider's token endpoint with the code verifier, authenticating with `client_secret_basic`, or with `client_secret_post` when the provider's configuration document lists it and not `client_secret_basic`. It accepts the ID token the provider answers only when the token is signed by a key of the provider's key set with RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or ES512; names the configured issuer exactly; has the client id among its audiences, and as its `azp` when it names one or has more than one audience; carries an `exp` that has not passed and an `iat` that is not ahead of the server's clock, each with 30 seconds of leeway, and an `nbf`, when it has one, that has passed; carries a subject; and carries the sign-in's nonce. The user is the user of the organization whose email equals the token's `email`, compared without regard to case, when the token's `email_verified` is `true`. Only the users of the organization the sign-in started for are compared: a provider stored for one organization never signs in a user of another, and the sign-in creates no user.
+The server redeems the code at the provider's token endpoint with the code verifier, authenticating with `client_secret_basic`, or with `client_secret_post` when the provider's configuration document lists it and not `client_secret_basic`. It accepts the ID token the provider answers only when the token is signed by a key of the provider's key set with RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 or ES512; names the configured issuer exactly; has the client id among its audiences, and as its `azp` when it names one or has more than one audience; carries an `exp` that has not passed and an `iat` that is not ahead of the server's clock, each with 30 seconds of leeway, and an `nbf`, when it has one, that has passed; carries a subject; and carries the sign-in's nonce. The user is the user of the organization whose email equals the token's `email`, compared without regard to case, when the token's `email_verified` is `true`. Only the users of the organization the sign-in started for are compared: a provider stored for one organization never signs in a user of another. A configuration that provisions no user creates none.
+
+When no user of the organization has the email and the configuration provisions users, the sign-in creates a user of that organization and signs it in. The user has the email in lower case; the token's `name`, or the email when the token has none, cut to 255 characters; the configuration's role; the status `active`; the provider `oidc`; and no password. The email must be an address at one of `emailDomains` exactly, so an address at a subdomain of a listed domain is not provisioned, and no user of another organization, deleted or not, may have it. The new user is recorded in the audit log as a `create` of the resource type `user` with `method` `oidc_provisioning`, before the `login`. The next sign-in with the email signs the same user in.
 
 A refused sign-in answers `401` with `{"error": "Sign-in through the identity provider was refused", "code": "<reason>"}`:
 
@@ -265,7 +279,9 @@ A refused sign-in answers `401` with `{"error": "Sign-in through the identity pr
 | `code_refused` | the provider's token endpoint refused the code |
 | `id_token_invalid` | the ID token failed one of the checks above |
 | `email_not_verified` | the ID token carries no email, or its `email_verified` is not `true` |
-| `no_user` | no user of the organization has the email |
+| `no_user` | no user of the organization has the email, and the configuration provisions none |
+| `domain_not_provisioned` | the configuration provisions users, and the email is not an address at one of its `emailDomains` |
+| `email_in_other_organization` | the configuration provisions users, and a user of another organization has the email |
 | `ambiguous_user` | more than one user of the organization has the email |
 | `account_inactive` | the user is suspended, deactivated or deleted |
 

@@ -38,6 +38,17 @@ type oidcSignInConfigValue struct {
 	ClientID           string    `json:"clientId"`
 	SealedClientSecret string    `json:"sealedClientSecret"`
 	UpdatedBy          uuid.UUID `json:"updatedBy"`
+	// Provisioning is written only for a configuration that provisions
+	// users, so the document of one that does not is the document of a
+	// configuration stored before provisioning existed.
+	Provisioning *oidcProvisioningValue `json:"provisioning,omitempty"`
+}
+
+// oidcProvisioningValue is the provisioning member of the document.
+type oidcProvisioningValue struct {
+	Enabled      bool     `json:"enabled"`
+	Role         string   `json:"role"`
+	EmailDomains []string `json:"emailDomains"`
 }
 
 func oidcSignInConfigKey(organizationID uuid.UUID) string {
@@ -64,14 +75,22 @@ func (r *OIDCSignInConfigRepository) Get(ctx context.Context, organizationID uui
 	if err := json.Unmarshal([]byte(value), &doc); err != nil {
 		return nil, fmt.Errorf("failed to read the OIDC sign-in configuration: %w", err)
 	}
-	return &domain.OIDCSignInConfig{
+	cfg := &domain.OIDCSignInConfig{
 		OrganizationID:     organizationID,
 		Issuer:             doc.Issuer,
 		ClientID:           doc.ClientID,
 		SealedClientSecret: doc.SealedClientSecret,
 		UpdatedBy:          doc.UpdatedBy,
 		UpdatedAt:          updatedAt,
-	}, nil
+	}
+	if p := doc.Provisioning; p != nil && p.Enabled {
+		cfg.Provisioning = domain.OIDCProvisioning{
+			Enabled:      true,
+			Role:         domain.UserRole(p.Role),
+			EmailDomains: p.EmailDomains,
+		}
+	}
+	return cfg, nil
 }
 
 // Put writes cfg to its organization's row, inserting the row or replacing
@@ -80,12 +99,16 @@ func (r *OIDCSignInConfigRepository) Put(ctx context.Context, cfg *domain.OIDCSi
 	if cfg.OrganizationID == uuid.Nil {
 		return errors.New("an OIDC sign-in configuration needs an organization")
 	}
-	value, err := json.Marshal(oidcSignInConfigValue{
+	doc := oidcSignInConfigValue{
 		Issuer:             cfg.Issuer,
 		ClientID:           cfg.ClientID,
 		SealedClientSecret: cfg.SealedClientSecret,
 		UpdatedBy:          cfg.UpdatedBy,
-	})
+	}
+	if p := cfg.Provisioning; p.Enabled {
+		doc.Provisioning = &oidcProvisioningValue{Enabled: true, Role: string(p.Role), EmailDomains: p.EmailDomains}
+	}
+	value, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("failed to write the OIDC sign-in configuration: %w", err)
 	}

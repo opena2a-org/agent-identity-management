@@ -422,3 +422,23 @@ func (r *UserRepository) CountByRoleAndStatus(role domain.UserRole, status domai
 
 	return count, nil
 }
+
+// EmailInUseOutsideOrganization reports whether a user of an organization other than
+// organizationID has the email, compared without regard to case. A soft-deleted user
+// counts: its row still holds the email.
+func (r *UserRepository) EmailInUseOutsideOrganization(email string, organizationID uuid.UUID) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM users
+			WHERE LOWER(email) = LOWER($1)
+			  AND organization_id <> $2
+		)
+	`
+
+	var inUse bool
+	if err := r.db.QueryRow(query, email, organizationID).Scan(&inUse); err != nil {
+		return false, fmt.Errorf("failed to look up the email in other organizations: %w", err)
+	}
+
+	return inUse, nil
+}

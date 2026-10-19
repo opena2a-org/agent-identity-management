@@ -113,9 +113,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   and bound to the organization. `POST /api/v1/auth/oidc/callback` takes the code, the state and the flow, redeems the
   code, checks the ID token's signature with the provider's key set and its issuer, audience, `azp`, `exp`, `iat`,
   `nbf` and nonce, and answers a login pair, as `POST /api/v1/auth/login/local` does, for the user of that
-  organization whose email the token asserts as verified. Only the users of that organization are compared, and the sign-in creates no
-  user. A refused sign-in answers `401` with a `code` that names the check; `docs/API.md` lists them. Both routes are
-  behind the credential routes' rate limiter.
+  organization whose email the token asserts as verified. Only the users of that organization are compared, and without
+  provisioning (the next entry) the sign-in creates no user. A refused sign-in answers `401` with a `code` that names
+  the check; `docs/API.md` lists them. Both routes are behind the credential routes' rate limiter.
 - The provider redirects the browser to the `/auth/oidc/callback` page under `FRONTEND_URL`, which the dashboard does
   not serve yet.
 - Tests: `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_handler_test.go` drives the login and callback
@@ -125,6 +125,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   organization, asserting the email of a user of another, signs in no one and changes no user.
   `apps/backend/internal/application/oidc_sign_in_service_test.go` holds the flow's binding to its organization and
   its 10-minute lifetime, and `apps/backend/internal/infrastructure/oauth/oidc_provider_test.go` each ID token check.
+
+### Added: an organization's OpenID Connect sign-in can create the user at the first sign-in
+
+- `PUT /api/v1/admin/oidc-sign-in` takes an optional `provisioning` member: `enabled`, a `role` (`viewer`, `member` or
+  `manager`, and `viewer` when it is left out; `admin` is refused) and 1 to 20 `emailDomains`. `GET` answers it, and
+  the audit row of a stored configuration names it. A body without it stores a configuration that provisions no user.
+  Provisioning is kept in the configuration's `system_config` row; this adds no migration.
+- With provisioning enabled, a sign-in whose verified email no user of the organization has creates a user of that
+  organization and answers a login pair for it. The user has the email in lower case, the ID token's name, the
+  configured role, the status `active`, the provider `oidc` and no password. The email must be an address at one of
+  the configured domains exactly, and no user of another organization, deleted or not, may have it; otherwise the
+  callback answers `401` with the code `domain_not_provisioned` or `email_in_other_organization` and creates nothing.
+  The new user is recorded in the audit log as a `create` of the resource type `user`, before the login.
+- Tests: `apps/backend/internal/application/oidc_sign_in_provisioning_test.go` provisions a user of the configured
+  organization and signs the same user in at the next sign-in, refuses addresses at other domains and at subdomains,
+  never provisions the email of another organization's user, and ends as the user a concurrent first sign-in
+  created. `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_handler_provisioning_test.go` drives the
+  administration, login and callback routes against the stub provider on 127.0.0.1.
 
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
