@@ -11,6 +11,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: HTTP request metrics count a request a route served under that route's path, so the values a caller puts in a path add no series
+
+- `PrometheusMiddleware` labelled a request a route handler served with the path the caller sent, after replacing
+  each segment of digits and each 36-character segment holding four hyphens with `:id`. A value of another shape in a
+  path parameter or a wildcard became a new `path` value on `aim_http_requests_total` and
+  `aim_http_request_duration_seconds`, and so did a request that a middleware on the route's own registration line
+  refused, such as the rate limiter of `GET /api/v1/did/*`, a route that takes no credentials. In
+  `prometheus_middleware_test.go`, 100 requests with distinct values on four such routes added 100 series to the
+  registry before this change; with it they add none.
+- The `path` label is now the route's path as the server registers it, group prefix included, for example
+  `/api/v1/agents/:id/trust-score` or `/api/v1/did/*`. A request no route handler served keeps the label `unmatched`:
+  an unknown path, a method the path does not accept, or a request a group middleware refused.
+- A query or alert on a served request's own path, such as a `path` holding a DID under `/api/v1/did/`, receives no
+  new samples and needs the route's path. A `:id` the replacement wrote stays only where the route names its
+  parameter `:id`: requests to `POST /api/v1/agents/:id/log-capability/:audit_id` with two UUIDs were counted under
+  `/api/v1/agents/:id/log-capability/:id` and are now counted under the route's path.
+- `docs/DEPLOYMENT.md` describes the labels under Prometheus metric names. Tests: in `prometheus_middleware_test.go`,
+  one test fails unless a request to a path-parameter, wildcard, two-parameter group or rate-limited route is counted
+  under that route's path and under no other series, and another fails unless 100 requests with distinct path values
+  add no series and none of the values appears in the body `/metrics` serves; both fail on the middleware before this
+  change. A third sends 600 mixed-method requests, 400 of them concurrently, and fails unless the 600 are counted
+  under the route with valid method labels; it passes before this change as well.
+
 ### Added: The server runs a capability drift monitor and a trust re-evaluation job
 
 - The capability drift monitor runs every 15 minutes by default (`DRIFT_MONITOR_INTERVAL`, a Go duration, at

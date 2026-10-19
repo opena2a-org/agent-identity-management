@@ -1126,6 +1126,8 @@ Every `fga.authorize` decision lands as a parent span, a child of its request's 
 
 The gauge of registered MCP servers is `aim_mcp_servers`. It was `aim_mcp_servers_total`, a counter's suffix on a gauge; a query or alert on the old name matches nothing and needs the new one.
 
+`aim_http_requests_total` and `aim_http_request_duration_seconds` carry the labels `method`, `path` and `status`. `path` is the path of the route that served the request as the server registers it, group prefix included, for example `/api/v1/agents/:id/trust-score` or `/api/v1/did/*`, so the values a caller puts in a path parameter or a wildcard are not label values. A request no route handler served carries `path="unmatched"`: an unknown path, a method the path does not accept, or a request a group middleware refused, such as one without credentials under `/api/v1/agents`. `status` is the status the client received. Earlier builds labelled a request a route handler served with the path the caller sent, with each segment of digits and each 36-character segment holding four hyphens replaced by `:id`; a query or alert on such a value needs the route's path.
+
 ---
 
 ## 📞 Support
