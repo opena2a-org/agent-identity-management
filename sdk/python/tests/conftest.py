@@ -19,7 +19,7 @@ offline suite only ever talks to its own fakes, which do not verify
 signatures. They exist to satisfy imports and produce byte-shaped values.
 
 The ``isolated_home`` fixture at the end of this file runs every test against
-an empty temporary home directory.
+an empty temporary home directory, which is also its working directory.
 """
 
 import base64
@@ -451,12 +451,19 @@ if _UNSHIMMED_MARKERS:
 # home directory that holds `aim-sdk login` credentials reaches that home's
 # `.aim` that way (#726). A test that needs stored credentials writes them under
 # the temporary home, or patches these names itself.
+#
+# The patches below reach this process only. A Python child process a test
+# starts runs that discovery itself, from the working directory it is given or
+# inherits, so the working directory is the temporary home too, and no test
+# gives a Python child a directory of the checkout as its cwd
+# (tests/test_isolated_home.py checks both).
 
 @pytest.fixture(autouse=True)
 def isolated_home(monkeypatch, tmp_path_factory):
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.chdir(home)
 
     from aim_sdk import credentials, grant_client
 

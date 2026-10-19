@@ -29,7 +29,7 @@ INIT = SDK_ROOT / "aim_sdk" / "__init__.py"
 HEAVY = ("requests", "urllib3", "jwt", "cryptography", "nacl", "keyring")
 
 # Runs the console script's entry point the way the installed `aim-sdk` does,
-# then records which modules were loaded.
+# then records which modules were loaded and which aim_sdk package it imported.
 _PROBE = """
 import json, os, sys
 sys.argv = ["aim-sdk", *json.loads(os.environ["PROBE_ARGS"])]
@@ -39,27 +39,35 @@ try:
 except SystemExit:
     pass
 with open(os.environ["PROBE_OUT"], "w", encoding="utf-8") as fh:
-    json.dump(sorted(sys.modules), fh)
+    json.dump({"modules": sorted(sys.modules), "aim_sdk": sys.modules["aim_sdk"].__file__}, fh)
 """
 
 
 def _modules_loaded_by(tmp_path: Path, *args: str) -> set:
+    """Run the probe in `home`, so the command's credential discovery, which
+    walks the working directory's ancestors for a `.aim/`, cannot reach the
+    home directory around a checkout; PYTHONPATH keeps it importing this tree,
+    which the probe's record of aim_sdk shows."""
     home = tmp_path / "home"
     home.mkdir()
     out = tmp_path / "modules.json"
     env = {k: v for k, v in os.environ.items() if not k.startswith("AIM_")}
+    python_path = [str(SDK_ROOT)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
     env.update({
         "HOME": str(home),
         "USERPROFILE": str(home),
+        "PYTHONPATH": os.pathsep.join(python_path),
         "PROBE_ARGS": json.dumps(list(args)),
         "PROBE_OUT": str(out),
     })
     proc = subprocess.run(
         [sys.executable, "-c", _PROBE],
-        cwd=SDK_ROOT, env=env, capture_output=True, text=True, timeout=60,
+        cwd=home, env=env, capture_output=True, text=True, timeout=60,
     )
     assert out.exists(), proc.stderr
-    return set(json.loads(out.read_text(encoding="utf-8")))
+    record = json.loads(out.read_text(encoding="utf-8"))
+    assert Path(record["aim_sdk"]).resolve() == INIT, record["aim_sdk"]
+    return set(record["modules"])
 
 
 def _heavy(modules: set) -> list:
