@@ -13,6 +13,10 @@ import (
 )
 
 // AnalyticsTracking middleware tracks API calls for real-time analytics
+//
+// An error the chain returns is answered by the app's error handler here, as
+// HTTPServerSpans and the Prometheus middleware do, so the record carries the
+// status the client receives, and the middleware returns nil.
 func AnalyticsTracking(db *sql.DB) fiber.Handler {
 	if db != nil {
 		startInsertFailureReporting.Do(func() {
@@ -32,8 +36,15 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 		endpoint := RedactBootstrapTokens(strings.Clone(c.Path()))
 		requestSize := len(c.Body())
 
-		// Process the request
-		err := c.Next()
+		// Process the request. A returned error becomes a response only when
+		// the app's error handler runs, which would otherwise happen after
+		// this middleware returns: run it here, before the status, size and
+		// body below are read.
+		if err := c.Next(); err != nil {
+			if handlerErr := c.App().ErrorHandler(c, err); handlerErr != nil {
+				_ = c.SendStatus(fiber.StatusInternalServerError)
+			}
+		}
 
 		// Calculate response time
 		duration := time.Since(start)
@@ -105,7 +116,7 @@ func AnalyticsTracking(db *sql.DB) fiber.Handler {
 			AgentPathOutcome:  agentPathOutcome,
 		})
 
-		return err
+		return nil
 	}
 }
 
