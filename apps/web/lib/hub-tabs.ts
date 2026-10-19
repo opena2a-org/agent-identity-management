@@ -55,6 +55,8 @@ export const HUB_TABS: Record<string, HubTab[]> = {
   ],
   organization: [
     { name: "Users", href: "/dashboard/admin/users", roles: ["admin"] },
+    // Role set matches the backend gate: /api/v1/admin/oidc-sign-in sits in the admin group.
+    { name: "Identity provider", href: "/dashboard/admin/identity-provider", roles: ["admin"] },
     // Role set matches the backend gate: GET /api/v1/admin/audit-logs sits in the admin group.
     { name: "Audit log", href: "/dashboard/admin/audit-logs", roles: ["admin"] },
     { name: "Tags", href: "/dashboard/tags", roles: ["admin", "manager", "member"] },

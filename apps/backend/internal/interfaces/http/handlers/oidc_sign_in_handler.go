@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -193,7 +194,8 @@ func (h *OIDCSignInHandler) GetConfiguration(c fiber.Ctx) error {
 // oidcConfigurationRequest is the body of PUT /api/v1/admin/oidc-sign-in. A
 // body without provisioning stores a configuration that provisions no user,
 // and one without requireProviderSignIn a configuration that requires no
-// provider sign-in.
+// provider sign-in. A body without clientSecret keeps the stored client
+// secret when the stored configuration has the same issuer and client id.
 type oidcConfigurationRequest struct {
 	Issuer                string                   `json:"issuer"`
 	ClientID              string                   `json:"clientId"`
@@ -242,7 +244,10 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 	case errors.Is(err, application.ErrOIDCClientIDInvalid):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "clientId is required, at most 512 characters"})
 	case errors.Is(err, application.ErrOIDCClientSecretInvalid):
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "clientSecret is required, at most 2048 characters"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "clientSecret is required, at most 2048 characters; it may be left out only to keep the client secret " +
+				"stored with the same issuer and clientId",
+		})
 	case errors.Is(err, application.ErrOIDCProvisioningRoleInvalid):
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "provisioning.role must be viewer, member or manager"})
 	case errors.Is(err, application.ErrOIDCProvisioningDomainsInvalid):
@@ -261,9 +266,13 @@ func (h *OIDCSignInHandler) PutConfiguration(c fiber.Ctx) error {
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
+	// Configure stores a body without a client secret only by keeping the
+	// stored secret, so the row says whether this change kept it or stored
+	// a new one.
 	h.audit(c, organizationID, userID, domain.AuditActionUpdate, oidcSignInConfigResource, organizationID, fiber.Map{
 		"issuer":                cfg.Issuer,
 		"clientId":              cfg.ClientID,
+		"clientSecretKept":      strings.TrimSpace(req.ClientSecret) == "",
 		"provisioning":          oidcProvisioningAnswer(cfg.Provisioning),
 		"requireProviderSignIn": cfg.RequireProviderSignIn,
 	})
