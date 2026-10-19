@@ -16,13 +16,16 @@
 #       generates JWT_SECRET, KEYVAULT_MASTER_KEY and the admin password
 #       (printing none of them), builds cmd/server, cmd/migrate and
 #       cmd/bootstrap, runs the migrations, seeds the admin, starts the server
-#       on a free port and waits for /health/ready. Each NAME=VALUE is added
-#       to the variables the backend processes get; a setting such as
-#       ENVIRONMENT is the caller's to choose, never this file's.
-# After aim_backend_start: aim_url, admin_email, admin_password, work (a fresh
-# directory under TMPDIR), logs ($work/logs) and $work/home exist. The EXIT
-# trap stops the server whatever the outcome and keeps $logs unless the caller
-# sets status=0 before it exits.
+#       on a free port, waits for /health/ready and completes the admin's
+#       required password change (aim_backend_complete_password_change,
+#       below). Each NAME=VALUE is added to the variables the backend
+#       processes get; a setting such as ENVIRONMENT is the caller's to
+#       choose, never this file's.
+# After aim_backend_start: aim_url, admin_email, admin_password (the password
+# the account holds after the change, which the tests sign in with), work (a
+# fresh directory under TMPDIR), logs ($work/logs) and $work/home exist. The
+# EXIT trap stops the server whatever the outcome and keeps $logs unless the
+# caller sets status=0 before it exits.
 
 backend_dir="$repo_root/apps/backend"
 admin_email="admin@opena2a.org"
@@ -96,7 +99,7 @@ aim_backend_cleanup() {
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
   fi
-  rm -rf "${work:?}/bin" "${work:?}/home"
+  rm -rf "${work:?}/bin" "${work:?}/home" "${work:?}/auth"
   if [ "$status" -eq 0 ]; then
     rm -rf "${work:?}"
   else
@@ -190,4 +193,81 @@ aim_backend_start() {
   done
   [ -n "$ready" ] || fail "the backend was not ready within 90s (see $logs/server.log)"
   echo "Backend ready at $aim_url"
+
+  # --- The admin's required password change --------------------------------
+
+  aim_backend_complete_password_change
+}
+
+# aim_backend_post_json PATH BODY_FILE OUT [HEADER_FILE] posts the JSON in
+# BODY_FILE to the backend at PATH, writes the answer's body to OUT and prints
+# the HTTP status. HEADER_FILE, when given, holds request headers, one per
+# line, which curl reads itself (-H @file), so a bearer token is on no command
+# line. A request that gets no answer fails the call.
+aim_backend_post_json() {
+  local path="$1" body_file="$2" out="$3" header_file="${4:-}"
+  local -a args=(-sS -o "$out" -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data-binary "@$body_file")
+  if [ -n "$header_file" ]; then
+    args+=(-H "@$header_file")
+  fi
+  curl "${args[@]}" "$aim_url$path"
+}
+
+# aim_backend_json_string NAME KEY FILE sets NAME to the first string member
+# KEY of the JSON in FILE, or to the empty string when there is none. The
+# member read here, accessToken, holds no quote.
+aim_backend_json_string() {
+  local name="$1" key="$2" file="$3" value
+  value="$(sed -nE 's/.*"'"$key"'"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' "$file" | head -n 1)"
+  printf -v "$name" '%s' "$value"
+}
+
+# aim_backend_complete_password_change completes the required password change
+# of the admin aim-bootstrap --default seeds: while users.force_password_change
+# is set, the API admits the account's session only to GET /api/v1/auth/me and
+# POST /api/v1/auth/change-password, and every other route answers 403
+# passwordChangeRequired. It signs in with the seeded password, changes the
+# password through POST /api/v1/auth/change-password to a second generated
+# one, which clears the requirement, sets admin_password to it, waits for the
+# next whole second (token times are whole seconds, and a token minted in the
+# second of a change is refused), and proves that a sign-in with it is
+# admitted and requires no change. Request bodies and the bearer token go
+# through files under $work/auth, mode 0700, removed when the function returns
+# and by the EXIT trap; no password or token is on a command line or printed.
+aim_backend_complete_password_change() {
+  local auth_dir="$work/auth" new_password status token
+  echo "Completing the admin's required password change"
+  mkdir -m 700 "$auth_dir"
+  # The same alphabet as the seeded password: neither holds a character JSON
+  # escapes, and both satisfy the server's rule (upper, lower, digit, special).
+  new_password="$(openssl rand -base64 18 | tr -d '/+=' | head -c 24)Bb2!"
+
+  (umask 077 && printf '{"email":"%s","password":"%s"}' "$admin_email" "$admin_password" >"$auth_dir/sign-in.json")
+  status="$(aim_backend_post_json /api/v1/auth/login/local "$auth_dir/sign-in.json" "$auth_dir/sign-in-answer.json")" \
+    || fail "POST /api/v1/auth/login/local got no answer"
+  [ "$status" = 200 ] \
+    || fail "the seeded admin's sign-in, POST /api/v1/auth/login/local, answered $status: $(head -c 300 "$auth_dir/sign-in-answer.json")"
+  aim_backend_json_string token accessToken "$auth_dir/sign-in-answer.json"
+  [ -n "$token" ] || fail "the seeded admin's sign-in answered 200 without accessToken"
+
+  (umask 077 && printf 'Authorization: Bearer %s\n' "$token" >"$auth_dir/authorization.header" \
+    && printf '{"currentPassword":"%s","newPassword":"%s"}' "$admin_password" "$new_password" >"$auth_dir/change.json")
+  status="$(aim_backend_post_json /api/v1/auth/change-password "$auth_dir/change.json" "$auth_dir/change-answer.json" "$auth_dir/authorization.header")" \
+    || fail "POST /api/v1/auth/change-password got no answer"
+  [ "$status" = 200 ] \
+    || fail "POST /api/v1/auth/change-password answered $status: $(head -c 300 "$auth_dir/change-answer.json")"
+  admin_password="$new_password"
+
+  # The next whole second; 2 where sleep takes whole seconds only.
+  sleep 2
+  (umask 077 && printf '{"email":"%s","password":"%s"}' "$admin_email" "$admin_password" >"$auth_dir/sign-in.json")
+  status="$(aim_backend_post_json /api/v1/auth/login/local "$auth_dir/sign-in.json" "$auth_dir/sign-in-answer.json")" \
+    || fail "POST /api/v1/auth/login/local got no answer"
+  [ "$status" = 200 ] \
+    || fail "the admin's sign-in with the changed password answered $status: $(head -c 300 "$auth_dir/sign-in-answer.json")"
+  if grep -Eq '"forcePasswordChange"[[:space:]]*:[[:space:]]*true' "$auth_dir/sign-in-answer.json"; then
+    fail "the admin's account still requires a password change after POST /api/v1/auth/change-password answered 200"
+  fi
+  rm -rf "$auth_dir"
+  echo "The admin's password change is complete"
 }

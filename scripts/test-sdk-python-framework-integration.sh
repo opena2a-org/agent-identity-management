@@ -23,8 +23,11 @@
 #   2. generates JWT_SECRET, KEYVAULT_MASTER_KEY and the admin password, and
 #      prints none of them;
 #   3. builds cmd/server, cmd/migrate and cmd/bootstrap, runs the migrations,
-#      seeds the admin and starts the server on a free port, then waits for
-#      /health/ready;
+#      seeds the admin, starts the server on a free port, waits for
+#      /health/ready and completes the admin's required password change
+#      through POST /api/v1/auth/change-password, as the API admits the
+#      seeded account's session only to GET /api/v1/auth/me and that route
+#      until the change is made;
 #   4. runs `python -m pytest -m integration` on the three adapter test files
 #      with AIM_URL set, a fresh HOME, no inherited environment, and
 #      HTTP(S)_PROXY pointing at a closed port, so only the loopback backend
