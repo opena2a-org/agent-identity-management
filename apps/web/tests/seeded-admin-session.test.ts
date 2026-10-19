@@ -91,6 +91,10 @@ class FakeAim {
       }
       this.calls.push(`change ${label(data?.currentPassword)} -> ${label(data?.newPassword)}`);
       if (data?.currentPassword !== this.password) return { status: 400, body: { error: 'currentPassword is incorrect' } };
+      // bcrypt hashes at most 72 bytes; the server answers a longer one 500.
+      if (Buffer.byteLength(String(data?.newPassword), 'utf8') > 72) {
+        return { status: 500, body: { error: 'An internal error occurred. Please try again later.' } };
+      }
       this.password = String(data?.newPassword);
       this.forced = false;
       this.changedAt = this.clock;
@@ -138,9 +142,38 @@ function prepare(aim: FakeAim, options: { seededPassword?: string; attempts?: nu
 }
 
 describe('intermediatePasswordFor', () => {
-  it('derives a password that differs from the seeded one and keeps its character classes', () => {
+  // The server's rule (apps/backend/internal/infrastructure/auth/password.go):
+  // 8 or more bytes with an upper-case letter, a lower-case letter, a digit and
+  // a special character; bcrypt then hashes at most 72 bytes.
+  const satisfiesServerRule = (password: string) =>
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+
+  const seededOfLength = (bytes: number) => `Aa1-${'x'.repeat(bytes - 4)}`;
+
+  it('derives a password that differs from the seeded one and satisfies the server rule', () => {
     expect(INTERMEDIATE).not.toBe(SEEDED);
-    expect(INTERMEDIATE.startsWith(SEEDED)).toBe(true);
+    expect(satisfiesServerRule(INTERMEDIATE)).toBe(true);
+    expect(intermediatePasswordFor(SEEDED)).toBe(INTERMEDIATE);
+  });
+
+  it('stays within 72 bytes for seeded passwords of 8 to 72 bytes and beyond', () => {
+    for (const bytes of [8, 9, 63, 64, 65, 71, 72, 73, 200]) {
+      const seeded = seededOfLength(bytes);
+      const intermediate = intermediatePasswordFor(seeded);
+      expect(Buffer.byteLength(intermediate, 'utf8')).toBeLessThanOrEqual(72);
+      expect(intermediate).not.toBe(seeded);
+      expect(satisfiesServerRule(intermediate)).toBe(true);
+    }
+    const multiByte = `Ä1-${'ü'.repeat(40)}a`;
+    expect(Buffer.byteLength(intermediatePasswordFor(multiByte), 'utf8')).toBeLessThanOrEqual(72);
+  });
+
+  it('derives different passwords for different seeded ones', () => {
+    expect(intermediatePasswordFor(seededOfLength(64))).not.toBe(intermediatePasswordFor(seededOfLength(65)));
   });
 });
 
@@ -161,6 +194,18 @@ describe('prepareSeededAdmin', () => {
     // A token minted in the second of a change is refused: the sign-in after
     // the change waits for the next whole second.
     expect(aim.waits).toEqual([1100]);
+  });
+
+  it('completes the required change for a seeded password of 64 to 72 bytes', async () => {
+    for (const bytes of [64, 72]) {
+      const seeded = `FAKE-Pw1-${'x'.repeat(bytes - 9)}`;
+      expect(seeded.length).toBe(bytes);
+      const aim = new FakeAim(seeded, true);
+      await expect(prepare(aim, { seededPassword: seeded })).resolves.toEqual({ restored: true });
+      expect(aim.forced).toBe(false);
+      expect(aim.password).toBe(seeded);
+      expect(aim.calls).toEqual(['login other', 'change other -> other', 'change other -> other', 'login other', 'me']);
+    }
   });
 
   it('changes nothing when the account holds the seeded password and requires no change', async () => {

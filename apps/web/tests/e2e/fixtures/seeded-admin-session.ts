@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 
 // The admin that cmd/bootstrap --default seeds must change its default password
@@ -54,11 +55,15 @@ export function seededAdminFromEnv(): SeededAdmin {
   };
 }
 
-// The seeded password satisfies the server's rule (8 or more characters with an
-// upper-case letter, a lower-case letter, a digit and a special character), so
-// the seeded password followed by this suffix does too, and it differs.
+// The server's rule asks for 8 or more characters with an upper-case letter, a
+// lower-case letter, a digit and a special character, and bcrypt hashes at most
+// 72 bytes (a longer new password is answered 500). The intermediate password is
+// 24 ASCII characters whatever the seeded password's length: "Aa1-" for the four
+// classes, then 20 base64url characters of the seeded password's SHA-256, so a
+// rerun derives the same one and it differs from the seeded one.
 export function intermediatePasswordFor(seededPassword: string): string {
-  return `${seededPassword}-Changed1`;
+  const digest = createHash('sha256').update(seededPassword, 'utf8').digest('base64url');
+  return `Aa1-${digest.slice(0, 20)}`;
 }
 
 function bearer(session: Session): { Authorization: string } {
