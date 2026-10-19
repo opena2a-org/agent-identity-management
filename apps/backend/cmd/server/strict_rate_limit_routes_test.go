@@ -43,6 +43,9 @@ var strictRateLimitedRoutes = []string{
 	"POST /api/v1/auth/login/local",
 	"POST /api/v1/auth/logout",
 	"POST /api/v1/auth/refresh",
+	// Sign-in through the organization's OIDC provider.
+	"POST /api/v1/auth/oidc/:organizationId/login",
+	"POST /api/v1/auth/oidc/callback",
 	"GET /api/v1/auth/me",
 	"POST /api/v1/auth/change-password",
 	"POST /api/v1/auth/sdk/recover",

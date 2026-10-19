@@ -100,6 +100,32 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `apps/backend/internal/config/testdata/environment_table.json`, and the `NotifyTrustScoreChanged` tests in
   `apps/backend/internal/application/webhook_events_test.go`.
 
+### Added: an organization's users can sign in through the organization's OpenID Connect provider
+
+- An administrator stores the organization's provider with `PUT /api/v1/admin/oidc-sign-in` (issuer, client id and
+  client secret), reads it with `GET` and removes it with `DELETE` on the same path. Before it stores anything, the
+  server reads the issuer's configuration document, and it refuses an issuer that is not an `https` URL, or whose
+  document cannot be read or names another issuer. The configuration is a row of the `system_config` table keyed by
+  the organization's id; this adds no migration. The client secret is stored encrypted with the key vault's master
+  key and bound to the organization, and no answer or audit row carries it.
+- `POST /api/v1/auth/oidc/{organizationId}/login` answers the provider's authorization URL (authorization code flow,
+  PKCE `S256`, a state and a nonce) and a flow value that holds the state, the nonce and the code verifier encrypted
+  and bound to the organization. `POST /api/v1/auth/oidc/callback` takes the code, the state and the flow, redeems the
+  code, checks the ID token's signature with the provider's key set and its issuer, audience, `azp`, `exp`, `iat`,
+  `nbf` and nonce, and answers a login pair, as `POST /api/v1/auth/login/local` does, for the user of that
+  organization whose email the token asserts as verified. Only the users of that organization are compared, and the sign-in creates no
+  user. A refused sign-in answers `401` with a `code` that names the check; `docs/API.md` lists them. Both routes are
+  behind the credential routes' rate limiter.
+- The provider redirects the browser to the `/auth/oidc/callback` page under `FRONTEND_URL`, which the dashboard does
+  not serve yet.
+- Tests: `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_handler_test.go` drives the login and callback
+  routes against a stub provider listening on 127.0.0.1 (`apps/backend/internal/infrastructure/oauth/oidctest`) and
+  ends with a pair for a user of the configured organization. Through the same routes it refuses an ID token with a
+  wrong issuer, audience or nonce, a bad signature or an `exp` in the past, and shows that the provider of one
+  organization, asserting the email of a user of another, signs in no one and changes no user.
+  `apps/backend/internal/application/oidc_sign_in_service_test.go` holds the flow's binding to its organization and
+  its 10-minute lifetime, and `apps/backend/internal/infrastructure/oauth/oidc_provider_test.go` each ID token check.
+
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
 - With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and

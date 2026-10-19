@@ -23,6 +23,12 @@ import (
 // and API clients through POST /api/v1/auth/login/local. These tests hold the
 // route table to that, and the documentation to the route table. Building
 // provider sign-in means replacing both.
+//
+// Sign-in through an organization's OpenID Connect provider is a separate
+// route pair, POST /api/v1/auth/oidc/:organizationId/login and POST
+// /api/v1/auth/oidc/callback, and reads none of those settings: an
+// organization's administrator stores its provider through
+// /api/v1/admin/oidc-sign-in.
 
 // providerSignInPaths are the login and callback paths the guides gave for
 // each provider.
