@@ -116,8 +116,8 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   organization whose email the token asserts as verified. Only the users of that organization are compared, and without
   provisioning (the next entry) the sign-in creates no user. A refused sign-in answers `401` with a `code` that names
   the check; `docs/API.md` lists them. Both routes are behind the credential routes' rate limiter.
-- The provider redirects the browser to the `/auth/oidc/callback` page under `FRONTEND_URL`, which the dashboard does
-  not serve yet.
+- The provider redirects the browser to the `/auth/oidc/callback` page under `FRONTEND_URL`, which the dashboard
+  serves (see the entry on the dashboard's sign-in below).
 - Tests: `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_handler_test.go` drives the login and callback
   routes against a stub provider listening on 127.0.0.1 (`apps/backend/internal/infrastructure/oauth/oidctest`) and
   ends with a pair for a user of the configured organization. Through the same routes it refuses an ID token with a
@@ -143,6 +143,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   never provisions the email of another organization's user, and ends as the user a concurrent first sign-in
   created. `apps/backend/internal/interfaces/http/handlers/oidc_sign_in_handler_provisioning_test.go` drives the
   administration, login and callback routes against the stub provider on 127.0.0.1.
+
+### Added: the dashboard signs a user in through the organization's OpenID Connect provider
+
+- `/auth/login?organization=<organization id>` is an organization's sign-in link. When `organization` is a UUID, the
+  sign-in page shows a "Sign in with your identity provider" button above the email and password form. The button
+  starts the sign-in with `POST /api/v1/auth/oidc/{organizationId}/login`, keeps the answered flow in the browser
+  tab's session storage, and sends the browser to the provider's authorization URL when that URL is `https`. A page
+  the browser restores from its back-forward cache on the way back from the provider has the button enabled.
+- The new `/auth/oidc/callback` page, the redirect URI the server names, removes the flow from the tab's storage as it
+  reads it and posts it with the redirect's `code` and `state` to `POST /api/v1/auth/oidc/callback`. It stores the
+  answered pair as a new session and opens the dashboard, the sign-in link's `returnUrl`, or the password change page
+  for an account that must change its password. A tab that holds no flow posts nothing, so the code and state of a
+  callback address alone sign no one in. A refused sign-in shows a line for the server's refusal code; a provider
+  redirect that carries an `error` shows a fixed line for it and never the redirect's `error_description`. Both link
+  back to the organization's sign-in link. The page takes the code and state out of the address bar.
+- The dashboard's API client treats a `401` from a route under `/api/v1/auth/oidc/` as that route's refusal, as it
+  treats one from `/api/v1/public/`: it does not refresh the session, show the session-expired toast or reload the
+  page.
+- Tests: `apps/web/app/auth/login/page.oidc-sign-in.test.tsx` starts a sign-in from the link, refuses an answered
+  address that is not `https`, and enables the button on a restored page. `apps/web/app/auth/oidc/callback/page.test.tsx`
+  completes a sign-in once (also when the development build runs the effect twice), posts nothing from a tab that
+  started none, and shows a refusal and a provider's error. `apps/web/lib/api.oidc-sign-in.test.ts` holds the two
+  requests and the `401` refusal, and `apps/web/lib/oidc-sign-in.test.ts` the stored flow and the lines shown.
 
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 

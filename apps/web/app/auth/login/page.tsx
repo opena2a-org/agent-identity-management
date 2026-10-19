@@ -3,19 +3,30 @@
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { AlertCircle, Building2, CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { AimLogo } from "@/components/sidebar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { safeReturnUrl } from "@/lib/return-url";
-import { signInFailure, type SignInFailure } from "@/lib/sign-in-failure";
+import { SIGN_IN_NEUTRAL_MESSAGE, signInFailure, type SignInFailure } from "@/lib/sign-in-failure";
+import {
+  OIDC_PROVIDER_ADDRESS_REFUSED_MESSAGE,
+  oidcStartFailure,
+  organizationIdParam,
+  providerAuthorizationUrl,
+  rememberOidcSignIn,
+} from "@/lib/oidc-sign-in";
 
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = safeReturnUrl(searchParams.get("returnUrl"));
+  // An organization's sign-in link carries its id; the page then offers sign-in through
+  // that organization's identity provider beside the password form.
+  const organizationId = organizationIdParam(searchParams.get("organization"));
+  const [isStartingProviderSignIn, setIsStartingProviderSignIn] = useState(false);
   const [isLoadingPassword, setIsLoadingPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -32,6 +43,16 @@ function LoginPageContent() {
   useEffect(() => {
     if (failure) failureRef.current?.focus();
   }, [failure]);
+
+  // Back from the provider, a page restored from the back-forward cache gets its
+  // provider sign-in button back.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setIsStartingProviderSignIn(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -95,6 +116,31 @@ function LoginPageContent() {
     }
   };
 
+  // The flow goes into this tab's storage before the browser leaves for the provider:
+  // the callback page sends it back, and a tab that holds none completes no sign-in.
+  const handleProviderSignIn = async () => {
+    if (!organizationId) return;
+    setFailure(null);
+    setIsStartingProviderSignIn(true);
+    try {
+      const start = await api.startOidcSignIn(organizationId);
+      const destination = providerAuthorizationUrl(start?.authorizationUrl);
+      const flow = typeof start?.flow === "string" ? start.flow : "";
+      if (!destination || !flow) {
+        const message = destination ? SIGN_IN_NEUTRAL_MESSAGE : OIDC_PROVIDER_ADDRESS_REFUSED_MESSAGE;
+        setFailure({ message, marksCredentials: false });
+        setIsStartingProviderSignIn(false);
+        return;
+      }
+      rememberOidcSignIn({ organizationId, flow, returnUrl });
+      // The button stays disabled while the browser leaves the page.
+      window.location.assign(destination);
+    } catch (error) {
+      setFailure({ message: oidcStartFailure(error), marksCredentials: false });
+      setIsStartingProviderSignIn(false);
+    }
+  };
+
   const credentialsRefused = !!failure?.marksCredentials;
 
   const inputClass = (invalid: boolean) =>
@@ -123,6 +169,26 @@ function LoginPageContent() {
               <AlertTitle>Could not sign in</AlertTitle>
               <AlertDescription id="sign-in-failure">{failure.message}</AlertDescription>
             </Alert>
+          )}
+          {organizationId && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={handleProviderSignIn}
+                disabled={isStartingProviderSignIn}
+                className="h-auto min-h-11 w-full whitespace-normal py-2.5"
+              >
+                <Building2 className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+                {isStartingProviderSignIn ? "Opening your identity provider..." : "Sign in with your identity provider"}
+              </Button>
+              <div className="my-5 flex items-center gap-3">
+                <span className="h-px flex-1 bg-divider" aria-hidden="true" />
+                <span className="text-sm text-ink-secondary">or with your email and password</span>
+                <span className="h-px flex-1 bg-divider" aria-hidden="true" />
+              </div>
+            </>
           )}
           <form onSubmit={handlePasswordLogin} className="space-y-4" noValidate>
             <div>
