@@ -390,7 +390,8 @@ def process_payment(amount: float):
 
 ### 3. Monitor Trust Drops
 
-Webhooks carry no event for an MCP connection or for capability drift. A webhook subscribed to
+Webhooks carry no event for an MCP connection; a capability drift of an MCP server is sent as
+`security.capability_drift`. A webhook subscribed to
 `trust_score.low` and `agent.suspended` is told when an agent's trust score falls below 70% and when the
 trust score policy suspends the agent. See [Webhook Events](../API.md#webhook-events) for what is sent
 and when.

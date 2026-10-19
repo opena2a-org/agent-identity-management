@@ -3385,6 +3385,90 @@
       "value": "not-a-key",
       "setting": "\"not-a-key\"",
       "line": "error: AIM_SIGNING_KEY_ATC_ISSUER_RETIRED must list base64-encoded 32-byte Ed25519 public keys"
+    },
+    {
+      "variable": "DRIFT_MONITOR_INTERVAL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "DRIFT_MONITOR_INTERVAL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "DRIFT_MONITOR_INTERVAL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "DRIFT_MONITOR_INTERVAL",
+      "input": "valid",
+      "value": "5m",
+      "setting": "\"5m\"",
+      "line": ""
+    },
+    {
+      "variable": "DRIFT_MONITOR_INTERVAL",
+      "input": "invalid",
+      "value": "often",
+      "setting": "\"often\"",
+      "line": "WARNING: DRIFT_MONITOR_INTERVAL=\"often\" is not a positive duration such as 5m or 1h; using the default 15m0s"
+    },
+    {
+      "variable": "DRIFT_MONITOR_INTERVAL",
+      "input": "below-minimum",
+      "value": "30s",
+      "setting": "\"30s\"",
+      "line": "WARNING: DRIFT_MONITOR_INTERVAL=\"30s\" is under the 1m0s minimum; using 1m0s"
+    },
+    {
+      "variable": "TRUST_REEVALUATION_INTERVAL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "TRUST_REEVALUATION_INTERVAL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "TRUST_REEVALUATION_INTERVAL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "TRUST_REEVALUATION_INTERVAL",
+      "input": "valid",
+      "value": "30m",
+      "setting": "\"30m\"",
+      "line": ""
+    },
+    {
+      "variable": "TRUST_REEVALUATION_INTERVAL",
+      "input": "invalid",
+      "value": "hourly",
+      "setting": "\"hourly\"",
+      "line": "WARNING: TRUST_REEVALUATION_INTERVAL=\"hourly\" is not a positive duration such as 5m or 1h; using the default 1h0m0s"
+    },
+    {
+      "variable": "TRUST_REEVALUATION_INTERVAL",
+      "input": "below-minimum",
+      "value": "1m",
+      "setting": "\"1m\"",
+      "line": "WARNING: TRUST_REEVALUATION_INTERVAL=\"1m\" is under the 5m0s minimum; using 5m0s"
     }
   ]
 }

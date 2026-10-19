@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 
 	// "github.com/lib/pq"
@@ -334,6 +335,35 @@ func main() {
 	// This ensures expired verifications are marked as such even if not queried
 	stopExpirationJob := startExpirationCleanupJob(db)
 	defer close(stopExpirationJob)
+
+	// Start the capability drift monitor. Each run reads the capability drift
+	// of every organization with a registered MCP server, which records an
+	// alert for each drift that has no unacknowledged one, and sends
+	// security.capability_drift for each drift it has not sent before.
+	// DRIFT_MONITOR_INTERVAL sets how often it runs (drift_monitor_interval.go).
+	driftInterval, driftIntervalWarning := driftMonitorInterval(cfg.Jobs.Value)
+	logIntervalWarning(driftIntervalWarning)
+	stopDriftMonitor := startCapabilityDriftMonitor(&capabilityDriftMonitor{
+		listOrganizations: driftMonitorOrganizations(db),
+		drift:             repos.MCPCapability,
+		webhooks:          services.Webhook,
+		dispatched:        map[string]bool{},
+	}, driftInterval)
+	defer stopDriftMonitor()
+
+	// Start the job that re-evaluates agent trust scores, so a score moves
+	// without waiting for a recalculation someone asks for.
+	// TRUST_REEVALUATION_INTERVAL sets how often it runs (trust_reevaluation.go).
+	trustInterval, trustIntervalWarning := trustReevaluationInterval(cfg.Jobs.Value)
+	logIntervalWarning(trustIntervalWarning)
+	stopTrustReevaluation := startTrustReevaluationJob(&trustReevaluation{
+		listAgentIDs: reevaluableAgentIDs(db),
+		agents:       repos.Agent,
+		scores:       repos.TrustScore,
+		calculator:   services.Trust,
+		webhooks:     services.Agent,
+	}, trustInterval)
+	defer stopTrustReevaluation()
 
 	// Replace the MCP trust scores migration 104 only rescaled with calculated
 	// ones, once per database. Runs in the background so startup does not wait
@@ -2766,6 +2796,141 @@ func runNonceCleanup(ctx context.Context, cleaner nonceCleaner) {
 	}
 	if deleted > 0 {
 		log.Printf("A2A nonce cleanup deleted %d expired nonce(s)", deleted)
+	}
+}
+
+// logIntervalWarning logs the warning a background job's interval reader
+// returned for an unusable value, and nothing for an empty one.
+func logIntervalWarning(warning string) {
+	if warning != "" {
+		log.Printf("WARNING: %s", warning)
+	}
+}
+
+// driftMonitorDays is how many days back each drift monitor run reads
+// capability drift.
+const driftMonitorDays = 1
+
+// capabilityDriftAlerts reads an organization's capability drift. The MCP
+// capability repository's read also records an alert for each drift that has
+// no unacknowledged one.
+type capabilityDriftAlerts interface {
+	GetCapabilityDriftAlerts(orgID uuid.UUID, days int) ([]repository.CapabilityDriftAlert, *repository.CapabilityDriftStats, error)
+}
+
+// capabilityDriftWebhooks sends an event to an organization's webhooks.
+type capabilityDriftWebhooks interface {
+	TriggerEvent(ctx context.Context, orgID uuid.UUID, event domain.WebhookEvent, data map[string]interface{}) error
+}
+
+// capabilityDriftMonitor reads the capability drift of every organization with
+// a registered MCP server and sends security.capability_drift to the
+// organization's webhooks for each drift it has not sent before.
+type capabilityDriftMonitor struct {
+	listOrganizations func(ctx context.Context) ([]uuid.UUID, error)
+	drift             capabilityDriftAlerts
+	webhooks          capabilityDriftWebhooks
+	// dispatched holds the drift already sent, keyed by MCP server, capability
+	// and drift type, for as long as the server process runs.
+	dispatched map[string]bool
+}
+
+// startCapabilityDriftMonitor runs a capability drift check every interval.
+// The returned stop function ends a check under way before its next
+// organization, stops the monitor and returns once its goroutine has exited.
+// Calling it again does nothing.
+func startCapabilityDriftMonitor(monitor *capabilityDriftMonitor, interval time.Duration) (stop func()) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	ticker := time.NewTicker(interval)
+	log.Printf("Capability drift monitor started (runs every %s)", interval)
+
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-ticker.C:
+				monitor.check(ctx)
+			case <-ctx.Done():
+				ticker.Stop()
+				log.Println("Capability drift monitor stopped")
+				return
+			}
+		}
+	}()
+
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// check is one run of the drift monitor. A drift whose send fails is sent
+// again on the next run.
+func (m *capabilityDriftMonitor) check(ctx context.Context) {
+	orgIDs, err := m.listOrganizations(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return // the monitor is stopping and cancelled this run
+		}
+		log.Printf("Drift monitor: failed to list organizations: %v", err)
+		return
+	}
+
+	for _, orgID := range orgIDs {
+		if ctx.Err() != nil {
+			return
+		}
+		alerts, _, err := m.drift.GetCapabilityDriftAlerts(orgID, driftMonitorDays)
+		if err != nil {
+			log.Printf("Drift monitor: failed to get drift alerts for org %s: %v", orgID, err)
+			continue
+		}
+		for _, alert := range alerts {
+			key := alert.MCPServerID + ":" + alert.CapabilityName + ":" + alert.DriftType
+			if m.dispatched[key] {
+				continue
+			}
+			payload := map[string]interface{}{
+				"serverName":     alert.MCPServerName,
+				"capabilityName": alert.CapabilityName,
+				"driftType":      alert.DriftType,
+				"severity":       alert.Severity,
+				"detectedAt":     time.Now().UTC().Format(time.RFC3339),
+			}
+			if err := m.webhooks.TriggerEvent(context.Background(), orgID, domain.WebhookEventCapabilityDrift, payload); err != nil {
+				log.Printf("Drift monitor: webhook dispatch failed for org %s: %v", orgID, err)
+				continue
+			}
+			m.dispatched[key] = true
+		}
+	}
+}
+
+// driftMonitorOrganizations lists the organizations that have a registered MCP
+// server, the ones each drift monitor run reads. It is a system task's
+// listing, never a tenant request's.
+func driftMonitorOrganizations(db *sql.DB) func(ctx context.Context) ([]uuid.UUID, error) {
+	return func(ctx context.Context) ([]uuid.UUID, error) {
+		rows, err := db.QueryContext(ctx,
+			`SELECT DISTINCT organization_id FROM mcp_servers WHERE organization_id IS NOT NULL`)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = rows.Close() }()
+
+		var orgIDs []uuid.UUID
+		for rows.Next() {
+			var orgID uuid.UUID
+			if err := rows.Scan(&orgID); err != nil {
+				return nil, err
+			}
+			orgIDs = append(orgIDs, orgID)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return orgIDs, nil
 	}
 }
 
