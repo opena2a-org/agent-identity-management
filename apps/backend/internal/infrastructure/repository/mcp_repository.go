@@ -52,7 +52,7 @@ func (r *MCPServerRepository) Create(server *domain.MCPServer) error {
 		capabilitiesJSON, // Use JSON bytes instead of pq.Array
 		server.TrustScore,
 		server.RegisteredByAgent, // Can be nil for user-registered servers
-		server.CreatedBy,         // User who created this server
+		userRef(server.CreatedBy), // User who created this server; NULL for none
 		server.CreatedByName,      // ✅ Audit trail: creator name
 		server.CreatedByEmail,     // ✅ Audit trail: creator email
 		server.CreatedBySDKTokenID, // ✅ SDK token tracking

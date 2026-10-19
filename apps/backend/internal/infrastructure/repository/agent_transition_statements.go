@@ -287,7 +287,7 @@ func DecideCapabilityRequestTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, st
 		UPDATE capability_requests
 		   SET status = $2, reviewed_by = $3, reviewed_at = NOW(), updated_at = NOW()
 		 WHERE id = $1 AND status = $4`,
-		id, status, reviewedBy, domain.CapabilityRequestStatusPending)
+		id, status, userRef(reviewedBy), domain.CapabilityRequestStatusPending)
 	if err != nil {
 		return fmt.Errorf("decide capability request: %w", err)
 	}

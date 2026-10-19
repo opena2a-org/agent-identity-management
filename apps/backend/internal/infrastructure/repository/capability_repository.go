@@ -60,7 +60,7 @@ func insertCapability(ctx context.Context, db execer, capability *domain.AgentCa
 		capability.CapabilityType,
 		scopeJSON,
 		capability.ExecutionMode,
-		capability.GrantedBy,
+		userRefPtr(capability.GrantedBy),
 		capability.GrantedAt,
 		capability.CreatedAt,
 		capability.UpdatedAt,
