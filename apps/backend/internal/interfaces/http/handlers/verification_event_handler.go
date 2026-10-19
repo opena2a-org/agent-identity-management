@@ -91,13 +91,14 @@ func (h *VerificationEventHandler) ListVerificationEvents(c fiber.Ctx) error {
 
 	agentIDStr := c.Query("agent_id")
 
-	events := make([]*domain.VerificationEvent, 0)
-	var total int
-
-	// Filter by agent if specified
+	// Without agent_id the organization's events are listed; with it, the
+	// events of that agent once it is known to belong to the organization.
+	// Either list is read once, after this branch, so the err checked below
+	// is the read's.
+	listEvents, listID := h.service.ListVerificationEvents, orgID
 	if agentIDStr != "" {
-		agentID, err := uuid.Parse(agentIDStr)
-		if err != nil {
+		agentID, parseErr := uuid.Parse(agentIDStr)
+		if parseErr != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "Invalid agent ID format",
 			})
@@ -114,11 +115,10 @@ func (h *VerificationEventHandler) ListVerificationEvents(c fiber.Ctx) error {
 			return nil
 		}
 
-		events, total, err = h.service.ListAgentVerificationEvents(c.Context(), agentID, limit, offset)
-	} else {
-		events, total, err = h.service.ListVerificationEvents(c.Context(), orgID, limit, offset)
+		listEvents, listID = h.service.ListAgentVerificationEvents, agentID
 	}
 
+	events, total, err := listEvents(c.Context(), listID, limit, offset)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to retrieve verification events",

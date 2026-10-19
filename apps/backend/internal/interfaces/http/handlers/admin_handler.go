@@ -866,7 +866,7 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 		}
 
 		// Format: escape quotes in fields and wrap in quotes
-		csvBuilder.WriteString(fmt.Sprintf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+		fmt.Fprintf(&csvBuilder, "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
 			log.ID.String(),
 			log.Timestamp.Format(time.RFC3339),
 			log.Action,
@@ -877,7 +877,7 @@ func (h *AdminHandler) ExportAuditLogs(c fiber.Ctx) error {
 			strings.ReplaceAll(log.UserAgent, "\"", "\"\""),
 			metadataJSON,
 			log.ActorType(),
-		))
+		)
 	}
 
 	c.Set("Content-Type", "text/csv")

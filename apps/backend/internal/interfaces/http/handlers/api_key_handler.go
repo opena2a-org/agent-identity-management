@@ -155,12 +155,9 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 		})
 	}
 
-	// Parse expiration days (default to 90 days if not provided)
+	// The key expires 90 days after it is issued. The request's expiresAt is
+	// decoded but not read yet (TODO: parse it and convert it to days).
 	expiresInDays := 90
-	if req.ExpiresAt != nil {
-		// TODO: Parse expires_at timestamp and convert to days
-		// For now, using default
-	}
 
 	plainKey, apiKey, err := h.apiKeyService.GenerateAPIKey(
 		c.Context(),

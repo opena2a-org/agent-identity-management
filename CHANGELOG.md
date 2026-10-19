@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
+
+- With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and
+  the read of the agent's events assigned that inner `err`. The check after the branch read the handler's own `err`,
+  which held the result of parsing `offset`. A failed read of the agent's events was answered `200` with
+  `"events": null` and `"total": 0`, and a request with `offset=abc` was answered `500` with
+  `Failed to retrieve verification events` although the read succeeded.
+- The branch now only chooses which list is read, the organization's or the agent's, and that list is read once after
+  the branch, into the `err` that is checked. With `agent_id` set, a failed read is answered `500` with
+  `Failed to retrieve verification events`, and an `offset` of `abc` or `1.5` is read as `0` and answered `200`: the
+  answers the list without `agent_id` gives to the same requests.
+- Test: `apps/backend/internal/interfaces/http/handlers/verification_event_list_filter_test.go` sends a request
+  whose read fails and requests with `offset=abc` and `offset=1.5`, each with and without `agent_id`. On the previous
+  handler its three `agent_id` cases failed and its three cases without `agent_id` passed.
+
 ### Changed: the FGA engine holds no Registry ASC address until `FGA_REGISTRY_ASC_URL` sets one
 
 - `NewFGAEngine` set the engine's Registry ASC address to `https://api.oa2a.org`, the OpenA2A Registry, and the server

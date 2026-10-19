@@ -982,7 +982,7 @@ func TestNewComplianceHandlerWithInterfaces(t *testing.T) {
 	handler := NewComplianceHandlerWithInterfaces(mockComplianceService, mockAuditService)
 
 	if handler == nil {
-		t.Error("Expected handler to be non-nil")
+		t.Fatal("Expected handler to be non-nil")
 	}
 
 	// Test that interfaces are set
