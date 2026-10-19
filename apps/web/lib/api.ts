@@ -47,9 +47,14 @@ const TOKEN_REFRESH_LEASE = "token_refresh_lease";
 
 type TokenPair = { accessToken: string; refreshToken: string };
 
-// Routes under this prefix do not check the session, so a 401 from one of them is that
-// route's own refusal (a wrong password at sign-in), never an expired session.
-const PUBLIC_ROUTE_PREFIX = "/api/v1/public/";
+// Routes under these prefixes do not check the session, so a 401 from one of them is that
+// route's own refusal (a wrong password at sign-in, a refused identity provider sign-in),
+// never an expired session.
+const SESSIONLESS_ROUTE_PREFIXES = ["/api/v1/public/", "/api/v1/auth/oidc/"];
+
+function isSessionlessRoute(endpoint: string): boolean {
+  return SESSIONLESS_ROUTE_PREFIXES.some((prefix) => endpoint.startsWith(prefix));
+}
 
 // Runtime API URL configuration
 // CRITICAL: This function MUST be called ONLY in browser context (client-side)
@@ -203,6 +208,20 @@ export interface AccountDeletion {
   status: "deactivated";
   deletionRequestedAt: string;
   deletionDueAt: string;
+}
+
+/** The answer of POST /api/v1/auth/oidc/{organizationId}/login: where the browser goes, and the flow to send back. */
+export interface OidcSignInStart {
+  authorizationUrl: string;
+  flow: string;
+  expiresAt: string;
+}
+
+/** The answer of POST /api/v1/auth/oidc/callback: a login pair and the user it signs in. */
+export interface OidcSignInAnswer {
+  accessToken: string;
+  refreshToken: string;
+  user: Pick<User, "id" | "email" | "name" | "role" | "organizationId" | "forcePasswordChange">;
 }
 
 export interface APIKey {
@@ -910,7 +929,7 @@ class APIClient {
       credentials: "omit", // the session travels only in the Authorization header
     });
 
-    if (response.status === 401 && !endpoint.startsWith(PUBLIC_ROUTE_PREFIX)) {
+    if (response.status === 401 && !isSessionlessRoute(endpoint)) {
       // Try to refresh the token if we haven't already
       if (!isRetry) {
         const refreshResult = await this.refreshAccessToken(token);
@@ -1206,6 +1225,27 @@ class APIClient {
       this.setToken(response.accessToken, response.refreshToken, "new-session");
     }
 
+    return response;
+  }
+
+  // Sign-in through an organization's OpenID Connect provider. Neither route reads a
+  // session: the start answers the provider's authorization URL and the flow the
+  // callback sends back with the code and state the provider redirects with.
+  async startOidcSignIn(organizationId: string): Promise<OidcSignInStart> {
+    return this.request<OidcSignInStart>(
+      `/api/v1/auth/oidc/${encodeURIComponent(organizationId)}/login`,
+      { method: "POST" }
+    );
+  }
+
+  async completeOidcSignIn(data: { code: string; state: string; flow: string }): Promise<OidcSignInAnswer> {
+    const response = await this.request<OidcSignInAnswer>("/api/v1/auth/oidc/callback", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    if (response?.accessToken) {
+      this.setToken(response.accessToken, response.refreshToken, "new-session");
+    }
     return response;
   }
 
