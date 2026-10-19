@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/seed"
 )
 
 var uuidPattern = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
@@ -200,9 +202,9 @@ func expectDefaultRunCreatingTheAdmin(mock sqlmock.Sqlmock, orgDomain, orgID str
 		WithArgs(admin, orgID, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
 			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	for i, p := range defaultPolicies {
+	for i, p := range seed.DefaultPolicies {
 		var added int64 = 1
-		if i >= len(defaultPolicies)-present {
+		if i >= len(seed.DefaultPolicies)-present {
 			added = 0
 		}
 		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO security_policies`)).
@@ -223,7 +225,7 @@ func TestRunBootstrap_DefaultRunThatCreatesTheAdminAddsTheDefaultPolicies(t *tes
 	t.Parallel()
 
 	const orgID = "6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
-	all := len(defaultPolicies)
+	all := len(seed.DefaultPolicies)
 	for _, tc := range []struct {
 		name    string
 		present int

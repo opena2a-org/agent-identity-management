@@ -112,18 +112,32 @@ func runSeedPaths(t *testing.T, strong, weak string) {
 	expectAdminExists(mock, true)
 	logSeedErr(seedAdminFromEnv(db))
 
-	// No administrator yet: one is seeded.
+	// No administrator yet: one is seeded, with the default policies.
 	db, mock = newSeedMock(t)
 	expectAdminExists(mock, false)
 	expectAdminOrg(mock)
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).WillReturnResult(sqlmock.NewResult(0, 1))
+	expectDefaultPoliciesCommitted(mock, "11111111-1111-1111-1111-111111111111", sqlmock.AnyArg(), 0)
 	logSeedErr(seedAdminFromEnv(db))
 
 	// The insert fails.
 	db, mock = newSeedMock(t)
 	expectAdminExists(mock, false)
 	expectAdminOrg(mock)
+	mock.ExpectBegin()
 	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).WillReturnError(errors.New("insert refused"))
+	mock.ExpectRollback()
+	logSeedErr(seedAdminFromEnv(db))
+
+	// A default policy is refused.
+	db, mock = newSeedMock(t)
+	expectAdminExists(mock, false)
+	expectAdminOrg(mock)
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO security_policies`)).WillReturnError(errors.New("policy refused"))
+	mock.ExpectRollback()
 	logSeedErr(seedAdminFromEnv(db))
 
 	// The admin organization is missing.

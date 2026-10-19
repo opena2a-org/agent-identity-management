@@ -18,6 +18,7 @@ import (
 	serverconfig "github.com/opena2a-org/agent-identity-management/apps/backend/internal/config"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/seed"
 )
 
 // Canonical defaults for the seeded OpenA2A admin org and user. Domain is the
@@ -415,7 +416,7 @@ func isBootstrapped(db *sql.DB) bool {
 // runBootstrap seeds the organization, the admin user and the
 // bootstrap_completed marker in one transaction, writing a numbered line to w
 // for each step and lines indented three spaces under it for what the step did.
-// A --default run that creates the admin also adds defaultPolicies to the
+// A --default run that creates the admin also adds seed.DefaultPolicies to the
 // admin's organization, in the same transaction.
 func runBootstrap(ctx context.Context, w io.Writer, db *sql.DB, config *BootstrapConfig) error {
 	// Start transaction
@@ -543,11 +544,11 @@ func runBootstrap(ctx context.Context, w io.Writer, db *sql.DB, config *Bootstra
 	step := 4
 	if config.Default && !config.adminAlreadyExisted {
 		fmt.Fprintf(w, "%d. Adding default security policies...\n", step)
-		added, err := seedDefaultPolicies(ctx, tx, orgID, userID)
+		added, err := seed.AddDefaultPolicies(ctx, tx, orgID, userID)
 		if err != nil {
 			return fmt.Errorf("failed to add default security policies: %w", err)
 		}
-		if present := int64(len(defaultPolicies)) - added; present > 0 {
+		if present := int64(len(seed.DefaultPolicies)) - added; present > 0 {
 			fmt.Fprintf(w, "   Added %d default security policies; %d the organization already had are left unchanged\n", added, present)
 		} else {
 			fmt.Fprintf(w, "   Added %d default security policies\n", added)

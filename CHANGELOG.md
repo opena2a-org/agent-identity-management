@@ -33,6 +33,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `security_policy_seed_threshold_test.go` reads the bootstrap's two trust-score policies with the other places that
   seed one.
 
+### Fixed: The server's `ADMIN_PASSWORD` seed adds the default security policies, as `aim-bootstrap --default` does
+
+- `scripts/quickstart.sh`, which writes `ADMIN_PASSWORD` to the `.env` it creates, and the fleet governance guide create
+  the first administrator with the server's `ADMIN_PASSWORD` seed at startup and do not run `aim-bootstrap`. That seed
+  inserted the administrator only, so the OpenA2A Admin organization it seeds into received no security policy.
+  Measured on PostgreSQL 18.3 with the server built before this change: on an empty database, after the startup
+  migrations and the seed, `security_policies` held no row, and a second start left none.
+- The start that creates the administrator now adds the twelve policies `aim-bootstrap --default` adds, created by that
+  administrator, in the transaction that inserts it, and logs
+  `Added 12 default security policies to the admin.opena2a.org organization`. A policy the organization already has
+  under the same name is left as it is, and a start that finds an administrator adds none. When the database refuses a policy, the seed returns an error and rolls
+  back the transaction that inserted the administrator. Both seeds read the policies from one table,
+  `apps/backend/internal/infrastructure/seed/default_policies.go`, moved there from `apps/backend/cmd/bootstrap/`.
+  Measured on PostgreSQL 18.3 with the server built from this change: on an empty database, the first start left twelve
+  rows, identical in name, description, type, enforcement action, severity, rules, scope, enabled state and priority to
+  the rows `aim-bootstrap --default` leaves, and a second start found the administrator and left twelve.
+- Tests: `apps/backend/cmd/server/admin_seed_policies_integration_test.go` creates an empty database, applies the
+  migrations with the server's startup function, runs the seed twice and checks the policies against the names
+  migrations 015 and 052 insert, their organization, their creator and their enabled state; run against the server
+  before this change, it found no policy. The sqlmock tests in `admin_seed_test.go` hold the statement order, the
+  organization and administrator each policy INSERT carries, the log lines, and the rollback when a policy is refused.
+  `security_policy_seed_threshold_test.go` reads the trust-score policies from the table's new path.
+
 ### Fixed — `docs/API.md`'s `POST /api/v1/agents` request sends `agentType` and registers an agent, and its agent answers show `agentType` (#795)
 
 - The `POST /api/v1/agents` section of `docs/API.md` gave the agent's type as `"type": "ai_agent"` in its request

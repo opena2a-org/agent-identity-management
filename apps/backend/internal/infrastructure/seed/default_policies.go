@@ -1,4 +1,9 @@
-package main
+// Package seed holds the rows AIM adds when it creates the first
+// administrator of the OpenA2A Admin organization, the organization migration
+// 013 creates. Both places that create that administrator add them:
+// `aim-bootstrap --default` (cmd/bootstrap) and the server's ADMIN_PASSWORD
+// seed at startup (cmd/server).
+package seed
 
 import (
 	"context"
@@ -8,8 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// defaultPolicy is one row runBootstrap adds to security_policies.
-type defaultPolicy struct {
+// DefaultPolicy is one row AddDefaultPolicies adds to security_policies.
+type DefaultPolicy struct {
 	Name              string
 	Description       string
 	PolicyType        string
@@ -20,21 +25,23 @@ type defaultPolicy struct {
 	Priority          int
 }
 
-// defaultPolicies are the security policies migrations
+// DefaultPolicies are the security policies migrations
 // 015_add_default_security_policies.sql and 052_add_default_mcp_policies.sql
 // insert for the OpenA2A Admin organization, with the values the later
 // migrations that change those rows leave them: 105 disables the MCP policies,
 // 114 puts minTrustScore on the 0-1 trust scale and 130 adds logging and
 // completions to the allowlist's capabilities. Both migrations insert only
 // when the user admin@opena2a.org already exists. Migration 013 no longer
-// creates that user; `aim-bootstrap --default` does, after the migrations have
-// run, so on a fresh database they insert nothing and the --default run that
-// creates the admin adds these instead.
+// creates that user: `aim-bootstrap --default` or the server's ADMIN_PASSWORD
+// seed creates the first administrator after the migrations have run, so on a
+// fresh database they insert nothing, and the run that creates the
+// administrator adds these instead.
 //
 // A migration that changes these rows has to change this table too:
-// TestDefaultPoliciesMatchWhatTheMigrationsLeave applies the migrations for an
-// organization whose admin exists and fails when its rows differ from these.
-var defaultPolicies = []defaultPolicy{
+// TestDefaultPoliciesMatchWhatTheMigrationsLeave (cmd/bootstrap) applies the
+// migrations for an organization whose admin exists and fails when its rows
+// differ from these.
+var DefaultPolicies = []DefaultPolicy{
 	{
 		Name:              "Low Trust Score Alert",
 		Description:       "Alert when agent trust score falls below 70",
@@ -168,11 +175,11 @@ const insertDefaultPolicy = `
 	ON CONFLICT (organization_id, name) DO NOTHING
 `
 
-// seedDefaultPolicies adds defaultPolicies to the organization orgID, created
+// AddDefaultPolicies adds DefaultPolicies to the organization orgID, created
 // by adminID, in tx, and returns how many rows it added.
-func seedDefaultPolicies(ctx context.Context, tx *sql.Tx, orgID, adminID uuid.UUID) (int64, error) {
+func AddDefaultPolicies(ctx context.Context, tx *sql.Tx, orgID, adminID uuid.UUID) (int64, error) {
 	var added int64
-	for _, p := range defaultPolicies {
+	for _, p := range DefaultPolicies {
 		result, err := tx.ExecContext(ctx, insertDefaultPolicy,
 			orgID, p.Name, p.Description, p.PolicyType, p.EnforcementAction,
 			p.SeverityThreshold, p.Rules, p.IsEnabled, p.Priority, adminID)

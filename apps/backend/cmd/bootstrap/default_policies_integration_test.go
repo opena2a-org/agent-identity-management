@@ -16,6 +16,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/seed"
 )
 
 // Migrations 015 and 052 insert the OpenA2A Admin organization's default
@@ -232,9 +234,9 @@ func policyRowsOf(t *testing.T, tx *sql.Tx, orgID string) map[string]policyRow {
 // always rolled back, the test gives the OpenA2A Admin organization the user
 // admin@opena2a.org if no such user exists, removes that organization's
 // policies, applies every migration that names security_policies in order,
-// then adds defaultPolicies to a second organization and compares the two
+// then adds seed.DefaultPolicies to a second organization and compares the two
 // organizations' rows. A migration that changes the rows 015 and 052 insert
-// fails this test until defaultPolicies carries the same change.
+// fails this test until seed.DefaultPolicies carries the same change.
 func TestDefaultPoliciesMatchWhatTheMigrationsLeave(t *testing.T) {
 	db := bootstrapIntegrationDB(t)
 	ctx := context.Background()
@@ -278,9 +280,9 @@ func TestDefaultPoliciesMatchWhatTheMigrationsLeave(t *testing.T) {
 	require.NoError(t, tx.QueryRow(`INSERT INTO users (organization_id, email, name, provider, provider_id)
 		VALUES ($1, $2, 'Parity Admin', 'local', $3) RETURNING id`,
 		orgID, "bootstrap-policy-parity-"+suffix+"@example.com", "bootstrap-policy-parity-"+suffix).Scan(&userID))
-	added, err := seedDefaultPolicies(ctx, tx, orgID, userID)
+	added, err := seed.AddDefaultPolicies(ctx, tx, orgID, userID)
 	require.NoError(t, err)
-	require.EqualValues(t, len(defaultPolicies), added)
+	require.EqualValues(t, len(seed.DefaultPolicies), added)
 
 	require.Equal(t, fromMigrations, policyRowsOf(t, tx, orgID.String()),
 		"the policies the migrations leave for the OpenA2A Admin organization, then the ones the bootstrap adds")
