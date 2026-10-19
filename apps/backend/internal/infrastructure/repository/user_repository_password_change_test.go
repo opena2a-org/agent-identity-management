@@ -79,11 +79,16 @@ func TestUserRepository_GetSessionState(t *testing.T) {
 	})
 }
 
-// Update writes the user's password_changed_at through GREATEST, so a copy of
-// the row that carries no change (nil) or an older one leaves the recorded
-// change in place.
+// Update writes the user's password_changed_at through a CASE that keeps the
+// recorded change when the copy of the row carries no change (nil) or an
+// older one, and takes a later one. This test holds the query's text and the
+// argument it binds; user_repository_password_changed_at_integration_test.go
+// holds the rule against PostgreSQL.
 func TestUserRepository_Update_OnlyMovesThePasswordChangeForward(t *testing.T) {
-	update := regexp.QuoteMeta(`password_changed_at = GREATEST(password_changed_at, $14)`) + `\s+WHERE id = \$13`
+	update := regexp.QuoteMeta(`password_changed_at = CASE`) + `\s+` +
+		regexp.QuoteMeta(`WHEN $14::timestamptz IS NULL THEN password_changed_at`) + `\s+` +
+		regexp.QuoteMeta(`WHEN password_changed_at IS NULL OR password_changed_at < $14 THEN $14`) + `\s+` +
+		regexp.QuoteMeta(`ELSE password_changed_at`) + `\s+END\s+WHERE id = \$13`
 	changedAt := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 
 	for name, value := range map[string]*time.Time{"a recorded change": &changedAt, "no change carried": nil} {
