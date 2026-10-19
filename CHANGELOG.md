@@ -133,6 +133,27 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Fixed: deleting an admin removes the admin's email from the admin access reviews kept as compliance evidence
+
+- `POST /api/v1/compliance/evidence/collect` for the `admin_access_review` check stores an access review whose data
+  holds, under `adminUsers`, an entry for each user of the organization whose role is admin: the user's id, email, last
+  sign-in and status. The review is the organization's, and deleting one of those users kept it with the user's email
+  in the user's entry: `ComplianceService.GetEvidenceForCheck`, which `GET /api/v1/compliance/evidence/check/:checkName`
+  calls, read the review back with that email.
+- Migration `138_user_delete_removes_email_from_access_review_evidence.sql` adds an `AFTER DELETE` trigger to `users`.
+  For each deleted user it removes `email` from the entries whose id is the user's in the `admin_access_review`
+  evidence of the user's organization. The review and the entry are kept, the entry with its id, last sign-in and
+  status. The migration also removes, once, `email` from the entries whose id names no user.
+- Test: `apps/backend/internal/application/compliance_access_review_user_delete_integration_test.go`, against
+  PostgreSQL. With every migration applied, one test collects two access reviews through
+  `ComplianceService.CollectEvidence`, the first by the admin it then deletes through `UserRepository.Delete`, and reads
+  them back through `GetEvidenceForCheck`: both keep an entry for each of the two admins, the deleted admin's entry
+  keeps its id, last sign-in and status and has no email, and the other admin's entry is kept as collected. Against a
+  database migrated without migration 138 it fails, with the deleted admin's email in both reviews. Another test
+  deletes an organization that holds access reviews. In
+  `apps/backend/internal/infrastructure/repository/user_delete_access_review_integration_test.go`, a test runs the
+  migration file twice in a schema that stands in for a database migrated through 137.
+
 ### Fixed: deleting a user deletes the user's registration requests and the copies of the user's email and name in audit rows
 
 - Approving a registration request copies its email into the user it creates and keeps the request, which holds the
