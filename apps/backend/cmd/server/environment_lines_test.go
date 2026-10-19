@@ -198,6 +198,16 @@ func startupLine(t *testing.T, name string, cfg *config.Config) string {
 			return "error: " + err.Error()
 		}
 		return line
+	case "DRIFT_MONITOR_INTERVAL":
+		return logLines(name, func() {
+			_, warning := driftMonitorInterval(cfg.Jobs.Value)
+			logIntervalWarning(warning)
+		})
+	case "TRUST_REEVALUATION_INTERVAL":
+		return logLines(name, func() {
+			_, warning := trustReevaluationInterval(cfg.Jobs.Value)
+			logIntervalWarning(warning)
+		})
 	}
 	return ""
 }

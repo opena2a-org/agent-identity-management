@@ -318,6 +318,34 @@ func TestAgentService_RecalculateTrustScore_SendsTrustScoreChanged(t *testing.T)
 	assert.Equal(t, score.Score, got[domain.WebhookEventTrustScoreChanged].data["trustScore"])
 }
 
+// The trust re-evaluation job stores a recalculated score itself and asks the
+// service to announce it. The two scores are compared, and sent, at the two
+// decimal places agents.trust_score stores.
+func TestAgentService_NotifyTrustScoreChanged_ComparesAtTheStoredPrecision(t *testing.T) {
+	agent := createTestAgentForService()
+	dispatcher := newRecordingDispatcher()
+	s := &AgentService{webhooks: dispatcher}
+
+	s.NotifyTrustScoreChanged(agent, 0.90, 0.9049)
+	s.NotifyTrustScoreChanged(agent, 0.90, 0.8951)
+	dispatcher.assertNoMore(t)
+
+	s.NotifyTrustScoreChanged(agent, 0.90, 0.8949)
+	got := receiveEvents(t, dispatcher, 1)
+	changed, ok := got[domain.WebhookEventTrustScoreChanged]
+	require.True(t, ok, "trust_score.changed is sent")
+	assert.Equal(t, agent.OrganizationID, changed.orgID)
+	assert.Equal(t, agent.ID.String(), changed.data["agentId"])
+	assert.Equal(t, agent.Name, changed.data["agentName"])
+	assert.Equal(t, 0.90, changed.data["previousScore"])
+	assert.Equal(t, 0.89, changed.data["trustScore"])
+}
+
+func TestAgentService_NotifyTrustScoreChanged_WithoutAWebhookServiceSendsNothing(t *testing.T) {
+	agent := createTestAgentForService()
+	assert.NotPanics(t, func() { (&AgentService{}).NotifyTrustScoreChanged(agent, 0.50, 0.90) })
+}
+
 // A blocked capability violation lowers the stored score; when the score it
 // leaves is below the critical threshold the policy suspends the agent, and
 // each of the three changes is sent.

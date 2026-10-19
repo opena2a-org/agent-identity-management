@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: The server runs a capability drift monitor and a trust re-evaluation job
+
+- The capability drift monitor runs every 15 minutes by default (`DRIFT_MONITOR_INTERVAL`, a Go duration, at
+  least one minute). A run reads the MCP capability drift of every organization with a registered MCP server over
+  the last day, the read `GET /api/v1/supply-chain/drift-alerts` makes, which records an alert for a drift that
+  has no unacknowledged one, and sends `security.capability_drift` to the organization's webhooks once for each
+  drift (server, capability and drift type) while the server runs. A drift whose send failed is sent on the next
+  run. On the commit before this change, no code sent that event.
+- The trust re-evaluation job runs every hour by default (`TRUST_REEVALUATION_INTERVAL`, at least five minutes).
+  It recalculates the score of every agent that is not revoked and, for a score that moved by 0.001 or more since
+  the last one on record, writes the trust score history row and the agent's score, as
+  `POST /api/v1/agents/:id/trust-score/recalculate` does, then sends `trust_score.changed` when the agent's
+  score changed at the two decimal places it is stored at. The job does not run the trust score policy.
+- A value of either variable that does not parse, or is not positive, uses the default; a value under the minimum
+  runs at the minimum. Both log a `WARNING:` line at startup naming the variable and the interval in effect.
+  Stopping the server ends a run before its next organization or agent.
+- `docs/API.md`, `docs/guides/A2A.md`, `docs/server-features.md` and `README.md` say when the two jobs run and what
+  they send. Tests: `apps/backend/cmd/server/drift_monitor_test.go`,
+  `apps/backend/cmd/server/trust_reevaluation_test.go`, the two variables' rows in
+  `apps/backend/internal/config/testdata/environment_table.json`, and the `NotifyTrustScoreChanged` tests in
+  `apps/backend/internal/application/webhook_events_test.go`.
+
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
 - With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and

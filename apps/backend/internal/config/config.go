@@ -71,6 +71,7 @@ type Config struct {
 	Email       EmailConfig
 	SIEM        SIEMConfig
 	SigningKeys SigningKeysConfig
+	Jobs        JobsConfig
 }
 
 // ServerConfig holds server configuration
@@ -337,6 +338,27 @@ func (k SigningKeysConfig) Value(name string) string {
 	return ""
 }
 
+// JobsConfig holds the intervals of two background jobs as set:
+// DRIFT_MONITOR_INTERVAL for the capability drift monitor and
+// TRUST_REEVALUATION_INTERVAL for the trust re-evaluation job. cmd/server
+// reads them through Value and validates them.
+type JobsConfig struct {
+	DriftMonitorInterval      string
+	TrustReevaluationInterval string
+}
+
+// Value returns the named interval variable as Load read it, and "" for a
+// name JobsConfig does not hold.
+func (j JobsConfig) Value(name string) string {
+	switch name {
+	case "DRIFT_MONITOR_INTERVAL":
+		return j.DriftMonitorInterval
+	case "TRUST_REEVALUATION_INTERVAL":
+		return j.TrustReevaluationInterval
+	}
+	return ""
+}
+
 // Load loads configuration from environment variables.
 //
 // One rule holds for every variable: an empty value is read as unset, so it
@@ -446,6 +468,10 @@ func Load() (*Config, error) {
 			CardAttestationRetired: getEnv("AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED", ""),
 			ATCIssuer:              getEnv("AIM_SIGNING_KEY_ATC_ISSUER", ""),
 			ATCIssuerRetired:       getEnv("AIM_SIGNING_KEY_ATC_ISSUER_RETIRED", ""),
+		},
+		Jobs: JobsConfig{
+			DriftMonitorInterval:      getEnv("DRIFT_MONITOR_INTERVAL", ""),
+			TrustReevaluationInterval: getEnv("TRUST_REEVALUATION_INTERVAL", ""),
 		},
 	}
 

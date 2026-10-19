@@ -1053,22 +1053,28 @@ An active webhook subscribed to an event receives it when:
 | `agent.updated` | An agent is updated through `PUT /api/v1/agents/:id`. |
 | `agent.suspended` | An agent is suspended through `POST /api/v1/agents/:id/suspend`, or by the trust score policy (see `trust_score.low`). |
 | `agent.deleted` | An agent is deleted through `DELETE /api/v1/agents/:id`. |
-| `trust_score.changed` | An administrator sets an agent's trust score through `PUT /api/v1/agents/:id/trust-score`, or a capability violation lowers it, and the stored score differs from the one before. Other trust score changes, including `POST /api/v1/agents/:id/trust-score/recalculate`, send no event. |
-| `trust_score.low` | After one of the changes `trust_score.changed` names, the trust score policy finds that a verified or pending agent's score fell and ends below 70%. `severity` is `critical` below 50%, where the policy also suspends the agent, and `warning` otherwise. |
+| `trust_score.changed` | An administrator sets an agent's trust score through `PUT /api/v1/agents/:id/trust-score`, or a capability violation lowers it, and the stored score differs from the one before; or the trust re-evaluation job stores a recalculated score that differs from the agent's at two decimal places. Other trust score changes, including `POST /api/v1/agents/:id/trust-score/recalculate`, send no event. |
+| `trust_score.low` | After one of the changes `trust_score.changed` names, other than the trust re-evaluation job's, the trust score policy finds that a verified or pending agent's score fell and ends below 70%. `severity` is `critical` below 50%, where the policy also suspends the agent, and `warning` otherwise. |
 | `alert.created` | An alert is raised for a capability check denied because the agent has no granted capabilities. Other alerts send no event. |
 | `alert.acknowledged` | An alert is acknowledged through `POST /api/v1/admin/alerts/:id/acknowledge`. Acknowledging every alert at once, and resolving an alert, send no event. |
 | `api_key.created` | An API key is created, including the key created with an agent. |
 | `api_key.revoked` | An active API key is disabled through `PATCH /api/v1/api-keys/:id/disable`. |
 
+`security.capability_drift` is sent by the capability drift monitor, which runs every 15 minutes by default
+(`DRIFT_MONITOR_INTERVAL`). A run reads each organization's MCP capability drift over the last day, as
+`GET /api/v1/supply-chain/drift-alerts` reads it, and sends each drift (server, capability and drift type)
+once while the server runs; a drift whose send failed is sent on the next run.
+
 A subscription accepts these names, and no event is sent for them: `api_key.expired`, `security.violation`,
-`compliance.violation`, `security.capability_drift`, `security.data_exfiltration`. A create or update
+`compliance.violation`, `security.data_exfiltration`. A create or update
 naming any other event is refused with `400 {"error":"unsupported event: <name>"}`.
 
 The data of an `agent.*` event is the agent after the change: `agentId`, `name`, `displayName`,
 `agentType`, `status` and `trustScore`. A `trust_score.*` event carries `agentId`, `agentName`,
 `previousScore` and `trustScore`, and `trust_score.low` adds `severity`. An `api_key.*` event carries
 `apiKeyId`, `agentId`, `name`, `prefix` and, for a key that expires, `expiresAt`; it never carries the
-key or its hash.
+key or its hash. A `security.capability_drift` event carries `serverName`, `capabilityName`, `driftType`
+(`added`, `removed` or `stale`), `severity` and `detectedAt`, the time of the run that sent it.
 
 `POST /api/v1/webhooks/:id/test` sends a `webhook.test` delivery to the endpoint at once.
 

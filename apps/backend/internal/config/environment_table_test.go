@@ -252,6 +252,8 @@ func renderSetting(cfg *Config, name string) (string, bool) {
 	case "AIM_SIGNING_KEY_CARD_ATTESTATION", "AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED",
 		"AIM_SIGNING_KEY_ATC_ISSUER", "AIM_SIGNING_KEY_ATC_ISSUER_RETIRED":
 		return q(cfg.SigningKeys.Value(name)), true
+	case "DRIFT_MONITOR_INTERVAL", "TRUST_REEVALUATION_INTERVAL":
+		return q(cfg.Jobs.Value(name)), true
 	}
 	return "", false
 }

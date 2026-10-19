@@ -75,7 +75,7 @@ The decorator files a request for `db:write`, and the agent's audit log records 
 
 The SDK built from this repository printed the registration capture, and the release on PyPI printed the refusal; the release on PyPI prints `✓` where this repository's build prints `[OK]`, and adds `✓ Registered db:write (medium)` after the refusal's first line.
 
-The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`. What a verification request does to it: [Trust-gated capabilities](docs/server-features.md#trust-gated-capabilities).
+The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`, and every hour by default by the trust re-evaluation job (`TRUST_REEVALUATION_INTERVAL`). What a verification request does to it: [Trust-gated capabilities](docs/server-features.md#trust-gated-capabilities).
 
 The same one-line shape works in [Java](#java); TypeScript has no `secure()` call ([local mode](sdk/typescript/README.md#local-mode-with-opena2aaim-core)).
 

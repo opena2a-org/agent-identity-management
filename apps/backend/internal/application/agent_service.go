@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -111,6 +112,22 @@ func (s *AgentService) sendTrustScoreChanged(agent *domain.Agent, previousScore,
 	}
 	sendWebhookEvent(s.webhooks, agent.OrganizationID, domain.WebhookEventTrustScoreChanged,
 		trustScoreEventData(agent, previousScore, trustScore))
+}
+
+// NotifyTrustScoreChanged sends trust_score.changed for a score stored outside
+// the service, by the trust re-evaluation job, when the agent's score moved
+// from previousScore to newScore at the two decimal places agents.trust_score
+// stores. The event carries both scores at that precision, so a score that
+// moves by less sends nothing. When no webhook service is set, nothing is
+// sent.
+func (s *AgentService) NotifyTrustScoreChanged(agent *domain.Agent, previousScore, newScore float64) {
+	s.sendTrustScoreChanged(agent, storedTrustScore(previousScore), storedTrustScore(newScore))
+}
+
+// storedTrustScore rounds a score to the precision of agents.trust_score,
+// DECIMAL(5,2).
+func storedTrustScore(score float64) float64 {
+	return math.Round(score*100) / 100
 }
 
 // evaluateTrustScoreChange runs the trust score policy on agent's change from
