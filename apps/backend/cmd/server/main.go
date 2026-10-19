@@ -365,11 +365,10 @@ func main() {
 		defer stopRegistryATCRevocations()
 	}
 
-	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true)
-	if services.RegistryBridge != nil {
-		stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
-		defer close(stopRegistryBridge)
-	}
+	// Start Registry Bridge background job (opt-in via REGISTRY_BRIDGE_ENABLED=true;
+	// without it services.RegistryBridge is nil and no job starts)
+	stopRegistryBridge := startRegistryBridgeJob(services.RegistryBridge)
+	defer stopRegistryBridge()
 
 	// Graceful shutdown
 	go func() {
@@ -1109,19 +1108,9 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		cfg.Server.FrontendURL,
 	)
 
-	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry
-	registryURL := cfg.Registry.BridgeURL
-	var registryBridgeService *application.RegistryBridgeService
-	if cfg.Registry.BridgeEnabled {
-		registryBridgeService = application.NewRegistryBridgeService(
-			repos.Organization,
-			repos.Agent,
-			repos.MCPAttestation,
-			repos.MCPServer,
-			repos.AuditLog,
-			registryURL,
-		)
-	}
+	// Registry Bridge: aggregate attestation data and push to OpenA2A Registry,
+	// built only with REGISTRY_BRIDGE_ENABLED=true.
+	registryBridgeService := newRegistryBridgeService(cfg.Registry, repos)
 
 	// ATC issuance: compute the agent's 9-factor behavioral score and delegate
 	// credential signing + transparency-log recording to the Registry (the CA).
@@ -2843,17 +2832,39 @@ func runActionRequestNoncePurge(jobCtx context.Context, purger actionRequestNonc
 		result.Deleted, result.Organizations, result.Duration.Milliseconds())
 }
 
+// newRegistryBridgeService builds the Registry bridge, which pushes aggregated
+// attestation data to the Registry at REGISTRY_BRIDGE_URL. It returns nil
+// unless REGISTRY_BRIDGE_ENABLED is "true", so a server started without the
+// variable has no bridge and startRegistryBridgeJob starts no job for it.
+func newRegistryBridgeService(cfg config.RegistryConfig, repos *Repositories) *application.RegistryBridgeService {
+	if !cfg.BridgeEnabled {
+		return nil
+	}
+	return application.NewRegistryBridgeService(
+		repos.Organization,
+		repos.Agent,
+		repos.MCPAttestation,
+		repos.MCPServer,
+		repos.AuditLog,
+		cfg.BridgeURL,
+	)
+}
+
 // startRegistryBridgeJob starts a background goroutine that periodically
 // aggregates anonymized attestation data and pushes it to the OpenA2A Registry.
-// The bridge runs every 6 hours and is opt-in via REGISTRY_BRIDGE_ENABLED=true.
-// Returns a channel that should be closed to stop the bridge job.
-func startRegistryBridgeJob(bridgeService *application.RegistryBridgeService) chan struct{} {
+// The bridge runs every 6 hours and is opt-in via REGISTRY_BRIDGE_ENABLED=true:
+// for a nil bridge it starts no goroutine, logs nothing and returns a stop
+// function that does nothing. The start line is logged before it returns and
+// the stop line by the stop function, not by the goroutine.
+func startRegistryBridgeJob(bridgeService *application.RegistryBridgeService) (stop func()) {
+	if bridgeService == nil {
+		return func() {}
+	}
 	stopChan := make(chan struct{})
 	ticker := time.NewTicker(6 * time.Hour)
+	log.Println("Registry bridge enabled (runs every 6 hours)")
 
 	go func() {
-		log.Println("Registry bridge enabled (runs every 6 hours)")
-
 		for {
 			select {
 			case <-ticker.C:
@@ -2862,11 +2873,13 @@ func startRegistryBridgeJob(bridgeService *application.RegistryBridgeService) ch
 				}
 			case <-stopChan:
 				ticker.Stop()
-				log.Println("Registry bridge stopped")
 				return
 			}
 		}
 	}()
 
-	return stopChan
+	return func() {
+		close(stopChan)
+		log.Println("Registry bridge stopped")
+	}
 }
