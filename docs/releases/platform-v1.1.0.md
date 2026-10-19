@@ -406,19 +406,19 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 37 migrations, `098_mcp_manifest_baselines.sql` to
-`135_user_references_allow_user_delete.sql`. Measured on 2026-10-19 on an Apple M4 Max laptop with PostgreSQL 18.3: a
-database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own transaction and
+Upgrading from 1.0.0 applies 38 migrations, `098_mcp_manifest_baselines.sql` to
+`136_user_delete_clears_name_and_email_copies.sql`. Measured on 2026-10-19 on an Apple M4 Max laptop with PostgreSQL
+18.3: a database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own transaction and
 recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. Then `aim-server migrate`, built from
-a tree whose last migration is `135_user_references_allow_user_delete.sql`, was timed against it with
+a tree whose last migration is `136_user_delete_clears_name_and_email_copies.sql`, was timed against it with
 `/usr/bin/time -p`, three runs on separate copies by a binary that had already run on that laptop, while the laptop ran
-other work and its one-minute load average read 10.27 before the runs and 9.93 after them. Each run logged
-`Successfully applied 37 pending migration(s)`:
+other work and its one-minute load average read 12.90 before the runs and 13.15 after them. Each run logged
+`Successfully applied 38 pending migration(s)`:
 
 | 1.0.0 database | Wall time, three runs |
 |----------------|-----------------------|
-| only the rows the migrations write, 14 MB | 0.19 s, 0.20 s, 0.18 s |
-| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 629 MB | 1.27 s, 1.11 s, 1.35 s |
+| only the rows the migrations write, 14 MB | 0.32 s, 0.27 s, 0.26 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 638 MB | 0.87 s, 1.27 s, 1.37 s |
 
 The time grows with the size of the tables the migrations alter or index. The agent private key conversion runs at the
 server's first start, not in `aim-server migrate`, and is not in these times; it reads every agent row that holds a
