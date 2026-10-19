@@ -406,24 +406,21 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 41 migrations, `098_mcp_manifest_baselines.sql` to `139_user_deletion_requests.sql`.
-Measured on 2026-10-19 on an Apple M4 Max laptop with PostgreSQL 18.3: a database was migrated with the 97 migration
-files of `platform-v1.0.0`, each applied in its own transaction and recorded in `schema_migrations` by file name, as
-the 1.0.0 server does at start. Then `aim-server migrate`, built from a tree whose last migration is
-`139_user_deletion_requests.sql`, was timed against it with `/usr/bin/time -p`, three runs on separate copies, each
-copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that laptop, while the laptop ran
-other work and its one-minute load average read 17.93 before the runs and 13.57 after them. Each run logged
-`Successfully applied 41 pending migration(s)`:
+Upgrading from 1.0.0 applies 42 migrations, `098_mcp_manifest_baselines.sql` to
+`140_organization_references_allow_organization_delete.sql`. Measured on 2026-10-19 on an Apple M4 Max laptop with
+PostgreSQL 18.3: a database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own
+transaction and recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. Then
+`aim-server migrate`, built from a tree whose last migration is
+`140_organization_references_allow_organization_delete.sql`, was timed against it with `/usr/bin/time -p`, three runs
+on separate copies, each copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that
+laptop, while the laptop ran other work and its one-minute load average read 7.04 before the runs and 6.10 after them.
+Each run logged `Successfully applied 42 pending migration(s)`:
 
 | 1.0.0 database | Wall time, three runs |
 |----------------|-----------------------|
-| only the rows the migrations write, 14 MB | 0.27 s, 0.12 s, 0.13 s |
-| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 597 MB | 1.43 s, 0.91 s, 1.20 s |
-| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 599 MB | 3.00 s, 1.49 s, 1.53 s |
-
-Two earlier sets of the same nine runs that day, the first without the `CHECKPOINT`, took 0.10 s to 0.55 s on the
-first database, 0.66 s to 2.81 s on the second and 1.94 s to 11.14 s on the third; the load average read 6.83 before
-the first set and 6.21 after it, and 6.08 before the second and 21.07 after it.
+| only the rows the migrations write, 14 MB | 0.20 s, 0.10 s, 0.10 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 823 MB | 0.88 s, 1.35 s, 3.61 s |
+| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 827 MB | 5.83 s, 3.20 s, 2.79 s |
 
 The time grows with the size of the tables the migrations alter or index. The third database is the second with
 10,000 of its `audit_logs` rows written as such role changes;
@@ -431,7 +428,9 @@ The time grows with the size of the tables the migrations alter or index. The th
 from the audit rows about users deleted before it ran. `138_user_delete_removes_email_from_access_review_evidence.sql`
 rewrites, once, each admin access review stored as compliance evidence that holds an entry with an email whose id names
 no user. These databases hold no compliance evidence; on a migrated copy of the first with 10,000 such reviews of three
-admins each, that statement took 389 ms, 316 ms and 1,545 ms in three runs of `EXPLAIN ANALYZE`. The agent private key
+admins each, that statement took 389 ms, 316 ms and 1,545 ms in three runs of `EXPLAIN ANALYZE`. Nor do they hold rows
+in `a2a_consent_records`, `community_intelligence_reports` or `device_codes`, the three tables whose foreign key to
+`organizations` `140_organization_references_allow_organization_delete.sql` replaces. The agent private key
 conversion runs at the server's first start, not in `aim-server migrate`, and is not in these times; it reads every
 agent row that holds a stored private key.
 

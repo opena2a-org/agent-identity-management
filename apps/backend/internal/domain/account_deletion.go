@@ -11,7 +11,9 @@ import (
 // (POST /api/v1/auth/delete-account). The request deactivates the account at
 // once and records when it was made; the account deletion purge deletes the
 // account AccountDeletionDelay later, unless an admin has activated it again
-// in between, which withdraws the request.
+// in between, which withdraws the request. A purge that deletes the last user
+// of an organization deletes the organization too, unless a reference to the
+// organization refuses its delete.
 
 const (
 	// AccountDeletionDelay is how long an account waits, from its deletion
@@ -45,6 +47,9 @@ type AccountDeletion struct {
 	UserID         uuid.UUID
 	OrganizationID uuid.UUID
 	RequestedAt    time.Time
+	// OrganizationDeleted is set by the purge when it deleted the account's
+	// organization with the account: no user of the organization was left.
+	OrganizationDeleted bool
 }
 
 // DueAt is the time from which the purge deletes the account.

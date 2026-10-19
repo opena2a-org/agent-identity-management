@@ -126,6 +126,10 @@ export default function DeleteAccountPage() {
                   It is deleted 29 days later, with the API keys you created. The agents and MCP servers you created stay
                   with your organization.
                 </li>
+                <li>
+                  If no other user is left in your organization then, the organization is deleted too, with its agents and
+                  MCP servers.
+                </li>
                 <li>Until then, an admin of your organization can activate your account again, which cancels the deletion.</li>
               </ul>
 

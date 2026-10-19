@@ -17,7 +17,8 @@ type AccountDeletionStore interface {
 	// made at at; see the repository method for its refusals.
 	RequestDeletion(ctx context.Context, userID uuid.UUID, at time.Time) (domain.AccountDeletion, error)
 	// PurgeDeletionRequests deletes at most limit deactivated accounts whose
-	// request was made at or before requestedBy, and returns them.
+	// request was made at or before requestedBy, and the organizations they
+	// leave with no user, and returns the accounts.
 	PurgeDeletionRequests(ctx context.Context, requestedBy time.Time, limit int) ([]domain.AccountDeletion, error)
 }
 
@@ -74,8 +75,10 @@ func (s *AccountDeletionService) Request(ctx context.Context, userID uuid.UUID, 
 // time, until a batch deletes fewer, and writes for each deleted account an
 // account_deleted audit row in its organization that names no user, with the
 // deleted user's id as its resource and the request's time
-// (deletionRequestedAt) in its metadata. It returns how many accounts it
-// deleted, also when a batch fails.
+// (deletionRequestedAt) in its metadata. An account whose organization the
+// store deleted with it gets no audit row, as the organization's audit rows went
+// with the organization; a log line names the user and the organization
+// instead. It returns how many accounts it deleted, also when a batch fails.
 func (s *AccountDeletionService) Purge(ctx context.Context) (int, error) {
 	requestedBy := s.now().UTC().Add(-domain.AccountDeletionDelay)
 	total := 0
@@ -95,6 +98,11 @@ func (s *AccountDeletionService) Purge(ctx context.Context) (int, error) {
 }
 
 func (s *AccountDeletionService) recordDeleted(ctx context.Context, d domain.AccountDeletion) {
+	if d.OrganizationDeleted {
+		log.Printf("Account deletion: user %s was deleted, and with it organization %s, which had no user left",
+			d.UserID, d.OrganizationID)
+		return
+	}
 	if s.audit == nil {
 		return
 	}

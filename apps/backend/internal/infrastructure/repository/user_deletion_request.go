@@ -1,13 +1,17 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -100,10 +104,62 @@ func (r *UserRepository) RequestDeletion(ctx context.Context, userID uuid.UUID, 
 // the AFTER DELETE triggers on users run. Rows another purge holds locked are
 // skipped (FOR UPDATE SKIP LOCKED), so two servers that purge at once delete
 // each account once.
+//
+// In the same transaction it deletes each organization of the deleted accounts
+// that has no user left (deleteOrganizationLeftWithNoUser), with the rows that
+// reference the organization by ON DELETE CASCADE, and sets OrganizationDeleted
+// on the accounts of a deleted organization. An organization whose delete a
+// reference refuses is kept, the accounts are deleted all the same, and the
+// refusal is logged once the transaction commits. Any other failure rolls the
+// whole batch back and returns no account, so the next purge takes the accounts
+// and their organizations again.
 func (r *UserRepository) PurgeDeletionRequests(ctx context.Context, requestedBy time.Time, limit int) ([]domain.AccountDeletion, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		DELETE FROM users
-		WHERE id IN (
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("account deletion purge: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	deleted, err := deleteDueAccounts(ctx, tx, requestedBy, limit)
+	if err != nil {
+		return nil, fmt.Errorf("account deletion purge: %w", err)
+	}
+
+	organizationDeleted := make(map[uuid.UUID]bool)
+	refused := make(map[uuid.UUID]error)
+	for _, orgID := range organizationsOf(deleted) {
+		gone, refusal, err := deleteOrganizationLeftWithNoUser(ctx, tx, orgID)
+		if err != nil {
+			return nil, fmt.Errorf("account deletion purge: organization %s: %w", orgID, err)
+		}
+		organizationDeleted[orgID] = gone
+		if refusal != nil {
+			refused[orgID] = refusal
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("account deletion purge: %w", err)
+	}
+
+	for orgID, refusal := range refused {
+		log.Printf("Account deletion purge: organization %s has no user left and is kept: its delete was refused: %v",
+			orgID, refusal)
+	}
+	for i := range deleted {
+		deleted[i].OrganizationDeleted = organizationDeleted[deleted[i].OrganizationID]
+	}
+	return deleted, nil
+}
+
+// deleteDueAccounts is the purge's DELETE FROM users. The accounts are chosen
+// and locked once, in a MATERIALIZED common table expression. Written as
+// DELETE ... WHERE id IN (SELECT ... LIMIT ... FOR UPDATE SKIP LOCKED), the
+// statement was planned as a nested loop that ran the subquery again for each
+// row of users, and with the oldest due account locked by another transaction
+// it deleted two accounts under LIMIT 1.
+func deleteDueAccounts(ctx context.Context, tx *sql.Tx, requestedBy time.Time, limit int) ([]domain.AccountDeletion, error) {
+	rows, err := tx.QueryContext(ctx, `
+		WITH due AS MATERIALIZED (
 		    SELECT id FROM users
 		    WHERE deletion_requested_at <= $1
 		      AND status = 'deactivated'
@@ -111,9 +167,12 @@ func (r *UserRepository) PurgeDeletionRequests(ctx context.Context, requestedBy 
 		    LIMIT $2
 		    FOR UPDATE SKIP LOCKED
 		)
-		RETURNING id, organization_id, deletion_requested_at`, requestedBy, limit)
+		DELETE FROM users u
+		USING due
+		WHERE u.id = due.id
+		RETURNING u.id, u.organization_id, u.deletion_requested_at`, requestedBy, limit)
 	if err != nil {
-		return nil, fmt.Errorf("account deletion purge: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -121,12 +180,83 @@ func (r *UserRepository) PurgeDeletionRequests(ctx context.Context, requestedBy 
 	for rows.Next() {
 		var d domain.AccountDeletion
 		if err := rows.Scan(&d.UserID, &d.OrganizationID, &d.RequestedAt); err != nil {
-			return deleted, fmt.Errorf("account deletion purge: %w", err)
+			return nil, err
 		}
 		deleted = append(deleted, d)
 	}
 	if err := rows.Err(); err != nil {
-		return deleted, fmt.Errorf("account deletion purge: %w", err)
+		return nil, err
 	}
 	return deleted, nil
+}
+
+// organizationsOf returns the organizations of the accounts, each once, in the
+// order of their ids' bytes, so two purges lock the organizations they share in
+// the same order.
+func organizationsOf(deleted []domain.AccountDeletion) []uuid.UUID {
+	orgs := make([]uuid.UUID, 0)
+	for _, d := range deleted {
+		if !slices.Contains(orgs, d.OrganizationID) {
+			orgs = append(orgs, d.OrganizationID)
+		}
+	}
+	slices.SortFunc(orgs, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	return orgs
+}
+
+// deleteOrganizationLeftWithNoUser deletes the organization if no user of it is
+// left, inside the purge's transaction, and reports whether it did.
+//
+// The organization's row is locked (FOR UPDATE) by a statement of its own, and
+// the users are counted by the next statement, which reads what was committed
+// once the lock is held. A transaction that adds a user to the organization
+// holds a lock on the organization's row until it ends (the foreign key check of
+// users.organization_id takes it), so the purge waits for it and then counts
+// that user, and the organization is kept. One DELETE that tested for users and
+// deleted the row would test against what was committed when it started, and
+// would delete that user by cascade.
+//
+// The delete runs under a savepoint. A delete that a reference to the
+// organization refuses (SQLSTATE 23503, a reference with no ON DELETE action, or
+// 23001, ON DELETE RESTRICT, as the signed audit record chain tables have) is
+// rolled back to the savepoint and returned as refusal, and the organization is
+// kept. Any other error is returned as err.
+func deleteOrganizationLeftWithNoUser(ctx context.Context, tx *sql.Tx, orgID uuid.UUID) (deleted bool, refusal error, err error) {
+	if _, err := tx.ExecContext(ctx, `SELECT 1 FROM organizations WHERE id = $1 FOR UPDATE`, orgID); err != nil {
+		return false, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `SAVEPOINT organization_delete`); err != nil {
+		return false, nil, err
+	}
+	res, err := tx.ExecContext(ctx, `
+		DELETE FROM organizations o
+		WHERE o.id = $1
+		  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.organization_id = o.id)`, orgID)
+	if isReferenceRefusal(err) {
+		if _, rbErr := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT organization_delete`); rbErr != nil {
+			return false, nil, rbErr
+		}
+		if _, relErr := tx.ExecContext(ctx, `RELEASE SAVEPOINT organization_delete`); relErr != nil {
+			return false, nil, relErr
+		}
+		return false, err, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `RELEASE SAVEPOINT organization_delete`); err != nil {
+		return false, nil, err
+	}
+	return n == 1, nil, nil
+}
+
+// isReferenceRefusal is true for an error of a delete that a foreign key
+// refused: foreign_key_violation (23503) or restrict_violation (23001).
+func isReferenceRefusal(err error) bool {
+	var pqErr *pq.Error
+	return errors.As(err, &pqErr) && (pqErr.Code == "23503" || pqErr.Code == "23001")
 }

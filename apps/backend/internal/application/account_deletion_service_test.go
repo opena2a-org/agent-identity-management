@@ -16,7 +16,8 @@ import (
 // A user asks for the deletion of their own account: the store deactivates it
 // and records the request, and the service writes the audit row. The purge
 // deletes the accounts whose request is domain.AccountDeletionDelay old, batch
-// by batch, and writes one audit row for each deleted account.
+// by batch, and writes one audit row for each deleted account whose
+// organization is kept.
 
 type accountDeletionStoreFake struct {
 	requestedAt time.Time
@@ -155,6 +156,38 @@ func TestAccountDeletionService_PurgeDeletesTheRequestsMadeTheDelayAgo(t *testin
 		assert.Equal(t, deleted[i].UserID, row.resourceID, "the row's resource is the deleted user")
 		assert.Equal(t, map[string]interface{}{"deletionRequestedAt": "2026-09-19T12:30:00Z"}, row.metadata)
 	}
+}
+
+// An account whose organization the store deleted with it gets no audit row:
+// the organization's audit rows went with it. A log line names the user and the
+// organization. The account of an organization that is kept gets its row.
+func TestAccountDeletionService_PurgeWritesNoAuditRowInAnOrganizationItDeleted(t *testing.T) {
+	deletedOrg, keptOrg := uuid.New(), uuid.New()
+	requestedAt := accountDeletionNow.Add(-30 * 24 * time.Hour)
+	lastUsers := accountDeletionsOf(2, deletedOrg, requestedAt)
+	for i := range lastUsers {
+		lastUsers[i].OrganizationDeleted = true
+	}
+	member := accountDeletionsOf(1, keptOrg, requestedAt)[0]
+	store := &accountDeletionStoreFake{batches: [][]domain.AccountDeletion{{lastUsers[0], member, lastUsers[1]}}}
+	audit := &accountDeletionAuditFake{}
+	logs := captureLog(t)
+
+	n, err := accountDeletionServiceFor(store, audit).Purge(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 3, n, "every deleted account is counted")
+
+	require.Len(t, audit.rows, 1, "only the account of the kept organization has an audit row")
+	assert.Equal(t, keptOrg, audit.rows[0].orgID)
+	assert.Equal(t, member.UserID, audit.rows[0].resourceID)
+
+	for _, d := range lastUsers {
+		assert.Contains(t, logs.String(),
+			"Account deletion: user "+d.UserID.String()+" was deleted, and with it organization "+deletedOrg.String()+
+				", which had no user left")
+	}
+	assert.NotContains(t, logs.String(), member.UserID.String())
+	assert.NotContains(t, logs.String(), "audit row", "no audit write was attempted and failed")
 }
 
 func TestAccountDeletionService_PurgeRepeatsWhileABatchIsFull(t *testing.T) {
