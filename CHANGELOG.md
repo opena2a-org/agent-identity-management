@@ -221,6 +221,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   another issuer or client id. On the commit this builds on, the two backend tests that keep the secret fail, the route
   answering `400`, and each of the four web test files fails.
 
+### Fixed: a user whose organization requires sign-in through its OpenID Connect provider confirms the deletion of their account with their password
+
+- `POST /api/v1/auth/delete-account` checks the password through the sign-in's own checks, which refuse a user who is
+  not an administrator of an organization with `requireProviderSignIn` after the password matched. The route answered
+  that refusal as a wrong password: on the commit this builds on, a member of such an organization who sent their
+  correct password was answered `401` with `{"error": "Invalid password", "code": "invalidPassword"}` and no deletion
+  was requested, and the same `401` answered when the requirement could not be read.
+- The request of such a user now stands: the password matched before the requirement was read, and the route issues no
+  tokens, as a password change by such a user does. When the requirement cannot be read, the route answers `500` and
+  records no request. A wrong password is answered `401` and recorded as before, and the accepted request is not a
+  failed attempt. `docs/API.md` names both cases.
+- Tests: `apps/backend/internal/interfaces/http/handlers/account_deletion_handler_test.go` confirms the deletion with
+  the password of a member of a requiring organization after refusing the wrong one, and holds the unreadable
+  requirement. On the commit this builds on, both tests fail, the route answering `401` with the code `invalidPassword`
+  in place of `202` and `500`.
+
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
 - With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and

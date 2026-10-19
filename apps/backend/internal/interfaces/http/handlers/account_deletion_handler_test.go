@@ -243,3 +243,51 @@ func TestAccountDeletion_TokenOfAnotherOrganizationIsRefused(t *testing.T) {
 	assert.Equal(t, 0, f.users.requests)
 	assert.Empty(t, f.failures.failures, "no password was checked")
 }
+
+// A user whose organization requires sign-in through its identity provider
+// confirms the deletion of their account with their password all the same:
+// the requirement is read after the password matched, and the route issues
+// no tokens. A wrong password is answered and recorded as before, and the
+// accepted request is not a failed attempt.
+func TestAccountDeletion_UserWhoMustSignInThroughTheProviderConfirmsWithThePassword(t *testing.T) {
+	f := newAccountDeletionFixture(t)
+	f.user.Role = domain.RoleMember
+	f.auth.SetProviderSignInRequirement(requirementOf{f.user.OrganizationID: true})
+
+	status, body := f.requestDeletion(t, reauthWrongPassword)
+	assert.Equal(t, fiber.StatusUnauthorized, status)
+	assert.Equal(t, "Invalid password", body["error"])
+	assert.Equal(t, InvalidPasswordCode, body["code"])
+	assert.Len(t, f.failures.failures, 1, "the wrong password counts toward the lockout")
+	assert.Equal(t, 0, f.users.requests)
+
+	status, body = f.requestDeletion(t, issuancePassword)
+	require.Equal(t, fiber.StatusAccepted, status, "body: %v", body)
+	assert.Equal(t, "deactivated", body["status"])
+	assert.NotContains(t, body, "accessToken")
+	assert.NotContains(t, body, "refreshToken")
+	assert.Equal(t, 1, f.users.requests)
+	assert.Equal(t, domain.UserStatusDeactivated, f.users.user.Status)
+	assert.Len(t, f.failures.failures, 1, "the accepted request is not a failed attempt")
+	rows := auditRowsOf(f.audit.rows, domain.AuditActionAccountDeletionRequested)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].UserID)
+	assert.Equal(t, f.user.ID, *rows[0].UserID)
+}
+
+// When the requirement cannot be read, the request of a user it could reach
+// is not recorded: 500, the account stays active and the session still acts.
+func TestAccountDeletion_WhenTheRequirementCannotBeRead(t *testing.T) {
+	f := newAccountDeletionFixture(t)
+	f.user.Role = domain.RoleMember
+	f.auth.SetProviderSignInRequirement(unreadableRequirement{})
+
+	status, body := f.requestDeletion(t, issuancePassword)
+	assert.Equal(t, fiber.StatusInternalServerError, status)
+	assert.Equal(t, map[string]any{"error": ServerErrorMessage}, body)
+	assert.Equal(t, 0, f.users.requests)
+	assert.Equal(t, domain.UserStatusActive, f.users.user.Status)
+	assert.Empty(t, auditRowsOf(f.audit.rows, domain.AuditActionAccountDeletionRequested))
+	status, _ = f.call(t, "GET", "/api/v1/auth/me", f.access, nil)
+	assert.Equal(t, fiber.StatusOK, status, "the session still acts")
+}
