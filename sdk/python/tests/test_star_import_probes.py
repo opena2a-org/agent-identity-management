@@ -12,14 +12,13 @@ import sys
 from pathlib import Path
 
 TESTS = Path(__file__).resolve().parent
-SDK_ROOT = TESTS.parent
 PROBES = sorted(
     p for p in (TESTS / "star_imports").glob("*.py") if p.name != "__init__.py"
 )
 STAR_IMPORT_TESTS = [
-    "tests/test_release_203_p2_p3_findings.py::"
+    f"{TESTS / 'test_release_203_p2_p3_findings.py'}::"
     "test_star_import_binds_no_stdlib_or_typing_name",
-    "tests/test_cli_import_cost.py::"
+    f"{TESTS / 'test_cli_import_cost.py'}::"
     "test_star_import_and_submodule_attributes_still_work",
 ]
 
@@ -31,13 +30,13 @@ def test_every_probe_opts_out_of_assertion_rewriting():
         assert doc and "PYTEST_DONT_REWRITE" in doc, probe.name
 
 
-def test_star_import_tests_pass_with_the_probes_on_the_command_line():
+def test_star_import_tests_pass_with_the_probes_on_the_command_line(tmp_path):
     proc = subprocess.run(
         [
             sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "-q",
-            *(str(p.relative_to(SDK_ROOT)) for p in PROBES),
+            *(str(p) for p in PROBES),
             *STAR_IMPORT_TESTS,
         ],
-        cwd=SDK_ROOT, capture_output=True, text=True, timeout=300,
+        cwd=tmp_path, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode == 0, proc.stdout[-3000:] + proc.stderr[-1000:]

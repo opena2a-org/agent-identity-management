@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed: the `aim-sdk` import-cost probe runs in its temporary home, not in the SDK directory, so it does not copy credentials from a `.aim` folder above the checkout
+
+- `tests/test_cli_import_cost.py` ran its `aim-sdk` probe with the SDK directory as its working directory, and
+  `load_sdk_credentials()` adopts SDK credentials from the nearest folder above the working directory that has a
+  `.aim` folder. Run from a copy of the SDK placed under a home whose `.aim/sdk_credentials.json` held a placeholder
+  refresh token, the file's 8 tests passed and the temporary home of
+  `test_status_signed_out_loads_no_network_or_crypto_package` held a copy of that token.
+- The probe now runs in that temporary home, with `PYTHONPATH` set to the SDK directory, and records the `aim_sdk`
+  package it imported; the test compares that with this tree's `aim_sdk/__init__.py`. The autouse `isolated_home`
+  fixture in `tests/conftest.py` makes each test's temporary home its working directory as well.
+  `tests/test_star_import_probes.py` and `tests/test_lint_ruff.py` run their Python child processes in the test's
+  temporary directory and name the files they check by absolute path.
+- `tests/test_isolated_home.py` adds three tests: the working directory is the temporary home and no `.aim` folder
+  sits in it or above it; no module directly under `tests/` starts a command that begins with `sys.executable` with a
+  `cwd` computed from a file's location; and `tests/test_cli_import_cost.py`, run by pytest from a copy of the SDK
+  under a home whose `.aim/sdk_credentials.json` holds a placeholder, passes and leaves no file holding the
+  placeholder under the run's base temp. On the previous tree all three fail: the working directory was the one
+  pytest started in, the scan names `test_cli_import_cost.py:57`, `test_lint_ruff.py:28` and
+  `test_star_import_probes.py:35`, and the status test's temporary home holds the copy.
+
 ### Fixed — the README gives `db:read` the risk level `detect_risk_level` returns, low (#792)
 
 - The Capability decorators section of `README.md` gave the `db:read` example the level medium (`db:` medium,

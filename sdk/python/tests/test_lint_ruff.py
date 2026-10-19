@@ -24,13 +24,14 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_client_and_credentials_pass_ruff():
+def test_client_and_credentials_pass_ruff(tmp_path):
     result = subprocess.run(
         [
             sys.executable, "-m", "ruff", "check", "--isolated", "--no-cache",
-            "--select", RULES, "--output-format", "concise", *FILES,
+            "--select", RULES, "--output-format", "concise",
+            *(str(SDK_ROOT / f) for f in FILES),
         ],
-        cwd=SDK_ROOT,
+        cwd=tmp_path,
         capture_output=True,
         text=True,
         timeout=120,
