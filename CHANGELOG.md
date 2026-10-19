@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: `trust_score.changed` is sent for the scores an agent's registration, update, verification, suspension, reactivation, revocation and MCP server changes store
+
+- The agent service stores a trust score when it registers an agent, and a recalculated one after
+  `PUT /api/v1/agents/:id`, `POST /api/v1/agents/:id/verify`, `POST /api/v1/agents/:id/suspend`,
+  `POST /api/v1/agents/:id/reactivate`, `POST /api/v1/agents/:id/revoke`, `PUT /api/v1/agents/:id/mcp-servers` and
+  `DELETE /api/v1/agents/:id/mcp-servers/:mcp_id`; `POST /api/v1/agents/:id/mcp-servers/detect` adds the servers it
+  maps through the same path as `PUT /api/v1/agents/:id/mcp-servers`. Before this change none of these sent
+  `trust_score.changed`.
+- Each of these recalculations now sends `trust_score.changed` when the score was stored, by the agent's row or by
+  its trust score history row, whose insert sets `agents.trust_score`, and differs from the agent's score before at
+  the two decimal places `agents.trust_score` keeps. The event carries both scores at that precision. The trust
+  score policy does not run after them, so they send no `trust_score.low`.
+- A registration sends `trust_score.changed` once, after its last write of the score, with `previousScore` 0 and the
+  last score it stored: for an agent verified at registration, the score recalculated after the verification. It is
+  sent whatever the score, as the 0.5 a new agent is given before its first score is not a previous score. A
+  registration that stores no score sends no event.
+- `docs/API.md` and the webhook dialog's description of the event say when it is sent; the score
+  `POST /api/v1/detection/agents/:id/capabilities/report` stores still sends no event. Tests:
+  `apps/backend/internal/application/agent_trust_score_senders_test.go`. Its registration test failed 5 of its 7
+  cases and its recalculation test all 7 when run against the agent service before this change, each with no event
+  dispatched. The registration and lifecycle tests in `webhook_events_test.go` now expect the event, and
+  `agent_trust_score_registration_integration_test.go` covers a registration through the transition recorder when
+  `TEST_DATABASE_URL` is set.
+
 ### Changed: `trust_score.changed` is sent for the scores a trust score calculation, a capability grant or revocation, and a drift penalty store
 
 - The trust calculator, the capability service and the drift detection service store trust scores of their own and

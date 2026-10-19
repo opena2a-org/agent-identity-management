@@ -477,16 +477,14 @@ func (s *CapabilityService) RevokeCapability(
 
 // storeRecalculatedTrustScore stores trustScore, recalculated for agent after a
 // grant or a revocation: agent's row through saveRecalculatedAgent, and the
-// score's trust_scores row. Either write stores the score, as the insert sets
-// agents.trust_score through the trigger of migration 093; when one of them did,
-// trust_score.changed is sent if the score differs from the one agent held at
-// the stored precision (sendStoredTrustScoreChange).
+// score's trust_scores row (writeRecalculatedTrustScore). Either write stores
+// the score, as the insert sets agents.trust_score through the trigger of
+// migration 093; when one of them did, trust_score.changed is sent if the score
+// differs from the one agent held at the stored precision
+// (sendStoredTrustScoreChange).
 func (s *CapabilityService) storeRecalculatedTrustScore(agent *domain.Agent, trustScore *domain.TrustScore) {
 	previousScore := agent.TrustScore
-	agent.TrustScore = trustScore.Score
-	rowErr := saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-	historyErr := s.trustScoreRepo.Create(trustScore)
-	if historyErr == nil || (s.transitions == nil && rowErr == nil) {
+	if writeRecalculatedTrustScore(s.agentRepo, s.trustScoreRepo, s.transitions != nil, agent, trustScore) {
 		sendStoredTrustScoreChange(s.webhooks, agent, previousScore, trustScore.Score)
 	}
 }
