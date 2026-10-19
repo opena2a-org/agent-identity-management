@@ -8,9 +8,9 @@ Get started with AIM quickly. Each tutorial is designed to deliver value in unde
 
 ```bash
 # 1. Download the SDK from the AIM dashboard: Developers → SDK & docs (/dashboard/sdk), "Download Python SDK"
-# 2. Extract and run:
+# 2. Extract the newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there) and run:
 cd ~/projects
-unzip ~/Downloads/aim-sdk-python-v*.zip
+unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"
 cd aim-sdk-python
 pip install -e .
 python demo_agent.py

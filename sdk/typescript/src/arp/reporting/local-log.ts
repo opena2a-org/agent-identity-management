@@ -39,9 +39,13 @@ export class LocalLogger {
     this.appendLog(ENFORCEMENT_LOG, entry);
   }
 
-  /** Read recent events */
+  /**
+   * Read recent events, one per event ID. An event logged more than once, as an event
+   * queued for an L2 batch is when its batch is answered, is returned as its latest
+   * record, at the place of its first. `limit` counts events, not lines.
+   */
   readEvents(limit?: number): ARPEvent[] {
-    return this.readLog<ARPEvent>(EVENT_LOG, limit);
+    return this.readEventLog(limit);
   }
 
   /** Read recent enforcement actions */
@@ -49,9 +53,26 @@ export class LocalLogger {
     return this.readLog<EnforcementResult>(ENFORCEMENT_LOG, limit);
   }
 
-  /** Tail the event log (returns last N lines as JSON) */
+  /** Tail the event log: the last N events, read as readEvents() reads them */
   tail(n: number = 20): ARPEvent[] {
-    return this.readLog<ARPEvent>(EVENT_LOG, n);
+    return this.readEventLog(n);
+  }
+
+  private readEventLog(limit?: number): ARPEvent[] {
+    const events: ARPEvent[] = [];
+    const placeOf = new Map<string, number>();
+    for (const record of this.readLog<ARPEvent>(EVENT_LOG)) {
+      // A record without an ID cannot be matched to another, so each is kept.
+      const id = typeof record?.id === 'string' && record.id !== '' ? record.id : undefined;
+      const place = id === undefined ? undefined : placeOf.get(id);
+      if (place === undefined) {
+        if (id !== undefined) placeOf.set(id, events.length);
+        events.push(record);
+      } else {
+        events[place] = record;
+      }
+    }
+    return limit && limit > 0 ? events.slice(-limit) : events;
   }
 
   private appendLog(filename: string, data: unknown): void {

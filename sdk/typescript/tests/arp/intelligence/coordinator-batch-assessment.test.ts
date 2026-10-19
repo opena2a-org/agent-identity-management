@@ -310,3 +310,123 @@ describe('IntelligenceCoordinator batched L2 assessment', () => {
     }
   });
 });
+
+/**
+ * analyze() returns null for an event it queues for a batch, so whoever reads the event when
+ * analyze() returns reads it without its assessment. onBatchAssessed handlers are called with
+ * each event of the batch once the batch's answer is applied to it.
+ */
+describe('IntelligenceCoordinator onBatchAssessed', () => {
+  let dataDir: string;
+
+  beforeEach(() => {
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coord-batch-assessed-'));
+    stub.state.calls = 0;
+    stub.state.fail = false;
+    stub.state.content = '';
+    stub.state.prompts = [];
+  });
+
+  afterEach(() => {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  /** What a handler saw of an event when it was called. */
+  function seenAs(e: ARPEvent): [string, string, string | undefined] {
+    return [e.id, e.classifiedBy, e.llmAssessment?.recommendation];
+  }
+
+  it('passes each event of a batch sent by stop() to each handler, in the order queued, with its assessment applied', async () => {
+    stub.state.content = '1: KILL — exfiltration\n2: ALLOW — a host the agent uses';
+    const coord = new IntelligenceCoordinator(config(), dataDir);
+    const first: Array<[string, string, string | undefined]> = [];
+    const second: Array<[string, string, string | undefined]> = [];
+    coord.onBatchAssessed((e) => {
+      first.push(seenAs(e));
+    });
+    coord.onBatchAssessed(async (e) => {
+      second.push(seenAs(e));
+    });
+
+    for (const e of [flagged(1), flagged(2)]) {
+      expect(await coord.analyze(e)).toBeNull();
+    }
+    expect(first).toEqual([]);
+    await coord.stop();
+
+    const expected = [
+      ['evt-1', 'L2-llm', 'kill'],
+      ['evt-2', 'L2-llm', 'allow'],
+    ];
+    expect(first).toEqual(expected);
+    expect(second).toEqual(expected);
+  });
+
+  it('passes the events of a batch sent when its window closes', async () => {
+    stub.state.content = '1: PAUSE — unexpected host';
+    const coord = new IntelligenceCoordinator(config({ batchWindowMs: 10 }), dataDir);
+    const seen: Array<[string, string, string | undefined]> = [];
+    coord.onBatchAssessed((e) => {
+      seen.push(seenAs(e));
+    });
+
+    expect(await coord.analyze(flagged(1))).toBeNull();
+    await vi.waitFor(() => expect(seen).toEqual([['evt-1', 'L2-llm', 'pause']]), { timeout: 5000 });
+    expect(stub.state.calls).toBe(1);
+    await coord.stop();
+  });
+
+  it('passes no event when the batch call fails', async () => {
+    stub.state.fail = true;
+    const coord = new IntelligenceCoordinator(config(), dataDir);
+    const seen: ARPEvent[] = [];
+    coord.onBatchAssessed((e) => {
+      seen.push(e);
+    });
+
+    await coord.analyze(flagged(1));
+    await coord.stop();
+
+    expect(stub.state.calls).toBe(1);
+    expect(seen).toEqual([]);
+  });
+
+  it('passes no event when the budget refuses the batch call when the batch is sent', async () => {
+    stub.state.content = '1: KILL — exfiltration';
+    const coord = new IntelligenceCoordinator(config({ maxCallsPerHour: 1 }), dataDir);
+    const seen: ARPEvent[] = [];
+    coord.onBatchAssessed((e) => {
+      seen.push(e);
+    });
+
+    // Queued while the hour has a call left; a critical event then takes that call.
+    expect(await coord.analyze(flagged(1))).toBeNull();
+    await coord.analyze({ ...flagged(2), severity: 'critical' });
+    expect(stub.state.calls).toBe(1);
+    await coord.stop();
+
+    expect(stub.state.calls).toBe(1);
+    expect(seen).toEqual([]);
+  });
+
+  it('calls the other handlers and events when a handler throws or rejects', async () => {
+    stub.state.content = '1: KILL — exfiltration\n2: KILL — exfiltration';
+    const coord = new IntelligenceCoordinator(config(), dataDir);
+    const seen: string[] = [];
+    coord.onBatchAssessed(() => {
+      throw new Error('a handler that throws');
+    });
+    coord.onBatchAssessed(async () => {
+      throw new Error('a handler that rejects');
+    });
+    coord.onBatchAssessed((e) => {
+      seen.push(e.id);
+    });
+
+    await coord.analyze(flagged(1));
+    await coord.analyze(flagged(2));
+    await expect(coord.stop()).resolves.toBeUndefined();
+
+    expect(seen).toEqual(['evt-1', 'evt-2']);
+  });
+});

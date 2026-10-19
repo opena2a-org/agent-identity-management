@@ -124,7 +124,8 @@ The dashboard gives you the SDK from the `sdk/python` tree its server image was 
 
 ```bash
 cd ~/projects  # or any folder outside the repository clone
-unzip ~/Downloads/aim-sdk-python-v*.zip
+# The newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there)
+unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"
 cd aim-sdk-python
 pip install -e ".[rich]"
 ```

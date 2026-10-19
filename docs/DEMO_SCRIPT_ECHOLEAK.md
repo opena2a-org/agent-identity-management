@@ -36,7 +36,8 @@ Expected response:
 
 ```bash
 # In the dashboard: Developers → SDK & docs (/dashboard/sdk), click "Download Python SDK"
-unzip ~/Downloads/aim-sdk-python-v*.zip
+# Extract the newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there)
+unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"
 cd aim-sdk-python
 pip install -e .
 ```

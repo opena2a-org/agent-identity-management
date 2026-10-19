@@ -223,6 +223,37 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   to read the archive name it sends and the folder its entries sit in, and checks the seven guides against them. On
   the previous guides all seven failed.
 
+### Fixed — three more guides name the dashboard's SDK page, button and archive, the credential steps replace `~/.aim/sdk_credentials.json`, and the install steps unzip one archive (#805)
+
+- `docs/tutorials/sdk-quickstart.md` sent the reader to Settings → SDK Download and ran
+  `unzip ~/Downloads/aim-sdk-python.zip` twice, `docs/tutorials/dashboard-walkthrough.md` listed an SDK Download row
+  under Settings and gave Settings → SDK Download in its quick actions, and `sdk/java/README.md` said to go to
+  Settings → SDK Download. Each now names Developers → SDK & docs (`/dashboard/sdk`), the button "Download Python
+  SDK" or "Download Java SDK", and the archive as the server names it, `aim-sdk-python-v<version>.zip` or
+  `aim-sdk-java-v<version>.zip`. The walkthrough moves the SDK out of its Settings table into a step of its own,
+  Step 6, and Settings becomes Step 7. The Java README gives the commands that extract the newest
+  `aim-sdk-java-v*.zip` in `~/Downloads` and copy its `.aim/sdk_credentials.json` to `~/.aim/sdk_credentials.json`.
+- The credential steps in `docs/security/token-rotation.md`, `docs/troubleshooting/README.md` (two) and
+  `docs/troubleshooting/authentication.md` ran `cp -r aim-sdk-python/.aim ~/.aim/`. Run with a
+  `~/.aim/sdk_credentials.json` already in place, that command left the file as it was and wrote the archive's copy
+  to `~/.aim/.aim/sdk_credentials.json`; `~/.aim/sdk_credentials.json` is the first file the Python SDK's
+  `load_sdk_credentials` and the Java SDK's `CredentialManager` read credentials from. The steps now run
+  `mkdir -p ~/.aim && cp aim-sdk-python/.aim/sdk_credentials.json ~/.aim/sdk_credentials.json` and
+  `chmod 600 ~/.aim/sdk_credentials.json`, which replace that file, or create it when `~/.aim` does not exist. The
+  step in `docs/troubleshooting/README.md` that ran `chmod 600 ~/.aim/credentials.json` restricts the copied file.
+- `docs/quick-start.md`, `docs/DEMO_SCRIPT_ECHOLEAK.md` and `docs/tutorials/README.md` ran
+  `unzip ~/Downloads/aim-sdk-python-v*.zip`. With `aim-sdk-python-v2.0.3.zip` and a newer
+  `aim-sdk-python-v2.0.3 (1).zip` in `~/Downloads`, that command printed `caution: filename not matched`, exited 11
+  and created no `aim-sdk-python` folder, in bash and in zsh. These guides and `docs/tutorials/sdk-quickstart.md` now
+  run `unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"`, which in the same case extracts the newer
+  archive into the folder the command is run from.
+- Tests: `apps/backend/internal/interfaces/http/handlers/sdk_install_guides_docs_test.go` checks the three guides as
+  it checks the seven before them, and checks that each `unzip` of an SDK archive in the ten guides is the
+  newest-match command and that each copy out of an archive's `.aim` folder is the `mkdir -p ~/.aim && cp` of
+  `sdk_credentials.json`. On the previous guides eight of the ten failed.
+  `sdk/python/tests/test_readme_self_hosted_sign_in.py` holds `docs/quick-start.md` to the newest-match command; it
+  failed on the previous guide.
+
 ### Fixed — the SDK tabs link pages that continue the hosted flow, the TypeScript tab says where its API key comes from, and the Python example declares the README's capability
 
 - The Python and TypeScript SDK tabs (`apps/web/lib/sdk-tabs.ts`, shown on the dashboard and on the get-started page

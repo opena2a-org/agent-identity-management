@@ -16,9 +16,10 @@ Secure your first AI agent with 3 lines of Python code. No configuration needed.
 After downloading the SDK, you can see AIM in action immediately:
 
 ```bash
-# Extract and install
+# Download the SDK from the AIM dashboard: Developers → SDK & docs (/dashboard/sdk), "Download Python SDK"
+# Extract the newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there) and install it
 cd ~/projects  # or wherever you keep projects
-unzip ~/Downloads/aim-sdk-python.zip
+unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"
 cd aim-sdk-python
 pip install -e .
 
@@ -46,13 +47,14 @@ aim-sdk login --url http://localhost:8080
 **Or download a pre-configured SDK.** The dashboard can also give you the SDK as a ZIP with your personal credentials embedded, so you skip `aim-sdk login`:
 
 1. Login to AIM at http://localhost:3000
-2. Go to **Settings → SDK Download**
-3. Click **Download Python SDK**
-4. Extract the ZIP file to your projects folder:
+2. Go to **Developers → SDK & docs** (`/dashboard/sdk`)
+3. Click "Download Python SDK"
+4. Extract the downloaded `aim-sdk-python-v<version>.zip` to your projects folder; it unpacks into an `aim-sdk-python` folder:
 
 ```bash
 cd ~/projects  # or ~/dev, ~/Desktop, etc.
-unzip ~/Downloads/aim-sdk-python.zip
+# The newest aim-sdk-python-v*.zip in ~/Downloads (an earlier download can still be there)
+unzip "$(ls -t ~/Downloads/aim-sdk-python-v*.zip | head -n 1)"
 cd aim-sdk-python
 pip install -e .
 ```
