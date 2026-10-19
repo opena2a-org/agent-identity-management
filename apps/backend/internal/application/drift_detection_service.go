@@ -30,6 +30,7 @@ const (
 type DriftDetectionService struct {
 	agentRepo domain.AgentRepository
 	alertRepo domain.AlertRepository
+	webhooks  webhookEventDispatcher // Optional: sends trust_score.changed; set by SetWebhookService
 
 	// driftScore is the OTel gauge keyed by agent.id. Emitted on every
 	// DetectDrift call so dashboards see steady-state zeros and a spike
@@ -54,6 +55,13 @@ func NewDriftDetectionService(agentRepo domain.AgentRepository, alertRepo domain
 		alertRepo:  alertRepo,
 		driftScore: gauge,
 	}
+}
+
+// SetWebhookService wires the webhook service that trust_score.changed is sent
+// to when a drift penalty changes an agent's stored trust score. When unset,
+// no event is sent.
+func (s *DriftDetectionService) SetWebhookService(webhookService *WebhookService) {
+	s.webhooks = asWebhookEventDispatcher(webhookService)
 }
 
 // DriftResult contains the results of drift detection
@@ -210,6 +218,7 @@ func (s *DriftDetectionService) applyTrustScorePenalty(
 	if err := s.agentRepo.UpdateTrustScore(agent.ID, newScore); err != nil {
 		return fmt.Errorf("failed to update trust score: %w", err)
 	}
+	sendStoredTrustScoreChange(s.webhooks, agent, agent.TrustScore, newScore)
 
 	fmt.Printf("Applied trust score penalty to agent %s: %.2f -> %.2f (-%0.f points)\n",
 		agent.Name, agent.TrustScore, newScore, penalty)

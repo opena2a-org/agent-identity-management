@@ -1048,10 +1048,14 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// Send the alert.*, agent.*, trust_score.* and api_key.* events to the
 	// webhooks subscribed to them. The webhook service bounds the delivery:
 	// retries and attempt timeout, pending deliveries overall and per webhook,
-	// and attempts in flight (application.WebhookConfig).
+	// and attempts in flight (application.WebhookConfig). The trust calculator
+	// and the drift detection service send trust_score.changed for the scores
+	// they store; the capability service, built below, does as well.
 	alertService.SetWebhookService(webhookService)
 	agentService.SetWebhookService(webhookService)
 	apiKeyService.SetWebhookService(webhookService)
+	trustCalculator.SetWebhookService(webhookService)
+	driftDetectionService.SetWebhookService(webhookService)
 
 	// Send every alert the alert repository inserts, whichever service wrote
 	// it, to the organization's Slack, PagerDuty, Teams and email channels
@@ -1096,6 +1100,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		trustCalculator,
 		repos.TrustScore,
 	)
+	capabilityService.SetWebhookService(webhookService)
 
 	detectionService := application.NewDetectionService(
 		db,

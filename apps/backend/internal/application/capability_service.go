@@ -48,7 +48,8 @@ type CapabilityService struct {
 	alertRepo      domain.AlertRepository
 	trustCalc      domain.TrustScoreCalculator
 	trustScoreRepo domain.TrustScoreRepository
-	transitions    *transition.Recorder // Optional: set by SetTransitionRecorder
+	transitions    *transition.Recorder   // Optional: set by SetTransitionRecorder
+	webhooks       webhookEventDispatcher // Optional: sends trust_score.changed; set by SetWebhookService
 }
 
 // NewCapabilityService creates a new capability service
@@ -68,6 +69,13 @@ func NewCapabilityService(
 		trustCalc:      trustCalc,
 		trustScoreRepo: trustScoreRepo,
 	}
+}
+
+// SetWebhookService wires the webhook service that trust_score.changed is sent
+// to when a capability violation, a grant or a revocation changes an agent's
+// stored trust score. When unset, no event is sent.
+func (s *CapabilityService) SetWebhookService(webhookService *WebhookService) {
+	s.webhooks = asWebhookEventDispatcher(webhookService)
 }
 
 // VerifyAction verifies if an agent is authorized to perform a specific action
@@ -161,6 +169,7 @@ func (s *CapabilityService) VerifyAction(
 		if err := s.agentRepo.UpdateTrustScore(agentID, newTrustScore); err != nil {
 			return nil, err
 		}
+		sendStoredTrustScoreChange(s.webhooks, agent, agent.TrustScore, newTrustScore)
 
 		// Check if agent should be marked as compromised
 		// IMPORTANT: trust_score is 0.0-1.0 scale, so 30% = 0.30
@@ -383,9 +392,7 @@ func (s *CapabilityService) GrantCapability(
 	// Automatically recalculate trust score after capability is granted
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 
 	return capability, nil
@@ -462,12 +469,26 @@ func (s *CapabilityService) RevokeCapability(
 	// Automatically recalculate trust score after capability is revoked
 	trustScore, err := s.trustCalc.Calculate(agent)
 	if err == nil {
-		agent.TrustScore = trustScore.Score
-		saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
-		s.trustScoreRepo.Create(trustScore)
+		s.storeRecalculatedTrustScore(agent, trustScore)
 	}
 
 	return nil
+}
+
+// storeRecalculatedTrustScore stores trustScore, recalculated for agent after a
+// grant or a revocation: agent's row through saveRecalculatedAgent, and the
+// score's trust_scores row. Either write stores the score, as the insert sets
+// agents.trust_score through the trigger of migration 093; when one of them did,
+// trust_score.changed is sent if the score differs from the one agent held at
+// the stored precision (sendStoredTrustScoreChange).
+func (s *CapabilityService) storeRecalculatedTrustScore(agent *domain.Agent, trustScore *domain.TrustScore) {
+	previousScore := agent.TrustScore
+	agent.TrustScore = trustScore.Score
+	rowErr := saveRecalculatedAgent(s.agentRepo, s.transitions != nil, agent)
+	historyErr := s.trustScoreRepo.Create(trustScore)
+	if historyErr == nil || (s.transitions == nil && rowErr == nil) {
+		sendStoredTrustScoreChange(s.webhooks, agent, previousScore, trustScore.Score)
+	}
 }
 
 // MarkHoneytoken marks (or unmarks) a granted capability as a honeytoken (issue #293).

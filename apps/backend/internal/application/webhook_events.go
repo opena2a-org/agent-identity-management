@@ -62,6 +62,20 @@ func trustScoreEventData(agent *domain.Agent, previousScore, trustScore float64)
 	}
 }
 
+// sendStoredTrustScoreChange sends trust_score.changed to d when agent's
+// stored trust score moved from previousScore to newScore at the two decimal
+// places agents.trust_score keeps (storedTrustScore). The event carries both
+// scores at that precision, so a score that moves by less sends nothing. It
+// does nothing when d is nil.
+func sendStoredTrustScoreChange(d webhookEventDispatcher, agent *domain.Agent, previousScore, newScore float64) {
+	previous, current := storedTrustScore(previousScore), storedTrustScore(newScore)
+	if d == nil || previous == current {
+		return
+	}
+	sendWebhookEvent(d, agent.OrganizationID, domain.WebhookEventTrustScoreChanged,
+		trustScoreEventData(agent, previous, current))
+}
+
 // apiKeyEventData is the data of an api_key.* event. It never carries the key
 // or its hash.
 func apiKeyEventData(key *domain.APIKey) map[string]interface{} {
