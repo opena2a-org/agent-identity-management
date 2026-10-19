@@ -20,16 +20,21 @@ import type { ARPConfig, ARPEvent, BudgetState, IntelligenceConfig } from '../..
 const stub = vi.hoisted(() => {
   const state = {
     calls: 0,
+    /** The prompt of each call, in the order the calls were made. */
+    prompts: [] as string[],
     fail: false,
     /** When true, pricing an answer (150 tokens in) throws; pricing an estimate does not. */
     pricingFails: false,
+    /** When true, estimating a call before it is made (200 tokens in) throws. */
+    estimateFails: false,
     /** When set, every call waits on it instead of on the next turn of the event loop. */
     gate: null as Promise<void> | null,
   };
   const adapter = {
     name: 'stub',
-    async assess(): Promise<{ content: string; inputTokens: number; outputTokens: number; model: string }> {
+    async assess(prompt: string): Promise<{ content: string; inputTokens: number; outputTokens: number; model: string }> {
       state.calls += 1;
+      state.prompts.push(prompt);
       await (state.gate ?? new Promise<void>((resolve) => setImmediate(resolve)));
       if (state.fail) throw new Error('stub adapter: the call failed');
       return {
@@ -43,6 +48,7 @@ const stub = vi.hoisted(() => {
     // (200 tokens in, maxTokensPerCall 300 out) is 0.005, a batch estimate (200 in,
     // 600 out) is 0.008, and an answered call (150 in, 50 out) costs 0.002.
     estimateCost(inputTokens: number, outputTokens: number): number {
+      if (state.estimateFails && inputTokens === 200) throw new Error('stub adapter: cannot estimate the call');
       if (state.pricingFails && inputTokens === 150) throw new Error('stub adapter: cannot price the answer');
       return (inputTokens + outputTokens) / 100000;
     },
@@ -60,6 +66,7 @@ vi.mock('../../../src/arp/intelligence/adapters', () => ({
 import { IntelligenceCoordinator } from '../../../src/arp/intelligence/coordinator';
 
 const ESTIMATE_USD = 0.005;
+const BATCH_ESTIMATE_USD = 0.008;
 const ANSWERED_COST_USD = 0.002;
 
 function config(intelligence: IntelligenceConfig): ARPConfig {
@@ -90,18 +97,31 @@ function readBudgetFile(dir: string): BudgetState {
   return JSON.parse(fs.readFileSync(path.join(dir, 'budget.json'), 'utf-8')) as BudgetState;
 }
 
+/**
+ * The number of events waiting for the next batch call. The queue is private; these
+ * tests read it because what they check is the memory it holds.
+ */
+function queuedForBatch(coord: IntelligenceCoordinator): number {
+  const queue = (coord as unknown as { batchQueue: unknown }).batchQueue;
+  if (!Array.isArray(queue)) throw new Error('IntelligenceCoordinator no longer keeps its batch queue in batchQueue');
+  return queue.length;
+}
+
 describe('IntelligenceCoordinator L2 budget reservation', () => {
   let dataDir: string;
 
   beforeEach(() => {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coord-budget-'));
     stub.state.calls = 0;
+    stub.state.prompts = [];
     stub.state.fail = false;
     stub.state.pricingFails = false;
+    stub.state.estimateFails = false;
     stub.state.gate = null;
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
@@ -233,5 +253,83 @@ describe('IntelligenceCoordinator L2 budget reservation', () => {
     expect(state.callsThisHour).toBe(1);
     expect(state.totalCalls).toBe(1);
     expect(state.totalSpentUsd).toBe(ANSWERED_COST_USD);
+  });
+
+  describe('a batched event is queued only when the budget can pay for its batch', () => {
+    it('2000 batched events are not queued while the budget is below one batch estimate', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const coord = new IntelligenceCoordinator(config({ budgetUsd: 0.001, enableBatching: true }), dataDir);
+
+      const assessments = await Promise.all(
+        Array.from({ length: 2000 }, (_, i) => coord.analyze(event(i, 'high'))),
+      );
+
+      expect(assessments.every((assessment) => assessment === null)).toBe(true);
+      expect(queuedForBatch(coord)).toBe(0);
+      // No batch is waiting, so no timer is set to send one.
+      expect(vi.getTimerCount()).toBe(0);
+
+      await coord.stop();
+      expect(stub.state.calls).toBe(0);
+    });
+
+    it('an event that arrives once the calls of the hour are used up is not queued, and one in the next hour is', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      vi.setSystemTime(new Date(2026, 2, 10, 10, 0));
+      const coord = new IntelligenceCoordinator(
+        config({ budgetUsd: 100, maxCallsPerHour: 2, enableBatching: true, batchWindowMs: 3600000 }),
+        dataDir,
+      );
+
+      // Two critical events bypass the batch and use both of the hour's calls.
+      await Promise.all([event(1), event(2)].map((e) => coord.analyze(e)));
+      expect(stub.state.calls).toBe(2);
+
+      expect(await coord.analyze(event(3, 'high'))).toBeNull();
+      expect(queuedForBatch(coord)).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+
+      // The next hour has calls again: an event is queued, and the batch sent holds it alone.
+      vi.setSystemTime(new Date(2026, 2, 10, 11, 1));
+      expect(await coord.analyze(event(4, 'high'))).toBeNull();
+      expect(queuedForBatch(coord)).toBe(1);
+
+      await coord.stop();
+      expect(stub.state.calls).toBe(3);
+      expect(stub.state.prompts[2]).toMatch(/^BATCH SECURITY ASSESSMENT — 1 anomalies\./);
+    });
+
+    it('an event is not queued when the budget holds a single-event estimate and not a batch estimate', async () => {
+      // 0.006 is more than a single-event estimate (0.005) and less than a batch estimate (0.008).
+      const coord = new IntelligenceCoordinator(config({ budgetUsd: 0.006, enableBatching: true }), dataDir);
+
+      expect(await coord.analyze(event(1, 'high'))).toBeNull();
+      expect(queuedForBatch(coord)).toBe(0);
+
+      await coord.stop();
+      expect(stub.state.calls).toBe(0);
+    });
+
+    it('an event is queued, and its batch sent, when the budget holds exactly one batch estimate', async () => {
+      const coord = new IntelligenceCoordinator(config({ budgetUsd: BATCH_ESTIMATE_USD, enableBatching: true }), dataDir);
+
+      expect(await coord.analyze(event(1, 'high'))).toBeNull();
+      expect(queuedForBatch(coord)).toBe(1);
+
+      await coord.stop();
+      expect(stub.state.calls).toBe(1);
+      expect(readBudgetFile(dataDir).totalSpentUsd).toBe(ANSWERED_COST_USD);
+    });
+
+    it('an event is not queued when the adapter cannot estimate the batch call, and analyze() resolves', async () => {
+      stub.state.estimateFails = true;
+      const coord = new IntelligenceCoordinator(config({ budgetUsd: 100, enableBatching: true }), dataDir);
+
+      await expect(coord.analyze(event(1, 'high'))).resolves.toBeNull();
+      expect(queuedForBatch(coord)).toBe(0);
+
+      await coord.stop();
+      expect(stub.state.calls).toBe(0);
+    });
   });
 });

@@ -606,6 +606,22 @@ they stay in scope if one ever grows an observational side-channel.
   tokens that adds up to them: 200 tokens over three events are 67, 67 and 66.
 - A batch the budget refuses, or whose call throws, leaves its events as they were, as before.
 
+### Fixed — ARP queues a batched event only while the L2 budget can pay for its batch (#802)
+
+- With `enableBatching` on, an event that L2 would assess in a batch is queued only when the budget could pay for the
+  batch's call at that moment: the call's estimate fits in what is left of `budgetUsd` once the calls in flight are
+  counted, and `maxCallsPerHour` has a call left. Otherwise the event is not queued and stays at its L1
+  classification. The batch still takes its reservation when it is sent. Measured with a stub adapter before this
+  change, with `budgetUsd: 0.001`, less than the stub's estimate for one batch call, 2000 `threat` events of severity
+  `high` passed to `analyze()` were all queued and a send timer was set, and `stop()` made no adapter call and
+  emptied the queue; now none of them is queued and no timer is set. With `maxCallsPerHour: 2` used by two critical
+  events, a `high` event analyzed next was queued, and `stop()`, called once the hour had started again, sent it in
+  one batch with an event analyzed in the new hour; now it is not queued, and that batch holds the new hour's event
+  alone. An adapter whose `estimateCost` throws on the batch's estimate leaves the event unqueued, and `analyze()`
+  resolves to null.
+- `BudgetController.canReserve(estimatedCostUsd)` returns whether `reserve()` would grant that estimate now, and
+  reserves nothing.
+
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.

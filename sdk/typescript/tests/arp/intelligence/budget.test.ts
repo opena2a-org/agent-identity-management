@@ -204,6 +204,47 @@ describe('BudgetController', () => {
       expect(budget.reserve(0)).not.toBeNull();
     });
 
+    it('canReserve answers as reserve would, and reserves nothing', () => {
+      const budget = new BudgetController(tmpDir, { budgetUsd: 1.0, maxCallsPerHour: 2 });
+
+      expect(budget.canReserve(0.6)).toBe(true);
+      expect(budget.canReserve(0.6)).toBe(true);
+      expect(budget.getStatus().spent).toBe(0);
+      expect(budget.getStatus().callsThisHour).toBe(0);
+      expect(fs.existsSync(path.join(tmpDir, 'budget.json'))).toBe(false);
+
+      reserveOrFail(budget, 0.6);
+      // The estimate held for the call in flight leaves 0.4 of the budget.
+      expect(budget.canReserve(0.6)).toBe(false);
+      expect(budget.reserve(0.6)).toBeNull();
+      expect(budget.canReserve(0.4)).toBe(true);
+
+      reserveOrFail(budget, 0.4);
+      // Both of the hour's calls are reserved.
+      expect(budget.canReserve(0)).toBe(false);
+      expect(budget.reserve(0)).toBeNull();
+    });
+
+    it('canReserve refuses an estimate that is not a number of 0 or more', () => {
+      const budget = new BudgetController(tmpDir);
+
+      expect(budget.canReserve(Number.NaN)).toBe(false);
+      expect(budget.canReserve(-1)).toBe(false);
+      expect(budget.canReserve('0.1' as unknown as number)).toBe(false);
+      expect(budget.canReserve(0)).toBe(true);
+    });
+
+    it('canReserve counts the calls of the current hour only', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 2, 10, 10, 0));
+      const budget = new BudgetController(tmpDir, { maxCallsPerHour: 1 });
+      reserveOrFail(budget, 0.01);
+      expect(budget.canReserve(0.01)).toBe(false);
+
+      vi.setSystemTime(new Date(2026, 2, 10, 11, 1));
+      expect(budget.canReserve(0.01)).toBe(true);
+    });
+
     it('charges the estimate for a cost that is not a finite number of 0 or more', () => {
       const budget = new BudgetController(tmpDir);
 

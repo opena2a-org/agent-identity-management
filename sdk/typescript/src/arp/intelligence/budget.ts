@@ -43,6 +43,27 @@ export class BudgetController {
   }
 
   /**
+   * Whether `reserve(estimatedCostUsd)` would be granted now. Reserves nothing.
+   *
+   * For a caller that decides now whether to make a call later: the coordinator queues
+   * a batched event only when the batch's call could be reserved. The answer can change
+   * before the call is made, so the call still takes its own reservation.
+   */
+  canReserve(estimatedCostUsd: number): boolean {
+    if (typeof estimatedCostUsd !== 'number' || !(estimatedCostUsd >= 0)) return false;
+    this.rolloverIfNeeded();
+    this.rolloverHourIfNeeded();
+
+    // Hard budget limit
+    if (this.state.totalSpentUsd + this.heldUsd() + estimatedCostUsd > this.budgetUsd) {
+      return false;
+    }
+
+    // Hourly rate limit
+    return this.state.callsThisHour < this.maxCallsPerHour;
+  }
+
+  /**
    * Reserve one call and its estimated cost before the call is made.
    *
    * Returns null when the estimate does not fit in what is left of the budget once the
@@ -52,19 +73,7 @@ export class BudgetController {
    * reservation is saved to disk before it is returned.
    */
   reserve(estimatedCostUsd: number): BudgetReservation | null {
-    if (typeof estimatedCostUsd !== 'number' || !(estimatedCostUsd >= 0)) return null;
-    this.rolloverIfNeeded();
-    this.rolloverHourIfNeeded();
-
-    // Hard budget limit
-    if (this.state.totalSpentUsd + this.heldUsd() + estimatedCostUsd > this.budgetUsd) {
-      return null;
-    }
-
-    // Hourly rate limit
-    if (this.state.callsThisHour >= this.maxCallsPerHour) {
-      return null;
-    }
+    if (!this.canReserve(estimatedCostUsd)) return null;
 
     const reservation: BudgetReservation = Object.freeze({ estimatedCostUsd });
     this.holds.set(reservation, { hourWindow: this.hourWindow });
