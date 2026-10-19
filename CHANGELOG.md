@@ -133,6 +133,31 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `verified_email` `true`, `false` and absent from a loopback test server. On the previous `oauth.go` the test file did
   not compile, as `OAuthUser` had no `EmailVerified`.
 
+### Fixed: deleting a user clears the copies of the user's name and email that agents and MCP servers hold
+
+- An agent and an MCP server store the name and email of the user who created them, returned as `createdByName` and
+  `createdByEmail`, and have `updatedBy`, `updatedByName` and `updatedByEmail` for the user who last changed them,
+  which no code in this repository writes. Deleting the user set `created_by` to `NULL` and kept the copies, so the
+  agent and the MCP server went on returning the deleted user's name and email. `updated_by` had no foreign key, so
+  a value written there kept the deleted user's id.
+- Migration `136_user_delete_clears_name_and_email_copies.sql` adds a `BEFORE UPDATE` trigger to `agents` and
+  `mcp_servers`: it writes `NULL` to `created_by_name` and `created_by_email` when `created_by` is `NULL`, and to
+  `updated_by_name` and `updated_by_email` when `updated_by` is `NULL`. Deleting a user sets `created_by` to `NULL`
+  through its foreign key, and that update runs the trigger. `agents.updated_by` and `mcp_servers.updated_by` now
+  reference `users(id)` with `ON DELETE SET NULL`; before the foreign key is added, an `updated_by` that names no user
+  is set to `NULL` with its copies.
+- The migration also clears the copies on the rows that lost their user before it ran. An agent it clears gets the
+  time of the migration as its `updated_at`.
+- Test: `apps/backend/internal/infrastructure/repository/user_delete_copies_integration_test.go`, against PostgreSQL.
+  One test, with every migration applied, deletes a user through `UserRepository.Delete` and reads back through
+  `AgentRepository.GetByID` and `MCPServerRepository.GetByID` the agent and the MCP server the user created and last
+  changed: no creator, no updater, an empty name and email, and `NULL` stored in each copy. An agent another user
+  created and the deleted user last changed keeps its creator's copies, and an MCP server another user created and
+  changed keeps all of its copies. Against a database migrated without migration 136 the test fails, with the deleted
+  user's name and email returned. The other test runs the migration file twice in a schema that stands in for a
+  database migrated through 135, and checks that a row whose creator was deleted and a row whose `updated_by` names no
+  user lose those copies, that a row whose users exist keeps them, and that deleting that user then clears them.
+
 ### Fixed: a user who created an agent, an API key, an MCP server or another row the organization keeps can be deleted
 
 - The admin's `DELETE /api/v1/admin/users/:id` deletes the user with `DELETE FROM users`, which failed with a
@@ -155,9 +180,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   agent's audit rows, of the MCP servers it registers, and of its capability requests with their automatic approval
   and grant. The repositories now store `NULL` for the zero id, which failed the foreign key. A capability request
   whose requester was deleted is still read and listed, with an empty `requestedByEmail`, and can still be decided.
-- Agents and MCP servers keep `created_by_name` and `created_by_email`, the name and email copied when they were
-  created. The other thirteen references to `users(id)` keep their rule; among them, the user's audit log rows are
-  deleted with the user.
+- The other thirteen references to `users(id)` keep their rule; among them, the user's audit log rows are deleted
+  with the user. The copies of the user's name and email that agents and MCP servers hold are cleared with the user,
+  as the entry above describes.
 - Test: `apps/backend/internal/infrastructure/repository/user_delete_integration_test.go`, against PostgreSQL with
   every migration applied. One test reads the catalog: every reference to `users(id)` has `ON DELETE CASCADE` or
   `ON DELETE SET NULL`, and each of the twenty references the migration changed has the rule it chose. One deletes a user named in all twenty
