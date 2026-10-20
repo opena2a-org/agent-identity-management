@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: `/metrics` counts the requests each agent signing scheme authenticates
+
+- `aim_agent_requests_authenticated_total` counts the requests an agent's signature authenticated, by `type`, the
+  scheme the request was signed in, and by `sdk`, the calling SDK, derived from the `User-Agent` header as for
+  `aim_s1_refusals_total` (`python`, `typescript`, `java` or `other`).
+- `type` is `agent-request-v1`, counted by `PQCAgentMiddleware` whichever algorithm verified the request and by
+  `Ed25519AgentMiddleware`; `agent-request-v2`, counted by `AgentRequestV2Middleware`; `verification-read`, the
+  `X-AIM-Agent-ID`, `X-AIM-Timestamp` and `X-AIM-Signature` headers of `GET /api/v1/sdk-api/verifications/{id}`;
+  `verification-body`, a `POST /api/v1/verifications` or `POST /api/v1/sdk-api/verifications` body without
+  `signedBytes`; or `action-request-v1`, a body of those two routes with `signedBytes`. A value outside this set is
+  counted as `unclassified`.
+- A request is counted where its authenticator accepts it, after the agent's status check. A request the
+  authenticator refuses is not counted, nor is a request `PQCAgentMiddleware` or `Ed25519AgentMiddleware` passes to
+  the next handler because it carries `Authorization`, or one `AgentRequestV2Middleware` passes on because it carries
+  no `X-Agent-Request`.
+- The series of the five schemes for the four `sdk` values are served from start at 0, so a scrape lists a scheme
+  that has authenticated no request. No route mounts `AgentRequestV2Middleware`, so its series stay at 0.
+- Tests, each scheme with accepted and refused requests:
+  `apps/backend/internal/infrastructure/metrics/agent_requests_authenticated_test.go`,
+  `apps/backend/internal/interfaces/http/middleware/agent_request_authenticated_count_test.go` and
+  `apps/backend/internal/interfaces/http/handlers/verification_authenticated_count_test.go`.
+
 ### Added — an authenticator for requests signed as `agent-request-v2` statements, which no route uses yet
 
 - `AgentRequestV2Middleware` authenticates a request that carries `X-Agent-Request`, the unpadded base64url of a

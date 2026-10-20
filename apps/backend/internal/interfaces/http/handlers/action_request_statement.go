@@ -19,6 +19,7 @@ import (
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
 
 // Signed action-request statements on POST /api/v1/verifications and
@@ -665,6 +666,7 @@ func (h *VerificationHandler) createVerificationFromStatement(c fiber.Ctx, membe
 		}).send(c)
 	}
 
+	metrics.RecordAgentRequestAuthenticated(metrics.AgentRequestSchemeActionRequest, c.Get("User-Agent"))
 	extra := map[string]interface{}{"signedStatement": domain.ActionRequestSchemeID}
 	if len(stmt.delegationDigests) > 0 {
 		extra["delegationDigests"] = stmt.delegationDigests

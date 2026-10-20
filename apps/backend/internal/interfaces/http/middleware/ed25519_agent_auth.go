@@ -190,6 +190,7 @@ func Ed25519AgentMiddleware(agentService *application.AgentService) fiber.Handle
 		c.Locals("authenticated_via", "ed25519")
 		c.Locals("auth_method", "ed25519") // Set auth_method so handlers can recognize Ed25519 auth
 
+		metrics.RecordAgentRequestAuthenticated(metrics.AgentRequestSchemeV1, c.Get("User-Agent"))
 		return c.Next()
 	}
 }

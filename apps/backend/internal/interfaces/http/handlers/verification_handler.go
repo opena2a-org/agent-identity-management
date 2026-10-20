@@ -18,6 +18,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
 
 // VerificationHandler handles agent action verification requests
@@ -279,6 +280,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 		})
 	}
 
+	metrics.RecordAgentRequestAuthenticated(metrics.AgentRequestSchemeVerificationBody, c.Get("User-Agent"))
 	return h.decideAndRecord(c, agent, agentID, verificationInput{
 		capability: req.Capability,
 		resource:   req.Resource,
@@ -1169,6 +1171,7 @@ func (h *VerificationHandler) GetVerificationSDK(c fiber.Ctx) error {
 	if !domain.AgentStatusPermitsAuth(agent.Status) {
 		return c.Status(fiber.StatusUnauthorized).JSON(agentauth.StatusDeniedBody(agent.Status))
 	}
+	metrics.RecordAgentRequestAuthenticated(metrics.AgentRequestSchemeVerificationRead, c.Get("User-Agent"))
 
 	event, err := h.getVerificationEventService().GetVerificationEvent(c.Context(), vid)
 	if err != nil || event == nil {
