@@ -177,6 +177,26 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   character is signed and sent as before.
 - Tests: `src/secrets/SecretsClient.resolve-refusals.test.ts`.
 
+### Added: an `agent-request-v2` signer, which the package does not export, checked against the conformance vectors
+
+- `src/crypto/agent-request-v2.ts` signs a request as an `agent-request-v2` statement and returns the two headers
+  that carry it, `X-Agent-Request` and `X-Agent-Request-Signature`. The statement names the method, the path and
+  query string of the URL, the URL's origin as the audience, the SHA-256 of the body when the body is not empty, the
+  agent ID, this host's clock in whole seconds and a random 16-byte nonce drawn for each call; each signature covers
+  its DSSE v1 pre-authentication encoding. The Ed25519 key of the credentials signs every statement. Given an ML-DSA
+  key, for an agent in hybrid mode, that key signs it too, and `X-Agent-Request-Signature` carries both signatures
+  separated by a comma.
+- The request and the credentials are checked by one function that `createAgentRequestHeaders` now calls for the
+  same checks, so the two signers refuse the same inputs with the same messages. An ML-DSA algorithm other than
+  ML-DSA-44, ML-DSA-65 or ML-DSA-87, a key that is not bytes, and a key whose length is not its algorithm's are
+  refused as well. Nothing is signed after a refusal. The 34 tests of `createAgentRequestHeaders` pass unchanged.
+- The package entry point does not export the signer and no SDK code calls it, so no request the SDK sends changes.
+- Tests: `src/crypto/agent-request-v2.test.ts`. Of the eight requests in `docs/specs/agent-request-v2-vectors.json`
+  that AIM's verifier accepts, the signer reproduces six byte for byte, the statement and the signature line, ML-DSA-65
+  signatures included; the other two are forms it does not write, an ML-DSA-65 signature alone and a statement with
+  line breaks and its members in another order. The tests also send signed requests with fetch to a loopback server
+  and check each statement against the request received, verifying the Ed25519 signature with `node:crypto`.
+
 ### Fixed — ARP log rotation rotates the file a symbolic link points to and counts only rotated copies, and `telemetryLog('0')` is refused (#762)
 
 - `rotateLogIfNeeded` resolves a symbolic link before it measures and renames, so the file the link points to is
