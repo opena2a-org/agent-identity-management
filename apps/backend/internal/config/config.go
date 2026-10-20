@@ -98,6 +98,13 @@ type ServerConfig struct {
 	// AllowedOrigins are the CORS origins (ALLOWED_ORIGINS, comma-separated,
 	// split as written). The CORS middleware validates them.
 	AllowedOrigins []string
+	// PublicOrigin is AIM_PUBLIC_ORIGIN as set, "" when it is unset or empty:
+	// the deployment's public origin, the audience AgentRequestV2Middleware
+	// requires a signed agent request (domain.AgentRequestSchemeID) to name,
+	// compared byte for byte. Load keeps it as written: it does not trim it,
+	// lowercase it or check its form. The middleware refuses every statement
+	// when it is given "".
+	PublicOrigin string
 }
 
 // DefaultMetricsListenAddr is loopback on the port the OpenTelemetry
@@ -502,6 +509,7 @@ func LoadServer() ServerConfig {
 		MetricsAuthToken:  getEnv("METRICS_AUTH_TOKEN", ""),
 		MetricsListenAddr: getEnv("METRICS_LISTEN_ADDR", DefaultMetricsListenAddr),
 		AllowedOrigins:    allowedOrigins,
+		PublicOrigin:      getEnv("AIM_PUBLIC_ORIGIN", ""),
 	}
 }
 

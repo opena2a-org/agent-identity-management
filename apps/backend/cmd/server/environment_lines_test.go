@@ -208,6 +208,8 @@ func startupLine(t *testing.T, name string, cfg *config.Config) string {
 			_, warning := trustReevaluationInterval(cfg.Jobs.Value)
 			logIntervalWarning(warning)
 		})
+	case "AIM_PUBLIC_ORIGIN":
+		return agentRequestAudienceStartupLine(cfg.Server)
 	}
 	return ""
 }

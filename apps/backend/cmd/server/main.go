@@ -332,6 +332,8 @@ func main() {
 	for _, line := range startupSummary(cfg, redisClient) {
 		log.Print(line)
 	}
+	// AIM_PUBLIC_ORIGIN, the audience a signed agent request must name.
+	log.Print(agentRequestAudienceStartupLine(cfg.Server))
 
 	// Start background job for automatic JIT access expiration
 	// This ensures expired verifications are marked as such even if not queried

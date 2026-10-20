@@ -128,6 +128,8 @@ func renderSetting(cfg *Config, name string) (string, bool) {
 		return q(cfg.Server.MetricsAuthToken), true
 	case "METRICS_LISTEN_ADDR":
 		return q(cfg.Server.MetricsListenAddr), true
+	case "AIM_PUBLIC_ORIGIN":
+		return q(cfg.Server.PublicOrigin), true
 	case "ALLOWED_ORIGINS":
 		return fmt.Sprintf("%q", cfg.Server.AllowedOrigins), true
 	case "REDIS_HOST":

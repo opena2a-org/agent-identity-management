@@ -2410,6 +2410,41 @@
       "line": ""
     },
     {
+      "variable": "AIM_PUBLIC_ORIGIN",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": "Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is not set)"
+    },
+    {
+      "variable": "AIM_PUBLIC_ORIGIN",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": "Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is not set)"
+    },
+    {
+      "variable": "AIM_PUBLIC_ORIGIN",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": "Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is \"   \")"
+    },
+    {
+      "variable": "AIM_PUBLIC_ORIGIN",
+      "input": "valid",
+      "value": "https://aim.example.com",
+      "setting": "\"https://aim.example.com\"",
+      "line": "Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is \"https://aim.example.com\")"
+    },
+    {
+      "variable": "AIM_PUBLIC_ORIGIN",
+      "input": "invalid",
+      "value": "https://AIM.example.com/",
+      "setting": "\"https://AIM.example.com/\"",
+      "line": "Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is \"https://AIM.example.com/\")"
+    },
+    {
       "variable": "POSTGRES_APP_USER",
       "input": "unset",
       "value": null,
