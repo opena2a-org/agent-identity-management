@@ -11,6 +11,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — an authenticator for requests signed as `agent-request-v2` statements, which no route uses yet
+
+- `AgentRequestV2Middleware` authenticates a request that carries `X-Agent-Request`, the unpadded base64url of a
+  JSON payload with exactly the members `method`, `target`, `audience`, `agent_id`, `timestamp` (RFC 3339 in UTC
+  with `Z`) and `nonce` (16 bytes, unpadded base64url), and `body_sha256` (the unpadded base64url SHA-256 of the
+  body as received) exactly when the request has a body. `X-Agent-Request-Signature` carries each signature as an
+  algorithm (`Ed25519`, `ML-DSA-44`, `ML-DSA-65` or `ML-DSA-87`), a colon and the unpadded base64url signature over
+  the DSSE v1 pre-authentication encoding of the payload type `application/vnd.opena2a.agent-request.v2+json` and
+  the payload as received.
+- The payload must name the request it arrives on: its method, its path and query as sent, the body, and an
+  `audience` equal byte for byte to the public origin the middleware is given. The signatures are verified against
+  the agent's registered keys; the request presents no key. An agent in hybrid mode needs one Ed25519 and one
+  ML-DSA signature, as two header lines or one comma-separated line, and any other agent exactly one signature.
+- After the signatures verify and before the agent's status is read, the middleware passes the agent, the stored
+  agent's organization, the nonce and the timestamp to one `Admit` call of the admitter it is given, an interface
+  `application.ActionRequestNonceService` implements. The middleware writes nothing itself, so a request it
+  refuses before that call stores no nonce. A request from a suspended or revoked agent whose signatures verify
+  spends its nonce.
+- Refusals carry a `reasonCode`: 400 `invalidRequest`, `nonceRequired`, or `conflictingAuthentication` when the
+  request also carries `Authorization`, `X-API-Key` or a header the other agent signature checks read; 401
+  `audienceMismatch`, `requestMismatch`, `agentKeyNotRecognized`, `signatureInvalid`, `hybridSignatureRequired`,
+  `singleSignatureRequired`, `timestampOutsideWindow`, `nonceReused` or `agentStatusDenied`; 503
+  `audienceNotConfigured` when the middleware is given no public origin, and `freshnessCheckUnavailable` when the
+  admission cannot run. A refused request does not reach the next handler. A request without `X-Agent-Request`
+  goes to the next handler untouched.
+- No route mounts the middleware, and no setting supplies its public origin.
+- Tests: `apps/backend/internal/interfaces/http/middleware/agent_request_v2_test.go`,
+  `apps/backend/internal/domain/agent_request_test.go`, and the agent-status read census in
+  `apps/backend/internal/agentauth/architecture_test.go`.
+
 ### Fixed: the Quick start signs the release of the Python SDK on PyPI in to a self-hosted AIM with the sign-in from the dashboard's SDK download (#789)
 
 - aim-sdk 2.0.3, the release on PyPI, cannot complete the Quick start's `aim-sdk login --url http://localhost:8080`:
