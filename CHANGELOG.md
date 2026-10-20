@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the account deletion purge removes the OpenID Connect sign-in configuration of an organization it deletes
+
+- An organization's OpenID Connect sign-in configuration, sealed client secret included, is a `system_config` row
+  keyed `oidc_sign_in:<organization id>`, and `system_config` has no reference to organizations, so no cascade
+  removes it. When the purge deletes an organization it leaves with no user, it now deletes that row in the same
+  transaction. The configuration of an organization the purge keeps, because a user is left or because a reference
+  refused the delete, stays.
+- Tests: `apps/backend/internal/infrastructure/repository/user_deletion_oidc_sign_in_integration_test.go` stores a
+  configuration for three organizations and runs the purge against PostgreSQL. On the commit this builds on, the
+  configuration of the organization whose one user was purged was still there after the organization was deleted.
+
 ### Changed: `trust_score.changed` is sent for the scores an agent's registration, update, verification, suspension, reactivation, revocation and MCP server changes store
 
 - The agent service stores a trust score when it registers an agent, and a recalculated one after

@@ -107,7 +107,8 @@ func (r *UserRepository) RequestDeletion(ctx context.Context, userID uuid.UUID, 
 //
 // In the same transaction it deletes each organization of the deleted accounts
 // that has no user left (deleteOrganizationLeftWithNoUser), with the rows that
-// reference the organization by ON DELETE CASCADE, and sets OrganizationDeleted
+// reference the organization by ON DELETE CASCADE and its OIDC sign-in
+// configuration in system_config, and sets OrganizationDeleted
 // on the accounts of a deleted organization. An organization whose delete a
 // reference refuses is kept, the accounts are deleted all the same, and the
 // refusal is logged once the transaction commits. Any other failure rolls the
@@ -205,7 +206,9 @@ func organizationsOf(deleted []domain.AccountDeletion) []uuid.UUID {
 }
 
 // deleteOrganizationLeftWithNoUser deletes the organization if no user of it is
-// left, inside the purge's transaction, and reports whether it did.
+// left, inside the purge's transaction, and reports whether it did. With a
+// deleted organization it removes the organization's OIDC sign-in
+// configuration row from system_config.
 //
 // The organization's row is locked (FOR UPDATE) by a statement of its own, and
 // the users are counted by the next statement, which reads what was committed
@@ -251,7 +254,16 @@ func deleteOrganizationLeftWithNoUser(ctx context.Context, tx *sql.Tx, orgID uui
 	if _, err := tx.ExecContext(ctx, `RELEASE SAVEPOINT organization_delete`); err != nil {
 		return false, nil, err
 	}
-	return n == 1, nil, nil
+	if n != 1 {
+		return false, nil, nil
+	}
+	// The organization's OIDC sign-in configuration is a system_config row,
+	// which has no reference to organizations, so no cascade removes it.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM system_config WHERE key = $1`, oidcSignInConfigKey(orgID)); err != nil {
+		return false, nil, err
+	}
+	return true, nil, nil
 }
 
 // isReferenceRefusal is true for an error of a delete that a foreign key
