@@ -22,6 +22,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/pqc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 )
 
 // AgentRequestNonceAdmitter admits the nonce of a signed agent request: the
@@ -63,6 +64,8 @@ type AgentRequestNonceAdmitter interface {
 // An authenticated request gets the locals agent_id, organization_id,
 // authenticated_via, auth_method and auth_algorithm, the keys
 // PQCAgentMiddleware sets, and agent_request_scheme, which names this format.
+// It is counted by metrics.RecordAgentRequestAuthenticated under
+// metrics.AgentRequestSchemeV2.
 func AgentRequestV2Middleware(agents agentauth.Source, admitter AgentRequestNonceAdmitter, audience string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		statements := headerValues(c, domain.AgentRequestHeader)
@@ -172,6 +175,7 @@ func AgentRequestV2Middleware(agents agentauth.Source, admitter AgentRequestNonc
 		c.Locals("auth_method", authMethod)
 		c.Locals("auth_algorithm", string(algorithm))
 		c.Locals("agent_request_scheme", domain.AgentRequestSchemeID)
+		metrics.RecordAgentRequestAuthenticated(metrics.AgentRequestSchemeV2, c.Get("User-Agent"))
 		return c.Next()
 	}
 }

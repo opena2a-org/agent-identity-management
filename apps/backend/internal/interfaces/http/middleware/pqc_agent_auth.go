@@ -170,6 +170,7 @@ func PQCAgentMiddleware(agentService *application.AgentService) fiber.Handler {
 		c.Locals("auth_method", authMethod)
 		c.Locals("auth_algorithm", algorithm)
 
+		metrics.RecordAgentRequestAuthenticated(metrics.AgentRequestSchemeV1, c.Get("User-Agent"))
 		return c.Next()
 	}
 }
