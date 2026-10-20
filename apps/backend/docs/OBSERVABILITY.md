@@ -193,7 +193,7 @@ A request that carries an `agent-request-v2` statement in `X-Agent-Request` is c
 | `freshness_check_unavailable` | the timestamp and nonce could not be checked against the database | 503 `freshnessCheckUnavailable` |
 | `agent_status_denied` | the agent's status is neither `verified` nor `pending` | 401 `agentStatusDenied` |
 
-Where one `reasonCode` answers several causes, `reason` tells them apart for operators only: `agent_lookup_failed`, `no_registered_key` and `registered_key_malformed` all answer `{"error":"the signing key is not the registered key of a known agent","reasonCode":"agentKeyNotRecognized"}`, so a caller holding only an agent id learns nothing about that agent. The agent's status is read only after the signatures verify and the nonce is admitted, so `agent_status_denied` counts requests signed with the agent's own keys.
+Where one `reasonCode` answers several causes, `reason` tells them apart for operators only: `agent_lookup_failed`, `no_registered_key` and `registered_key_malformed` all answer `{"error":"the signing key is not the registered key of a known agent","reasonCode":"agentKeyNotRecognized"}`. The agent's status is read only after the signatures verify and the nonce is admitted, so `agent_status_denied` counts requests signed with the agent's own keys.
 
 The set is closed. `unclassified` exists only as a guard: the middleware never produces it, and seeing it means a refusal was recorded without a reason from the table. `sdk` is derived from `User-Agent` as for `aim_s1_refusals_total`. Neither label carries anything the request sent: no agent id, statement, signature or raw `User-Agent`.
 
