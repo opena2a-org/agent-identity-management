@@ -10,7 +10,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	infraatc "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/atc"
-	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/integrations/siem"
 )
 
 // buildCommit is the commit the binary was built from, set by the linker:
@@ -129,26 +128,6 @@ func redisReadyCheck(configured bool, client *redis.Client) func(context.Context
 	return nil
 }
 
-// errSIEMDeliveryFailing is what the readiness check reports for SIEM
-// forwarding while its most recent delivery was not accepted, or an event was
-// dropped after the last accepted delivery.
-var errSIEMDeliveryFailing = errors.New("siem: the most recent delivery was not accepted, or an event was dropped after the last accepted one")
-
-// siemReadyCheck returns the readiness check for SIEM forwarding. A nil
-// result means no SIEM is configured (notConfigured). The check reads the
-// forwarder's record of its own deliveries; it sends nothing to the SIEM.
-func siemReadyCheck(forwarder *siem.Forwarder) func() error {
-	if forwarder == nil {
-		return nil
-	}
-	return func() error {
-		if forwarder.Health().Failing {
-			return errSIEMDeliveryFailing
-		}
-		return nil
-	}
-}
-
 // revocationReadyCheck returns the readiness check of the revocation list. A
 // nil result means no list is read (notConfigured): the server starts no
 // refresher without REGISTRY_URL. The check is the refresher's State: whether
@@ -163,18 +142,22 @@ func revocationReadyCheck(refresher *infraatc.CRLRefresher) func() (bool, string
 
 // newHealthReadyHandler builds GET /health/ready. checkDB is the required
 // database ping; a nil checkRedis means Redis is not configured (it is
-// optional; see redisReadyCheck), a nil checkSIEM means no SIEM is configured
-// (it is optional; see siemReadyCheck), and a nil checkRevocation means no
+// optional; see redisReadyCheck), and a nil checkRevocation means no
 // revocation list is read (it is optional; see revocationReadyCheck). The
 // response is 200 iff every required dependency is ok; an unavailable
-// optional dependency only sets degraded. checkSIEM and checkRevocation read
-// state and are not timed, so their entries carry no latencyMs.
-func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, checkSIEM func() error, checkRevocation func() (bool, string)) fiber.Handler {
+// optional dependency only sets degraded. checkRevocation reads state and is
+// not timed, so its entry carries no latencyMs.
+//
+// The route is served without authentication, so the body reports only the
+// dependencies the service needs to answer requests. SIEM forwarding is not
+// one of them: its delivery state is read on /metrics, as the gauge
+// aim_siem_forwarding_failing, which requires METRICS_AUTH_TOKEN off loopback.
+func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, checkRevocation func() (bool, string)) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		ctx, cancel := context.WithTimeout(context.Background(), healthReadyDeadline)
 		defer cancel()
 
-		deps := make(map[string]healthReadyDependency, 4)
+		deps := make(map[string]healthReadyDependency, 3)
 
 		dbStatus, dbLatency, dbReason := runBoundedCheck(ctx, healthReadyDBTimeout, checkDB)
 		deps["database"] = healthReadyDependency{
@@ -196,16 +179,6 @@ func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, chec
 				Reason:    redisReason,
 			}
 			degraded = redisStatus == depStatusUnavailable
-		}
-
-		switch {
-		case checkSIEM == nil:
-			deps["siem"] = healthReadyDependency{Status: depStatusNotConfigured, Required: false}
-		case checkSIEM() != nil:
-			deps["siem"] = healthReadyDependency{Status: depStatusUnavailable, Required: false, Reason: reasonCheckFailed}
-			degraded = true
-		default:
-			deps["siem"] = healthReadyDependency{Status: depStatusOK, Required: false}
 		}
 
 		if checkRevocation == nil {

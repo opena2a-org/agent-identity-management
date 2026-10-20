@@ -25,7 +25,7 @@ import (
 
 func revocationReadyApp(checkDB func(context.Context) error, checkRevocation func() (bool, string)) *fiber.App {
 	app := fiber.New()
-	app.Get("/health/ready", newHealthReadyHandler(checkDB, nil, nil, checkRevocation))
+	app.Get("/health/ready", newHealthReadyHandler(checkDB, nil, checkRevocation))
 	return app
 }
 
@@ -159,9 +159,9 @@ func TestMain_HandsTheReadinessRouteTheRevocationListState(t *testing.T) {
 
 	handlers := callsIn(mainFunc.Body, "newHealthReadyHandler")
 	require.Len(t, handlers, 1)
-	require.Len(t, handlers[0].Args, 4)
-	check, ok := handlers[0].Args[3].(*ast.CallExpr)
-	require.True(t, ok, "the fourth argument of newHealthReadyHandler is a call")
+	require.Len(t, handlers[0].Args, 3)
+	check, ok := handlers[0].Args[2].(*ast.CallExpr)
+	require.True(t, ok, "the third argument of newHealthReadyHandler is a call")
 	assert.Equal(t, "revocationReadyCheck", identName(check.Fun))
 	require.Len(t, check.Args, 1)
 	assert.Equal(t, "revocationList", identName(check.Args[0]))

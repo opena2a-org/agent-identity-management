@@ -33,7 +33,8 @@ import (
 // SIEM_SENTINEL_* variables name them; /metrics counts it for the sentinel
 // adapter. Started again with a client secret the token endpoint refuses,
 // the next failed sign-in reaches no ingestion endpoint, is counted failed,
-// and the readiness SIEM entry is unavailable.
+// and aim_siem_forwarding_failing reads 1. /metrics is read with the token;
+// GET /health/ready carries no siem entry throughout.
 //
 //	TEST_DATABASE_URL=postgres://... go test -tags=integration \
 //	  -run TestSIEMSentinelRoundTrip ./cmd/server/
@@ -50,7 +51,8 @@ func TestSIEMSentinelRoundTrip(t *testing.T) {
 	withEnvironment(t, "", false)
 	t.Setenv("JWT_SECRET", "siem-integration-secret-of-at-least-32-chars")
 	schema := aim07LoadSchema(t)
-	metricsApp := newMetricsApp("")
+	metricsToken := uuid.NewString() + uuid.NewString()
+	metricsApp := newMetricsApp(metricsToken)
 
 	tenant, clientID := uuid.NewString(), uuid.NewString()
 	clientSecret := strings.Join([]string{"integration", uuid.NewString()}, "-")
@@ -89,17 +91,18 @@ func TestSIEMSentinelRoundTrip(t *testing.T) {
 	require.NoError(t, err, "TimeGenerated is RFC 3339")
 	assert.True(t, !at.Before(started) && !at.After(ended), "TimeGenerated %s is within %s and %s", generated, started, ended)
 	assert.Equal(t, 1, tokens.Requests(), "one token for one batch")
-	series := siemMetricSeries(t, metricsApp)
+	series := siemMetricSeries(t, metricsApp, metricsToken)
 	assert.GreaterOrEqual(t, series[`aim_siem_events_sent_total{adapter="sentinel"}`], float64(1), "series: %v", series)
+	require.Contains(t, series, "aim_siem_forwarding_failing", "series: %v", series)
+	assert.Equal(t, float64(0), series["aim_siem_forwarding_failing"], "the last delivery was accepted")
 	readiness := siemReadiness(t, app, schema)
-	assert.Equal(t, map[string]any{"status": "ok", "required": false},
-		readiness["dependencies"].(map[string]any)["siem"])
+	assert.NotContains(t, readiness["dependencies"], "siem")
 	flushSIEMForwarding(forwarder)
 
 	// Started again with a client secret the token endpoint refuses.
 	ingestionRequests := ingestion.Requests()
 	app, forwarder = sentinelRoundTripServer(t, db, sentinelEnv(clientSecret+"-wrong"))
-	failedBefore := siemMetricSeries(t, metricsApp)[`aim_siem_events_failed_total{adapter="sentinel"}`]
+	failedBefore := siemMetricSeries(t, metricsApp, metricsToken)[`aim_siem_events_failed_total{adapter="sentinel"}`]
 	sentinelSignInFails(t, app)
 	sentinelFlush(t, forwarder)
 
@@ -108,13 +111,13 @@ func TestSIEMSentinelRoundTrip(t *testing.T) {
 	refusals := tokens.Refusals()
 	require.Len(t, refusals, 1, "a refused token is not asked for again within the batch")
 	assert.Equal(t, sentineltest.Refusal{Status: 401, Error: "invalid_client"}, refusals[0])
-	series = siemMetricSeries(t, metricsApp)
+	series = siemMetricSeries(t, metricsApp, metricsToken)
 	assert.Greater(t, series[`aim_siem_events_failed_total{adapter="sentinel"}`], failedBefore, "series: %v", series)
 	assert.Equal(t, float64(0), series[`aim_siem_events_sent_total{adapter="sentinel"}`], "the restarted forwarder sent nothing")
+	assert.Equal(t, float64(1), series["aim_siem_forwarding_failing"], "a refused token: series: %v", series)
 	readiness = siemReadiness(t, app, schema)
-	assert.Equal(t, true, readiness["degraded"], "a refused token degrades readiness")
-	assert.Equal(t, map[string]any{"status": "unavailable", "required": false, "reason": "dependency check failed"},
-		readiness["dependencies"].(map[string]any)["siem"])
+	assert.Equal(t, false, readiness["degraded"], "SIEM delivery is not a readiness dependency")
+	assert.NotContains(t, readiness["dependencies"], "siem")
 	flushSIEMForwarding(forwarder)
 }
 
@@ -153,7 +156,7 @@ func sentinelRoundTripServer(t *testing.T, db *sql.DB, getenv func(string) strin
 
 	app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
 	app.Use(middleware.RecoveryMiddleware())
-	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), siemReadyCheck(forwarder), nil))
+	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(false, nil), nil))
 	mountAPIRoutes(app, h, services, jwtService, nil, db)
 	return app, forwarder
 }

@@ -2,8 +2,9 @@ package siem
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// The series a Collector gives. Each counts events and ends in _total, the
-// suffix of a counter.
+// The series a Collector gives. The first three count events and end in
+// _total, the suffix of a counter; aim_siem_forwarding_failing is a gauge of
+// the Forwarder's Health.
 var (
 	eventsSentDesc = prometheus.NewDesc("aim_siem_events_sent_total",
 		"SIEM events an adapter accepted.",
@@ -14,11 +15,16 @@ var (
 	eventsDroppedDesc = prometheus.NewDesc("aim_siem_events_dropped_total",
 		"SIEM events not queued, because the queue was full or forwarding was stopping. They are not sent.",
 		nil, nil)
+	forwardingFailingDesc = prometheus.NewDesc("aim_siem_forwarding_failing",
+		"1 while the most recent delivery to an adapter was not accepted after every attempt, or an event was dropped after the last delivery an adapter accepted; 0 otherwise.",
+		nil, nil)
 )
 
 // Collector gives a Forwarder's counts as Prometheus counters:
 // aim_siem_events_sent_total and aim_siem_events_failed_total for each
-// adapter, and aim_siem_events_dropped_total.
+// adapter, and aim_siem_events_dropped_total. It gives the Forwarder's Health
+// as the gauge aim_siem_forwarding_failing, 1 while Health().Failing and 0
+// otherwise. Reading them sends nothing to an adapter.
 type Collector struct {
 	forwarder *Forwarder
 }
@@ -35,6 +41,7 @@ func (c *Collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- eventsSentDesc
 	ch <- eventsFailedDesc
 	ch <- eventsDroppedDesc
+	ch <- forwardingFailingDesc
 }
 
 // Collect implements prometheus.Collector. Adapters that share a name are
@@ -57,4 +64,9 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(eventsFailedDesc, prometheus.CounterValue, float64(failed[name]), name)
 	}
 	ch <- prometheus.MustNewConstMetric(eventsDroppedDesc, prometheus.CounterValue, float64(c.forwarder.Stats().Dropped))
+	failing := 0.0
+	if c.forwarder.Health().Failing {
+		failing = 1
+	}
+	ch <- prometheus.MustNewConstMetric(forwardingFailingDesc, prometheus.GaugeValue, failing)
 }

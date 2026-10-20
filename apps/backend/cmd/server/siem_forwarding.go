@@ -24,7 +24,7 @@ const siemFlushTimeout = 2 * time.Second
 
 // startSIEMForwarding reads the SIEM_* variables and, when a SIEM is
 // configured, forwards every audit log entry the repository writes to it and
-// puts the forwarder's counters on /metrics (see registerSIEMSeries). It
+// puts the forwarder's series on /metrics (see registerSIEMSeries). It
 // returns nil when none is configured, and an error naming the variable when
 // one is configured wrongly.
 func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(string) string) (*siem.Forwarder, error) {
@@ -39,7 +39,7 @@ func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(s
 
 	forwarder := siem.NewForwarder(settings.Adapters, settings.Forwarder, nil)
 	if err := registerSIEMSeries(metrics.Registerer(), forwarder); err != nil {
-		log.Printf("ERROR: siem: the SIEM counters are not on /metrics: %v", err)
+		log.Printf("ERROR: siem: the SIEM series are not on /metrics: %v", err)
 	}
 	auditLogs.OnCreate(func(entry *domain.AuditLog) {
 		forwarder.Enqueue(siem.EventFromAuditLog(entry))
@@ -60,12 +60,13 @@ func startSIEMForwarding(auditLogs *repository.AuditLogRepository, getenv func(s
 // siemSeriesMu serialises registerSIEMSeries.
 var siemSeriesMu sync.Mutex
 
-// registerSIEMSeries puts the counters of forwarder on reg, the registry
-// /metrics serves: aim_siem_events_sent_total and
-// aim_siem_events_failed_total for each adapter, and
-// aim_siem_events_dropped_total. They replace the counters of a forwarder
-// started before it in this process, and a nil forwarder leaves no SIEM
-// series at all. main starts one forwarder at most, so only tests replace one.
+// registerSIEMSeries puts the series of forwarder on reg, the registry
+// /metrics serves: the counters aim_siem_events_sent_total and
+// aim_siem_events_failed_total for each adapter and
+// aim_siem_events_dropped_total, and the gauge aim_siem_forwarding_failing.
+// They replace the series of a forwarder started before it in this process,
+// and a nil forwarder leaves no SIEM series at all. main starts one forwarder
+// at most, so only tests replace one.
 func registerSIEMSeries(reg prometheus.Registerer, forwarder *siem.Forwarder) error {
 	siemSeriesMu.Lock()
 	defer siemSeriesMu.Unlock()
