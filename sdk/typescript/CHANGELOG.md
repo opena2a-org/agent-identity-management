@@ -159,6 +159,24 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   fails it names the directory and the error code (`ENOTDIR`, `EACCES`), says the token has not been used, and sends
   nothing. The README describes the command under Quick Start.
 
+### Fixed: `SecretsClient.resolve` refuses a namespace or operation that holds a line feed, a carriage return or `|`, and a namespace that begins with `DSSEv1 `
+
+- `resolve(namespace, operation)` signs the text `namespace|operation|nonce`. It now throws `ConfigurationError`
+  before anything is signed or sent when the namespace or the operation contains a line feed, a carriage return or a
+  vertical bar (`|`), which would make the signed text read as other fields, and when the namespace begins with the
+  seven characters `DSSEv1 `. The signed text starts with the namespace, and a DSSE statement signed with an agent
+  key starts with `DSSEv1 ` (the DSSE v1 pre-authentication encoding): the refusal is there so that the signed text
+  does not start as such a statement does. With no line feed in the namespace, the signed text does not start with
+  an HTTP method and a line feed either, as the text of an `agent-request-v1` signature does.
+- The message names the field, then `the request was not sent`, then a `Fix:` line: `Fix: Pass a namespace and an
+  operation that contain no line feed, carriage return or vertical bar (|).`, or for the prefix `Fix: Pass a
+  namespace that does not begin with "DSSEv1 ".`
+- Run on the previous code, each of the 15 refused cases of the new tests was signed and sent: the six of field and
+  character, four namespaces beginning with `DSSEv1 `, and five beginning with `GET`, `POST`, `PUT`, `PATCH` or
+  `DELETE` and a line feed. A namespace that holds `DSSEv1` without the space, in lower case, or after its first
+  character is signed and sent as before.
+- Tests: `src/secrets/SecretsClient.resolve-refusals.test.ts`.
+
 ### Fixed — ARP log rotation rotates the file a symbolic link points to and counts only rotated copies, and `telemetryLog('0')` is refused (#762)
 
 - `rotateLogIfNeeded` resolves a symbolic link before it measures and renames, so the file the link points to is

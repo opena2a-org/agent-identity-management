@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed: `client.secrets.resolve()` refuses a namespace that begins with `DSSEv1 `
+
+- `client.secrets.resolve()` raises `SecretsError` before anything is signed or sent when the namespace begins with
+  the seven characters `DSSEv1 `. The signed text `namespace|operation|nonce` starts with the namespace, and a DSSE
+  statement signed with an agent key starts with `DSSEv1 ` (the DSSE v1 pre-authentication encoding): the refusal
+  is there so that the signed text does not start as such a statement does. Before this change,
+  `resolve("DSSEv1 ")` signed text starting with `DSSEv1 ` and sent the request.
+- A namespace that holds `DSSEv1` without the space, in lower case, or after its first character is signed and
+  sent as before.
+- A namespace that begins with `GET`, `POST`, `PUT`, `PATCH` or `DELETE` and a line feed, as the text of an
+  `agent-request-v1` signature does, was already refused for its line feed; tests now hold that for each of the
+  five methods.
+- Tests: `tests/test_secrets.py`, `TestResolveRefusesAnotherFormatsStart`.
+
 ### Fixed: the `aim-sdk` import-cost probe runs in its temporary home, not in the SDK directory, so it does not copy credentials from a `.aim` folder above the checkout
 
 - `tests/test_cli_import_cost.py` ran its `aim-sdk` probe with the SDK directory as its working directory, and
