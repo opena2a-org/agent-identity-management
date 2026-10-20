@@ -38,11 +38,26 @@ var (
 )
 
 // PasswordHasher provides password hashing and verification
-type PasswordHasher struct{}
+type PasswordHasher struct {
+	// cost is the bcrypt cost HashPassword hashes at. Zero, the cost of a
+	// hasher from NewPasswordHasher, is BcryptCost.
+	cost int
+}
 
-// NewPasswordHasher creates a new password hasher
+// NewPasswordHasher creates a new password hasher, which hashes at BcryptCost
 func NewPasswordHasher() *PasswordHasher {
 	return &PasswordHasher{}
+}
+
+// NewPasswordHasherWithCost creates a password hasher that hashes at cost.
+// It refuses a cost outside bcrypt.MinCost..bcrypt.MaxCost: bcrypt hashes a
+// cost below bcrypt.MinCost at bcrypt.DefaultCost. It is meant for tests,
+// which hash at bcrypt.MinCost to keep a password change under -race short.
+func NewPasswordHasherWithCost(cost int) (*PasswordHasher, error) {
+	if cost < bcrypt.MinCost || cost > bcrypt.MaxCost {
+		return nil, fmt.Errorf("bcrypt cost %d is outside %d..%d", cost, bcrypt.MinCost, bcrypt.MaxCost)
+	}
+	return &PasswordHasher{cost: cost}, nil
 }
 
 // HashPassword hashes a password using bcrypt
@@ -52,7 +67,11 @@ func (h *PasswordHasher) HashPassword(password string) (string, error) {
 		return "", err
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), BcryptCost)
+	cost := h.cost
+	if cost == 0 {
+		cost = BcryptCost
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	if err != nil {
 		return "", fmt.Errorf("failed to hash password: %w", err)
 	}

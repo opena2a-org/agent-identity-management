@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestNewPasswordHasher(t *testing.T) {
@@ -95,6 +96,36 @@ func TestPasswordHasher_HashPassword_InvalidPassword(t *testing.T) {
 	// Too weak
 	_, err = hasher.HashPassword("password1234")
 	assert.Error(t, err)
+}
+
+// NewPasswordHasher hashes at BcryptCost, and NewPasswordHasherWithCost at
+// the cost it is given.
+func TestPasswordHasher_HashPassword_HashesAtTheHashersCost(t *testing.T) {
+	password := "SecurePass123!"
+	hashCost := func(t *testing.T, hasher *PasswordHasher) int {
+		t.Helper()
+		hash, err := hasher.HashPassword(password)
+		require.NoError(t, err)
+		require.NoError(t, hasher.VerifyPassword(password, hash))
+		cost, err := bcrypt.Cost([]byte(hash))
+		require.NoError(t, err)
+		return cost
+	}
+
+	assert.Equal(t, BcryptCost, hashCost(t, NewPasswordHasher()))
+	minCost, err := NewPasswordHasherWithCost(bcrypt.MinCost)
+	require.NoError(t, err)
+	assert.Equal(t, bcrypt.MinCost, hashCost(t, minCost))
+}
+
+// A cost outside bcrypt.MinCost..bcrypt.MaxCost is refused, zero included:
+// bcrypt would hash a cost below bcrypt.MinCost at bcrypt.DefaultCost.
+func TestNewPasswordHasherWithCost_RefusesACostOutsideBcryptsRange(t *testing.T) {
+	for _, cost := range []int{-1, 0, bcrypt.MinCost - 1, bcrypt.MaxCost + 1} {
+		hasher, err := NewPasswordHasherWithCost(cost)
+		assert.Error(t, err, "cost %d", cost)
+		assert.Nil(t, hasher, "cost %d", cost)
+	}
 }
 
 func TestPasswordHasher_VerifyPassword_Correct(t *testing.T) {

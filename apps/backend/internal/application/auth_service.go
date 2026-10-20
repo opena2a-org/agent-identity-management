@@ -31,6 +31,7 @@ type AuthService struct {
 	failureConfig   domain.AuthFailureConfig
 	sdkTokenRepo    domain.SDKTokenRepository
 	providerSignIn  ProviderSignInRequirement
+	passwordHasher  *auth.PasswordHasher
 }
 
 // ProviderSignInRequirement reports whether an organization requires its
@@ -52,6 +53,12 @@ func (s *AuthService) SetProviderSignInRequirement(r ProviderSignInRequirement) 
 // none attached, a change revokes no row.
 func (s *AuthService) SetSDKTokenRepository(repo domain.SDKTokenRepository) {
 	s.sdkTokenRepo = repo
+}
+
+// SetPasswordHasher attaches the hasher ChangePassword hashes the new
+// password with. With none attached, it hashes at auth.BcryptCost.
+func (s *AuthService) SetPasswordHasher(h *auth.PasswordHasher) {
+	s.passwordHasher = h
 }
 
 // NewAuthService creates a new auth service
@@ -375,7 +382,10 @@ func (s *AuthService) ChangePassword(
 		return ErrPasswordNotConfigured
 	}
 
-	passwordHasher := auth.NewPasswordHasher()
+	passwordHasher := s.passwordHasher
+	if passwordHasher == nil {
+		passwordHasher = auth.NewPasswordHasher()
+	}
 	if err := passwordHasher.VerifyPassword(currentPassword, *user.PasswordHash); err != nil {
 		return ErrCurrentPasswordIncorrect
 	}

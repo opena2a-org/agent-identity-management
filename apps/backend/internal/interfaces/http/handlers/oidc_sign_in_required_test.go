@@ -56,12 +56,16 @@ func withPassword(t *testing.T, u domain.User) *domain.User {
 // repository that holds user alone: POST /api/v1/auth/login/local, POST
 // /api/v1/public/login, POST /api/v1/public/change-password, and POST
 // /api/v1/auth/change-password signed in as user. The two sign-in routes
-// report each refused sign-in to the returned reports.
+// report each refused sign-in to the returned reports. The service hashes a
+// changed password at bcrypt's minimum cost, as withPassword does.
 func passwordRoutes(t *testing.T, jwtService *auth.JWTService, requirement application.ProviderSignInRequirement, user *domain.User) (*fiber.App, *issuanceUserRepo, *signInReports) {
 	t.Helper()
 	users := &issuanceUserRepo{user: user}
 	authService := application.NewAuthService(users, nil, nil, nil, nil, nil)
 	authService.SetProviderSignInRequirement(requirement)
+	hasher, err := auth.NewPasswordHasherWithCost(bcrypt.MinCost)
+	require.NoError(t, err)
+	authService.SetPasswordHasher(hasher)
 	audit := application.NewAuditService(&familyAuditRepo{})
 	reports := &signInReports{}
 	public := NewPublicRegistrationHandler(application.NewRegistrationService(refusalRegistrationRepo{}, users, nil, nil, nil),
@@ -357,6 +361,36 @@ func TestPasswordRoutesWhenTheRequirementCannotBeRead(t *testing.T) {
 		require.Equal(t, fiber.StatusOK, status, "%s: %v", route, answer)
 		assert.NotEmpty(t, answer["accessToken"], route)
 	}
+}
+
+// passwordRoutes mounts both change routes on an auth service that hashes a
+// changed password at bcrypt's minimum cost, the cost withPassword hashes
+// at. postSignIn gives each request ten seconds, and under -race a request
+// that hashed at auth.BcryptCost spent seconds of them on bcrypt.
+func TestPasswordRoutesHashAChangedPasswordAtTheMinimumCost(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-only-jwt-secret-not-a-real-value-0123456789")
+	member := withPassword(t, domain.User{ID: uuid.New(), OrganizationID: uuid.New(), Email: "member@example.com",
+		Name: "Member", Role: domain.RoleMember, Status: domain.UserStatusActive, ForcePasswordChange: true})
+	app, users, _ := passwordRoutes(t, auth.NewJWTService(), requirementOf{}, member)
+	hashCost := func(t *testing.T) int {
+		t.Helper()
+		require.NotNil(t, users.user.PasswordHash)
+		cost, err := bcrypt.Cost([]byte(*users.user.PasswordHash))
+		require.NoError(t, err)
+		return cost
+	}
+
+	status, answer := postPassword(t, app, "/api/v1/public/change-password", map[string]string{
+		"email": member.Email, "oldPassword": issuancePassword, "newPassword": anotherPassword,
+	})
+	require.Equal(t, fiber.StatusOK, status, "%v", answer)
+	assert.Equal(t, bcrypt.MinCost, hashCost(t), "the forced change")
+
+	status, answer = postPassword(t, app, "/api/v1/auth/change-password", map[string]string{
+		"currentPassword": anotherPassword, "newPassword": issuancePassword,
+	})
+	require.Equal(t, fiber.StatusOK, status, "%v", answer)
+	assert.Equal(t, bcrypt.MinCost, hashCost(t), "the signed-in change")
 }
 
 // A signed-in user who must sign in through the provider cannot
