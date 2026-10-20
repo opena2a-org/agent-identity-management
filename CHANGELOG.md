@@ -11,6 +11,46 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: conformance vectors for `agent-request-v2` statements
+
+- `docs/specs/agent-request-v2-vectors.json` holds 33 requests signed as `agent-request-v2` statements, each with the
+  answer `AgentRequestV2Middleware` gives it: the HTTP status, the `reasonCode` of a refusal, and whether the request
+  leaves its nonce stored. Each request is written as sent (method, target, body, statement, `X-Agent-Request-Signature`
+  lines and other headers), so another implementation can check its signer or verifier against the same bytes. The
+  file's `description` states the format the vectors follow.
+- 8 requests are accepted: Ed25519 alone on a GET with a query and on a POST with a body, ML-DSA-65 alone, Ed25519 and
+  ML-DSA-65 from an agent in hybrid mode on two header lines and on one comma-separated line, timestamps 30 seconds
+  behind and 30 seconds ahead of the server clock, and a statement with line breaks, indentation and its members in
+  another order.
+- 25 are refused:
+  - `timestampOutsideWindow`: timestamps 31 seconds behind and 31 seconds ahead of the server clock.
+  - `nonceReused`: the first accepted request sent again with its nonce already stored.
+  - `invalidRequest`: nonces of 15 and of 17 bytes, an `agent-request-v1` signed text sent as the statement, a member
+    the format does not define, and three signatures. `nonceRequired`: a statement with no nonce.
+  - `audienceMismatch`: an audience of another origin, and one that differs from the server's only in letter case.
+  - `requestMismatch`: a body without `body_sha256`, `body_sha256` without a body, the digest of other bytes, a query
+    in another order than the one sent, and a method other than the one sent.
+  - `conflictingAuthentication`: `X-Agent-ID`, `X-Timestamp` and `X-Signature` beside the statement, and
+    `Authorization` beside it.
+  - `hybridSignatureRequired`: an agent in hybrid mode signing with Ed25519 alone. `singleSignatureRequired`: an agent
+    not in hybrid mode sending two signatures.
+  - `agentKeyNotRecognized`: an ML-DSA-65 signature for an agent with no ML-DSA-65 key, and an `agent_id` of no
+    registered agent. `signatureInvalid`: a signature under the `action-request-v1` payload type, and one over the
+    statement without its encoding.
+  - `agentStatusDenied`: a suspended agent. This is the one refusal that leaves its nonce stored, because the agent's
+    status is read after admission.
+- The keys of the four test agents are derived from labels written in the file (each seed is the SHA-256 of its
+  label), and the ML-DSA-65 signatures are deterministic, so the file can be made again byte for byte.
+- `TestAgentRequestV2VectorsAreCurrent` holds the file to what the test builds; from `apps/backend`,
+  `go test ./internal/interfaces/http/middleware -run TestAgentRequestV2VectorsAreCurrent -update` rewrites it.
+  `TestAgentRequestV2Vectors` sends each request through `AgentRequestV2Middleware` and checks the status and
+  `reasonCode`, that a request answered 200 reaches the route handler and a refused one does not, the nonce rows
+  stored, and that the admission store is called for the accepted requests and the window, nonce and status refusals
+  and for no other. With the expected answer of the 31-seconds-behind vector changed to 200 in the file, both tests
+  failed.
+- No route mounts `AgentRequestV2Middleware` yet, so no route answers these requests.
+- Tests: `apps/backend/internal/interfaces/http/middleware/agent_request_v2_vectors_test.go`.
+
 ### Added: `/metrics` counts the `agent-request-v2` requests the server refuses, by reason and calling SDK
 
 - `aim_agent_request_v2_refusals_total` counts each request carrying an `agent-request-v2` statement that
