@@ -51,6 +51,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - No route mounts `AgentRequestV2Middleware` yet, so no route answers these requests.
 - Tests: `apps/backend/internal/interfaces/http/middleware/agent_request_v2_vectors_test.go`.
 
+### Added: `AIM_PUBLIC_ORIGIN` holds the audience an `agent-request-v2` statement must name, and the server logs it at startup
+
+- `AIM_PUBLIC_ORIGIN` is the deployment's public origin, the audience `AgentRequestV2Middleware` requires an
+  `agent-request-v2` statement to name, compared byte for byte. `config.Load` reads it into `ServerConfig.PublicOrigin`
+  and keeps it as written: it does not trim it, lowercase it or check its form, so the environment table holds
+  `"   "` and `"https://AIM.example.com/"` as they were set. Unset and empty both leave it empty.
+- No route mounts `AgentRequestV2Middleware` yet, so the setting changes no response.
+- The server logs one startup line for it,
+  `Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is not set)`,
+  which ends `is "https://aim.example.com")` in place of `is not set)` when it is set to `https://aim.example.com`. The
+  value is quoted as Go quotes a string, so its case, its spaces and its path show, and a line feed or a carriage
+  return in it is escaped.
+- A test reads the backend's Go files outside the tests and holds the line to them: the line says no route accepts
+  these requests while no file uses `AgentRequestV2Middleware`, and the test asserts it stops saying so once one does.
+  As a control the same reading must find `PQCAgentMiddleware`; it finds its 6 uses, the six mounts in
+  `cmd/server/main.go`. On planted source it reports each use of the middleware at its line, and neither its
+  declaration nor a comment naming it.
+- The environment table gains five `AIM_PUBLIC_ORIGIN` rows, for unset, empty, whitespace, `https://aim.example.com`
+  and `https://AIM.example.com/`, each with the setting and the line; no other row changes.
+- Tests: `apps/backend/cmd/server/agent_request_audience_test.go` and the environment table tests of
+  `apps/backend/internal/config` and `apps/backend/cmd/server`.
+
 ### Added: `/metrics` counts the `agent-request-v2` requests the server refuses, by reason and calling SDK
 
 - `aim_agent_request_v2_refusals_total` counts each request carrying an `agent-request-v2` statement that
