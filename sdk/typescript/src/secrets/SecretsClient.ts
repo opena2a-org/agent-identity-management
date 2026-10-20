@@ -25,7 +25,29 @@
 import * as nodeCrypto from 'crypto';
 import { sign, toBase64, fromBase64 } from '../crypto/ed25519';
 import { normalizePrivateKey } from '../crypto/private-key';
-import { SecretsError } from '../exceptions';
+import { ConfigurationError, SecretsError } from '../exceptions';
+
+/**
+ * `resolve` signs the UTF-8 of `namespace|operation|nonce`, which starts with
+ * the caller's namespace. Before anything is signed it refuses:
+ * - a namespace or operation holding a line feed, a carriage return or `|`,
+ *   which would sign text that reads as other fields. With no line feed in the
+ *   namespace, the text never starts with an HTTP method and a line feed, as
+ *   the text of an agent-request-v1 signature does;
+ * - a namespace that starts with `DSSEv1 `, as a DSSE statement signed with an
+ *   agent key starts (the DSSE v1 pre-authentication encoding), so the text
+ *   never starts as such a statement does.
+ */
+const RESOLVE_FIELD_SEPARATORS = /[\n\r|]/;
+const DSSE_PREFIX = 'DSSEv1 ';
+const RESOLVE_NOT_SENT = 'the request was not sent';
+const RESOLVE_FIELD_FIX =
+  'Pass a namespace and an operation that contain no line feed, carriage return or vertical bar (|).';
+const DSSE_PREFIX_FIX = 'Pass a namespace that does not begin with "DSSEv1 ".';
+
+function resolveRefusal(line: string, fix: string): ConfigurationError {
+  return new ConfigurationError(`${line}; ${RESOLVE_NOT_SENT}\nFix: ${fix}`);
+}
 
 /** Result of a credential resolution. */
 export interface ResolvedCredential {
@@ -98,6 +120,10 @@ export class SecretsClient {
    * This method decrypts the response locally. The raw credential exists only
    * in the SDK's memory, never in the agent's application memory if consumed
    * immediately and discarded.
+   *
+   * @throws ConfigurationError when the namespace or the operation contains a
+   *   line feed, a carriage return or `|`, or the namespace begins with
+   *   `DSSEv1 `; nothing is signed or sent.
    */
   async resolve(namespace: string, operation = 'read'): Promise<ResolvedCredential> {
     const privateKeyB64 = this.host.getPrivateKey();
@@ -110,13 +136,34 @@ export class SecretsClient {
       throw new SecretsError('Public key required for secrets resolution');
     }
 
+    // The fields as the signed text renders them.
+    const namespaceText = `${namespace}`;
+    const operationText = `${operation}`;
+    for (const [field, text] of [
+      ['namespace', namespaceText],
+      ['operation', operationText],
+    ] as const) {
+      if (RESOLVE_FIELD_SEPARATORS.test(text)) {
+        throw resolveRefusal(
+          `the ${field} contains a line feed, a carriage return or a vertical bar (|)`,
+          RESOLVE_FIELD_FIX,
+        );
+      }
+    }
+    if (namespaceText.startsWith(DSSE_PREFIX)) {
+      throw resolveRefusal(
+        'the namespace begins with "DSSEv1 ", the first bytes of a DSSE statement an agent key signs',
+        DSSE_PREFIX_FIX,
+      );
+    }
+
     // Build nonce: RFC3339Nano:UUID (server rejects nonces older than 30s)
     const now = new Date().toISOString().replace(/\.\d{3}Z$/, '.000000000Z');
     const uuid = nodeCrypto.randomUUID();
     const nonce = `${now}:${uuid}`;
 
     // Sign: namespace|operation|nonce
-    const message = `${namespace}|${operation}|${nonce}`;
+    const message = `${namespaceText}|${operationText}|${nonce}`;
     const encoder = new TextEncoder();
     const messageBytes = encoder.encode(message);
     // The 32-byte seed of the 32- or 64-byte key; any other key is refused

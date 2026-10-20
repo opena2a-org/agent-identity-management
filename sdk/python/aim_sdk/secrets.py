@@ -58,6 +58,24 @@ def _refuse_unsignable(field: str, value: Any) -> None:
             )
 
 
+# The signed message starts with the namespace. A DSSE statement signed with an
+# agent key starts with "DSSEv1 " (the DSSE v1 pre-authentication encoding), so
+# a namespace that starts with it is refused, and the message never starts as
+# such a statement does. With no line feed in the namespace, the message never
+# starts with an HTTP method and a line feed either, as the text of an
+# agent-request-v1 signature does.
+_DSSE_PREFIX = "DSSEv1 "
+
+
+def _refuse_dsse_prefix(namespace: Any) -> None:
+    """Raise SecretsError if the namespace starts the signed message as a DSSE statement starts."""
+    if str(namespace).startswith(_DSSE_PREFIX):
+        raise SecretsError(
+            "Cannot resolve secret: namespace begins with 'DSSEv1 ', the first bytes of a DSSE "
+            "statement an agent key signs. A namespace cannot begin with 'DSSEv1 '."
+        )
+
+
 class SecretsClient:
     """
     Identity-native secrets client.
@@ -95,8 +113,9 @@ class SecretsClient:
             Dict with "credential" (bytes), "encryptionAlg" (str), "namespace" (str)
 
         Raises:
-            SecretsError: If resolution fails, or if namespace or operation contains
-                a line feed, a carriage return or "|" (nothing is signed or sent)
+            SecretsError: If resolution fails, if namespace or operation contains
+                a line feed, a carriage return or "|", or if namespace begins with
+                "DSSEv1 " (in those three cases nothing is signed or sent)
             AuthenticationError: If agent auth fails
         """
         if not self._client.signing_key:
@@ -106,6 +125,7 @@ class SecretsClient:
 
         _refuse_unsignable("namespace", namespace)
         _refuse_unsignable("operation", operation)
+        _refuse_dsse_prefix(namespace)
 
         # Build nonce: timestamp:uuid (server rejects nonces older than 30s)
         nonce = f"{time.strftime('%Y-%m-%dT%H:%M:%S.000000000Z', time.gmtime())}:{uuid4()}"

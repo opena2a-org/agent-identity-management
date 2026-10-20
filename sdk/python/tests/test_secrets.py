@@ -300,6 +300,94 @@ class TestResolveRefusesUnsignableFields:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Resolve never signs a message that starts as another signed format
+# ---------------------------------------------------------------------------
+
+# Namespaces that start as the DSSE v1 pre-authentication encoding of a
+# statement: "DSSEv1", a space, the payload type's length, the type, a space.
+DSSE_PREFIXED_NAMESPACES = [
+    pytest.param("DSSEv1 45 application/vnd.opena2a.agent-request.v2+json 2 {}", id="agent-request-v2"),
+    pytest.param("DSSEv1 46 application/vnd.opena2a.action-request.v1+json 2 {}", id="action-request-v1"),
+    pytest.param(
+        "DSSEv1 53 application/vnd.opena2a.delegation-revocation.v1+json 2 {}", id="delegation-revocation-v1"
+    ),
+    pytest.param("DSSEv1 ", id="prefix-alone"),
+]
+
+# Namespaces that hold "DSSEv1" somewhere other than as the first seven
+# characters "DSSEv1 ", so the signed message does not start with it.
+NAMESPACES_NOT_DSSE_PREFIXED = [
+    pytest.param("DSSEv1", id="no-space"),
+    pytest.param("dssev1 creds", id="lower-case"),
+    pytest.param(" DSSEv1 creds", id="leading-space"),
+    pytest.param("creds DSSEv1 x", id="not-at-start"),
+]
+
+# The text of an agent-request-v1 signature starts with the method in upper
+# case and a line feed.
+METHOD_LINE_NAMESPACES = [
+    pytest.param(f"{method}\n/api/v1/agents", id=method) for method in ("GET", "POST", "PUT", "PATCH", "DELETE")
+]
+
+
+def resolvable_response(signing_key):
+    blob_b64, pub_b64 = encrypt_for_agent(b"cred", bytes(signing_key.verify_key))
+    return {
+        "encryptedBlob": blob_b64,
+        "ephemeralPubKey": pub_b64,
+        "encryptionAlg": "X25519-ChaCha20-Poly1305",
+    }
+
+
+class TestResolveRefusesAnotherFormatsStart:
+    """resolve() signs "namespace|operation|nonce", which starts with the caller's namespace."""
+
+    @pytest.mark.parametrize("namespace", DSSE_PREFIXED_NAMESPACES)
+    def test_refuses_a_namespace_beginning_with_the_dsse_prefix(self, namespace):
+        client, _ = make_test_client()
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.resolve(namespace, "read")
+
+        assert str(excinfo.value) == (
+            "Cannot resolve secret: namespace begins with 'DSSEv1 ', the first bytes of a DSSE "
+            "statement an agent key signs. A namespace cannot begin with 'DSSEv1 '."
+        )
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize("namespace", METHOD_LINE_NAMESPACES)
+    def test_refuses_a_namespace_beginning_with_a_method_and_a_line_feed(self, namespace):
+        client, _ = make_test_client()
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError, match="namespace contains a line feed"):
+                client.secrets.resolve(namespace, "read")
+
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize("namespace", NAMESPACES_NOT_DSSE_PREFIXED)
+    def test_signs_and_sends_a_namespace_not_beginning_with_the_prefix(self, namespace):
+        """Control: only the first seven characters "DSSEv1 " are refused."""
+        client, signing_key = make_test_client()
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request", return_value=resolvable_response(signing_key)) as mock_req:
+            result = client.secrets.resolve(namespace, "read")
+
+        assert result["credential"] == b"cred"
+        mock_req.assert_called_once()
+        payload = mock_req.call_args[1]["data"]
+        signed_message = f"{namespace}|read|{payload['nonce']}".encode("utf-8")
+        mock_sign.assert_called_once_with(signed_message)
+        signing_key.verify_key.verify(signed_message, base64.b64decode(payload["signature"]))
+
+
+# ---------------------------------------------------------------------------
 # Tests: Namespace CRUD
 # ---------------------------------------------------------------------------
 
