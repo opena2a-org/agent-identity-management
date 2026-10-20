@@ -301,7 +301,7 @@ func main() {
 	// Readiness probe (no auth required). Body contract:
 	// apps/backend/contracts/health-ready.schema.json.
 	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(cfg.Redis.Configured, redisClient),
-		siemReadyCheck(siemForwarder), revocationReadyCheck(revocationList)))
+		revocationReadyCheck(revocationList)))
 
 	// System status endpoint (no auth required). Its version is the stamped
 	// build version, reported as GET /health/ready reports it.

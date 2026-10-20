@@ -40,6 +40,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `Failed to get security violations` on the A2A route.
 - Tests: `apps/backend/internal/interfaces/http/handlers/list_routes_negative_limit_test.go`.
 
+### Changed: `/health/ready` reports the dependencies the service needs to answer; SIEM delivery is read on `/metrics`
+
+- `GET /health/ready` no longer carries SIEM forwarding state; read SIEM delivery on `/metrics`
+  (`aim_siem_events_sent_total`, `aim_siem_events_failed_total`, `aim_siem_events_dropped_total`), which requires
+  `METRICS_AUTH_TOKEN` off loopback.
+- The gauge `aim_siem_forwarding_failing`, added to `/metrics` beside those counters, replaces the readiness entry
+  `dependencies.siem`. It is `1` while the most recent delivery to the SIEM was not accepted after every attempt, or an
+  event was dropped after the last accepted delivery, and `0` otherwise; it is absent when no SIEM is configured. A
+  failing SIEM no longer sets `"degraded": true` in the readiness body: alert on `aim_siem_forwarding_failing == 1`
+  held for 5 minutes instead, as `docs/DEPLOYMENT.md`'s "SIEM Forwarding" describes.
+- The readiness body's `database`, `redis` and `revocationState` entries, its status codes and
+  `apps/backend/contracts/health-ready.schema.json` are unchanged.
+- Tests: `apps/backend/cmd/server/health_ready_siem_test.go` holds the readiness body, with `checkedAt` and each
+  `latencyMs` normalised, byte-identical with no SIEM, with a SIEM whose last delivery was refused and with one whose
+  last delivery was accepted, and answered 200 each time; run against the handler before this change it failed, as
+  the body carried `siem`. The same file and `apps/backend/internal/integrations/siem/metrics_test.go` read the
+  gauge: `1` after a refused delivery, `0` after an accepted one, absent without a SIEM. The SIEM integration tests
+  read delivery on `/metrics` with the token.
+
 ### Fixed — a negative offset on the agent alert, agent violation, admin alert and A2A violation routes is read as 0 (#844)
 
 - `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations`, `GET /api/v1/admin/alerts` and

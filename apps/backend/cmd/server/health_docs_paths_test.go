@@ -154,8 +154,8 @@ func readinessDependencies(t *testing.T) map[string]bool {
 	t.Helper()
 	required := map[string]bool{}
 	for _, handler := range []fiber.Handler{
-		newHealthReadyHandler(aim07CheckOK, nil, nil, nil),
-		newHealthReadyHandler(aim07CheckOK, aim07CheckOK, func() error { return nil }, func() (bool, string) { return true, "" }),
+		newHealthReadyHandler(aim07CheckOK, nil, nil),
+		newHealthReadyHandler(aim07CheckOK, aim07CheckOK, func() (bool, string) { return true, "" }),
 	} {
 		app := fiber.New()
 		app.Get("/health/ready", handler)

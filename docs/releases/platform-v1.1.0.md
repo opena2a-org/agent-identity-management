@@ -153,11 +153,13 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   chain*; *Added: `aim-breakglass chain status`, the operator's read of an organization's audit record chain*.
 - CHANGELOG: *Added: the server forwards every audit log entry it writes to a Splunk HTTP Event Collector (#657)*.
 - With SIEM forwarding configured, failed sign-ins, FGA denials, alerts and successful secrets management requests
-  reach the SIEM too. `/health/ready` reports the SIEM under `dependencies.siem`, and `/metrics` carries
-  `aim_siem_events_sent_total`, `aim_siem_events_failed_total` and `aim_siem_events_dropped_total`;
+  reach the SIEM too. `/metrics` carries the gauge `aim_siem_forwarding_failing`, `1` while delivery is failing, and
+  the counters `aim_siem_events_sent_total`, `aim_siem_events_failed_total` and `aim_siem_events_dropped_total`, and
+  requires `METRICS_AUTH_TOKEN` off loopback; `/health/ready` does not report the SIEM.
   [SIEM Forwarding](../DEPLOYMENT.md#siem-forwarding) states the loss bound. CHANGELOG: *Added: failed sign-ins and
   FGA denials reach the SIEM next to the audit log entries*; *Added: alerts and secrets management requests reach the
-  SIEM*; *Added: a refused or unreachable SIEM shows in `/health/ready` and `/metrics`, and the loss bound is stated*.
+  SIEM*; *Added: a refused or unreachable SIEM shows in `/health/ready` and `/metrics`, and the loss bound is stated*;
+  *Changed: `/health/ready` reports the dependencies the service needs to answer; SIEM delivery is read on `/metrics`*.
 - Every HTTP request other than `/metrics` emits an OpenTelemetry server span, and the `fga.authorize` spans carry
   `gen_ai.agent.id`. `OTEL_EXPORTER_OTLP_CERTIFICATE`, `OTEL_EXPORTER_OTLP_CLIENT_CERTIFICATE` and
   `OTEL_EXPORTER_OTLP_CLIENT_KEY` name the CA that verifies the collector and a client certificate and its key, and an
