@@ -41,7 +41,12 @@ const AGENT_REQUEST_METHODS: ReadonlySet<string> = new Set([
   'DELETE',
 ]);
 
-const NOTHING_SIGNED = 'nothing was signed';
+/**
+ * The stem of a signer's refusals.
+ *
+ * @internal
+ */
+export const NOTHING_SIGNED = 'nothing was signed';
 
 /** The Fix for a key that does not belong to one registered agent. */
 const CREDENTIALS_FIX =
@@ -57,7 +62,12 @@ const EMPTY_QUERY_FIX = 'Remove the ? that has nothing after it, or put the quer
 
 const BODY_FIX = 'Serialize the body once and pass that string or those bytes, exactly as they are sent.';
 
-function refusal(line: string, stem: string, fix: string): ConfigurationError {
+/**
+ * A signer's refusal: what is wrong, the stem, and a `Fix:` line.
+ *
+ * @internal
+ */
+export function refusal(line: string, stem: string, fix: string): ConfigurationError {
   return new ConfigurationError(`${line}; ${stem}\nFix: ${fix}`);
 }
 
@@ -84,12 +94,13 @@ export async function decodeAgentPrivateKey(
 }
 
 /**
- * The request target fetch sends for `url`: the serialized URL from the end of
- * its origin up to, not including, the first `#`. A URL whose query is empty (a
- * `?` with nothing after it) is refused: Node 20's fetch sends its target
- * without the `?` and Node 24's with it, so no one signature verifies on both.
+ * The origin of `url`, as the URL standard serializes it, and the request
+ * target fetch sends for `url`: the serialized URL from the end of its origin
+ * up to, not including, the first `#`. A URL whose query is empty (a `?` with
+ * nothing after it) is refused: Node 20's fetch sends its target without the
+ * `?` and Node 24's with it, so no one signature verifies on both.
  */
-function requestTarget(url: unknown, stem: string): string {
+function originAndTarget(url: unknown, stem: string): { origin: string; target: string } {
   if (typeof url !== 'string') {
     throw refusal('the url is not an absolute http or https URL', stem, URL_FIX);
   }
@@ -117,7 +128,7 @@ function requestTarget(url: unknown, stem: string): string {
   if (parsed.search === '' && target.includes('?')) {
     throw refusal('the url has an empty query, a ? with nothing after it', stem, EMPTY_QUERY_FIX);
   }
-  return target;
+  return { origin: parsed.origin, target };
 }
 
 function bodyBytes(body: unknown, stem: string): Uint8Array {
@@ -125,6 +136,75 @@ function bodyBytes(body: unknown, stem: string): Uint8Array {
   if (typeof body === 'string') return new TextEncoder().encode(body);
   if (body instanceof Uint8Array) return body;
   throw refusal('the body is not a string or bytes', stem, BODY_FIX);
+}
+
+/**
+ * A request and credentials that `checkAgentRequest` accepted, as a signer
+ * uses them.
+ *
+ * @internal
+ */
+export interface CheckedAgentRequest {
+  method: AgentRequestMethod;
+  /** The URL's origin, as the URL standard serializes it. */
+  origin: string;
+  /** The path and query string fetch sends. */
+  target: string;
+  /** The body exactly as sent; empty when there is none. */
+  body: Uint8Array;
+  agentId: string;
+  /** The 32-byte Ed25519 seed of the agent private key. */
+  seed: Uint8Array;
+  /** The agent public key in standard base64, equal to the configured one. */
+  publicKey: string;
+}
+
+/**
+ * The checks a signer runs on a request and credentials before it signs, in
+ * this order: the method, the url, the body, the agent ID, the private key,
+ * and the configured public key against the private key's. A failure throws
+ * `ConfigurationError` naming it, and nothing is signed.
+ *
+ * @internal
+ */
+export async function checkAgentRequest(
+  request: AgentRequest,
+  credentials: Pick<AgentCredentials, 'agentId' | 'privateKey' | 'publicKey'>
+): Promise<CheckedAgentRequest> {
+  const stem = NOTHING_SIGNED;
+  const method: unknown = request?.method;
+  if (typeof method !== 'string' || !AGENT_REQUEST_METHODS.has(method)) {
+    throw refusal(
+      'the method is not one of GET, POST, PUT, PATCH or DELETE in upper case',
+      stem,
+      METHOD_FIX
+    );
+  }
+  const { origin, target } = originAndTarget(request.url, stem);
+  const body = bodyBytes(request.body, stem);
+
+  const agentId: unknown = credentials?.agentId;
+  if (typeof agentId !== 'string' || agentId.length === 0) {
+    throw refusal('no agent ID is configured', stem, CREDENTIALS_FIX);
+  }
+  const { seed, publicKey } = await decodeAgentPrivateKey(credentials.privateKey, stem);
+  const publicKeyB64 = toBase64(publicKey);
+  if (publicKeyB64 !== credentials.publicKey) {
+    throw refusal(
+      'the configured agent public key is not the public key of the agent private key',
+      stem,
+      CREDENTIALS_FIX
+    );
+  }
+  return {
+    method: method as AgentRequestMethod,
+    origin,
+    target,
+    body,
+    agentId,
+    seed,
+    publicKey: publicKeyB64,
+  };
 }
 
 /**
@@ -145,31 +225,10 @@ export async function createAgentRequestHeaders(
   request: AgentRequest,
   credentials: Pick<AgentCredentials, 'agentId' | 'privateKey' | 'publicKey'>
 ): Promise<AgentRequestHeaders> {
-  const stem = NOTHING_SIGNED;
-  const method: unknown = request?.method;
-  if (typeof method !== 'string' || !AGENT_REQUEST_METHODS.has(method)) {
-    throw refusal(
-      'the method is not one of GET, POST, PUT, PATCH or DELETE in upper case',
-      stem,
-      METHOD_FIX
-    );
-  }
-  const target = requestTarget(request.url, stem);
-  const body = bodyBytes(request.body, stem);
-
-  const agentId: unknown = credentials?.agentId;
-  if (typeof agentId !== 'string' || agentId.length === 0) {
-    throw refusal('no agent ID is configured', stem, CREDENTIALS_FIX);
-  }
-  const { seed, publicKey } = await decodeAgentPrivateKey(credentials.privateKey, stem);
-  const publicKeyB64 = toBase64(publicKey);
-  if (publicKeyB64 !== credentials.publicKey) {
-    throw refusal(
-      'the configured agent public key is not the public key of the agent private key',
-      stem,
-      CREDENTIALS_FIX
-    );
-  }
+  const { method, target, body, agentId, seed, publicKey } = await checkAgentRequest(
+    request,
+    credentials
+  );
 
   // The host clock only; never a time taken from a response or the network.
   const timestamp = String(Math.floor(Date.now() / 1000));
@@ -187,6 +246,6 @@ export async function createAgentRequestHeaders(
     'X-Agent-ID': agentId,
     'X-Timestamp': timestamp,
     'X-Signature': toBase64(signature),
-    'X-Public-Key': publicKeyB64,
+    'X-Public-Key': publicKey,
   };
 }
