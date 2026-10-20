@@ -65,7 +65,8 @@ type AgentRequestNonceAdmitter interface {
 // authenticated_via, auth_method and auth_algorithm, the keys
 // PQCAgentMiddleware sets, and agent_request_scheme, which names this format.
 // It is counted by metrics.RecordAgentRequestAuthenticated under
-// metrics.AgentRequestSchemeV2.
+// metrics.AgentRequestSchemeV2. A refused request is counted by
+// metrics.RecordAgentRequestV2Refusal under its refusal's reason.
 func AgentRequestV2Middleware(agents agentauth.Source, admitter AgentRequestNonceAdmitter, audience string) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		statements := headerValues(c, domain.AgentRequestHeader)
@@ -81,7 +82,7 @@ func AgentRequestV2Middleware(agents agentauth.Source, admitter AgentRequestNonc
 			}
 		}
 		if len(statements) != 1 {
-			return agentRequestInvalid("%s must be sent once", domain.AgentRequestHeader).send(c)
+			return agentRequestStatementInvalid("%s must be sent once", domain.AgentRequestHeader).send(c)
 		}
 
 		stmt, refusal := parseAgentRequestStatement(statements[0])
@@ -165,6 +166,7 @@ func AgentRequestV2Middleware(agents agentauth.Source, admitter AgentRequestNonc
 		if !agentStatusPermitsAuth(agent.Status) {
 			return (&agentRequestRefusal{
 				status: fiber.StatusUnauthorized,
+				reason: metrics.AgentRequestV2ReasonAgentStatusDenied,
 				body:   agentauth.StatusDeniedBody(agent.Status),
 			}).send(c)
 		}
@@ -229,78 +231,133 @@ const (
 	agentRequestFreshnessUnavailableCode  = "freshnessCheckUnavailable"
 )
 
-// agentRequestRefusal is one refusal: the status and the body. No body
-// carries a value taken from the request.
+// agentRequestRefusal is one refusal: the status, the body, and the reason it
+// is counted under. No body carries a value taken from the request.
 type agentRequestRefusal struct {
 	status int
+	reason metrics.AgentRequestV2RefusalReason
 	body   map[string]string
 }
 
+// send is the one place the middleware answers a statement it refuses. It
+// counts the refusal by reason and calling SDK, then writes the response.
 func (r *agentRequestRefusal) send(c fiber.Ctx) error {
+	metrics.RecordAgentRequestV2Refusal(r.reason, c.Get("User-Agent"))
 	return c.Status(r.status).JSON(r.body)
 }
 
-func agentRequestRefused(status int, reasonCode, message string) *agentRequestRefusal {
-	return &agentRequestRefusal{status: status, body: map[string]string{"error": message, "reasonCode": reasonCode}}
+func agentRequestRefused(status int, reason metrics.AgentRequestV2RefusalReason, reasonCode, message string) *agentRequestRefusal {
+	return &agentRequestRefusal{
+		status: status,
+		reason: reason,
+		body:   map[string]string{"error": message, "reasonCode": reasonCode},
+	}
 }
 
-func agentRequestInvalid(format string, args ...any) *agentRequestRefusal {
-	return agentRequestRefused(fiber.StatusBadRequest, agentRequestInvalidRequestCode, fmt.Sprintf(format, args...))
+// agentRequestStatementInvalid refuses a statement header, or the payload it
+// carries, outside the format.
+func agentRequestStatementInvalid(format string, args ...any) *agentRequestRefusal {
+	return agentRequestRefused(fiber.StatusBadRequest, metrics.AgentRequestV2ReasonStatementMalformed,
+		agentRequestInvalidRequestCode, fmt.Sprintf(format, args...))
+}
+
+// agentRequestSignatureHeaderInvalid refuses a signature header outside the
+// format.
+func agentRequestSignatureHeaderInvalid(format string, args ...any) *agentRequestRefusal {
+	return agentRequestRefused(fiber.StatusBadRequest, metrics.AgentRequestV2ReasonSignatureHeaderMalformed,
+		agentRequestInvalidRequestCode, fmt.Sprintf(format, args...))
 }
 
 func agentRequestConflictingAuthentication(header string) *agentRequestRefusal {
-	return agentRequestRefused(fiber.StatusBadRequest, agentRequestConflictingAuthCode,
+	return agentRequestRefused(fiber.StatusBadRequest, metrics.AgentRequestV2ReasonConflictingAuthentication,
+		agentRequestConflictingAuthCode,
 		fmt.Sprintf("%s cannot be combined with %s: a request is authenticated one way", domain.AgentRequestHeader, header))
 }
 
 func agentRequestFormRefusal(member string) *agentRequestRefusal {
-	return agentRequestInvalid("%s is not in the form %s requires", member, domain.AgentRequestSchemeID)
+	return agentRequestStatementInvalid("%s is not in the form %s requires", member, domain.AgentRequestSchemeID)
 }
 
-func agentRequestMismatch(message string) *agentRequestRefusal {
-	return agentRequestRefused(fiber.StatusUnauthorized, agentRequestRequestMismatchCode, message)
+// agentRequestMismatch refuses a statement that does not name the request it
+// arrived on. The caller gets one reasonCode whatever part differs; reason
+// counts the part.
+func agentRequestMismatch(reason metrics.AgentRequestV2RefusalReason, message string) *agentRequestRefusal {
+	return agentRequestRefused(fiber.StatusUnauthorized, reason, agentRequestRequestMismatchCode, message)
 }
 
 var (
 	agentRequestAudienceNotConfigured = agentRequestRefused(fiber.StatusServiceUnavailable,
-		agentRequestAudienceNotConfiguredCode,
+		metrics.AgentRequestV2ReasonAudienceNotConfigured, agentRequestAudienceNotConfiguredCode,
 		"this server has no configured public origin and accepts no "+domain.AgentRequestSchemeID+" statement")
-	agentRequestAudienceMismatch = agentRequestRefused(fiber.StatusUnauthorized, agentRequestAudienceMismatchCode,
+	agentRequestAudienceMismatch = agentRequestRefused(fiber.StatusUnauthorized,
+		metrics.AgentRequestV2ReasonAudienceMismatch, agentRequestAudienceMismatchCode,
 		"the statement's audience is not this server's public origin")
+	agentRequestNonceRequired = agentRequestRefused(fiber.StatusBadRequest,
+		metrics.AgentRequestV2ReasonNonceMissing, agentRequestNonceRequiredCode,
+		"the signed statement has no nonce")
 	agentRequestHybridRequired = &agentRequestRefusal{
 		status: fiber.StatusUnauthorized,
+		reason: metrics.AgentRequestV2ReasonHybridRequired,
 		body:   agentauth.HybridRequiredBody("Agent is in hybrid mode: sign the statement with both Ed25519 and ML-DSA"),
 	}
-	agentRequestSingleSignatureRequired = agentRequestRefused(fiber.StatusUnauthorized, agentRequestSingleSignatureCode,
+	agentRequestSingleSignatureRequired = agentRequestRefused(fiber.StatusUnauthorized,
+		metrics.AgentRequestV2ReasonSingleSignatureRequired, agentRequestSingleSignatureCode,
 		"Agent is not in hybrid mode: sign the statement with one of its registered keys")
-	agentRequestBehindClock = agentRequestRefused(fiber.StatusUnauthorized, agentRequestOutsideWindowCode,
+	agentRequestBehindClock = agentRequestRefused(fiber.StatusUnauthorized,
+		metrics.AgentRequestV2ReasonSkewPast, agentRequestOutsideWindowCode,
 		"request timestamp is behind the AIM database clock by more than the admission window")
-	agentRequestAheadOfClock = agentRequestRefused(fiber.StatusUnauthorized, agentRequestOutsideWindowCode,
+	agentRequestAheadOfClock = agentRequestRefused(fiber.StatusUnauthorized,
+		metrics.AgentRequestV2ReasonSkewFuture, agentRequestOutsideWindowCode,
 		"request timestamp is ahead of the AIM database clock by more than the admission window")
-	agentRequestNonceReused = agentRequestRefused(fiber.StatusUnauthorized, agentRequestNonceReusedCode,
+	agentRequestNonceReused = agentRequestRefused(fiber.StatusUnauthorized,
+		metrics.AgentRequestV2ReasonNonceReused, agentRequestNonceReusedCode,
 		"this nonce was already used by this agent")
 	agentRequestFreshnessUnavailable = agentRequestRefused(fiber.StatusServiceUnavailable,
-		agentRequestFreshnessUnavailableCode,
+		metrics.AgentRequestV2ReasonFreshnessCheckUnavailable, agentRequestFreshnessUnavailableCode,
 		"cannot check this request's time and nonce against the AIM database; nothing was recorded")
 )
 
 // agentRequestVerifyRefusal is the refusal for err from an agentauth Verify
 // method. An unknown agent, an agent with no registered key for a named
 // algorithm and a registered key that does not decode all get agentauth's one
-// body.
+// body, and are counted apart.
 func agentRequestVerifyRefusal(err error) *agentRequestRefusal {
-	refusal := &agentRequestRefusal{status: fiber.StatusUnauthorized}
 	switch {
 	case errors.Is(err, agentauth.ErrKeyNotRecognized):
-		refusal.body = agentauth.KeyNotRecognizedBody()
+		cause, _ := agentauth.KeyNotRecognizedCause(err)
+		switch cause {
+		case agentauth.KeyCauseAgentUnknown:
+			return agentRequestKeyNotRecognized(metrics.AgentRequestV2ReasonAgentLookupFailed)
+		case agentauth.KeyCauseRegisteredKeyMalformed:
+			return agentRequestKeyNotRecognized(metrics.AgentRequestV2ReasonRegisteredKeyMalformed)
+		default:
+			// The cause left that a statement can meet: the agent has no registered
+			// key for a named algorithm. agentauth's fourth cause, a presented key
+			// that is not the registered one, needs a presented key, and a statement
+			// presents none.
+			return agentRequestKeyNotRecognized(metrics.AgentRequestV2ReasonNoRegisteredKey)
+		}
 	case errors.Is(err, agentauth.ErrMLDSASignatureInvalid):
-		refusal.body = agentauth.SignatureInvalidBody(
-			"the ML-DSA signature does not verify over the statement with this agent's registered key")
+		return &agentRequestRefusal{
+			status: fiber.StatusUnauthorized,
+			reason: metrics.AgentRequestV2ReasonSignatureInvalidMLDSA,
+			body: agentauth.SignatureInvalidBody(
+				"the ML-DSA signature does not verify over the statement with this agent's registered key"),
+		}
 	default:
-		refusal.body = agentauth.SignatureInvalidBody(
-			"the Ed25519 signature does not verify over the statement with this agent's registered key")
+		return &agentRequestRefusal{
+			status: fiber.StatusUnauthorized,
+			reason: metrics.AgentRequestV2ReasonSignatureInvalidEd25519,
+			body: agentauth.SignatureInvalidBody(
+				"the Ed25519 signature does not verify over the statement with this agent's registered key"),
+		}
 	}
-	return refusal
+}
+
+// agentRequestKeyNotRecognized is agentauth's one unrecognised-key refusal,
+// counted under reason.
+func agentRequestKeyNotRecognized(reason metrics.AgentRequestV2RefusalReason) *agentRequestRefusal {
+	return &agentRequestRefusal{status: fiber.StatusUnauthorized, reason: reason, body: agentauth.KeyNotRecognizedBody()}
 }
 
 // agentRequestFreshnessErrorClass names why admission could not run, for the
@@ -367,14 +424,14 @@ var agentRequestTimestampForm = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T
 func parseAgentRequestStatement(encoded string) (*agentRequestStatement, *agentRequestRefusal) {
 	payload, ok := decodeAgentRequestBase64URL(encoded)
 	if !ok {
-		return nil, agentRequestInvalid("%s is not unpadded base64url", domain.AgentRequestHeader)
+		return nil, agentRequestStatementInvalid("%s is not unpadded base64url", domain.AgentRequestHeader)
 	}
 	names, values, dup, ok := readAgentRequestPayload(payload)
 	if !ok {
-		return nil, agentRequestInvalid("the payload is not one JSON object in valid UTF-8 with no trailing bytes")
+		return nil, agentRequestStatementInvalid("the payload is not one JSON object in valid UTF-8 with no trailing bytes")
 	}
 	if dup {
-		return nil, agentRequestInvalid("the payload repeats a member name")
+		return nil, agentRequestStatementInvalid("the payload repeats a member name")
 	}
 	defined := map[string]bool{}
 	for _, name := range agentRequestMembers {
@@ -382,7 +439,7 @@ func parseAgentRequestStatement(encoded string) (*agentRequestStatement, *agentR
 	}
 	for _, name := range names {
 		if !defined[name] {
-			return nil, agentRequestInvalid("the payload has a member %s does not define", domain.AgentRequestSchemeID)
+			return nil, agentRequestStatementInvalid("the payload has a member %s does not define", domain.AgentRequestSchemeID)
 		}
 	}
 	for _, name := range agentRequestRequiredMembers {
@@ -390,10 +447,9 @@ func parseAgentRequestStatement(encoded string) (*agentRequestStatement, *agentR
 			continue
 		}
 		if name == "nonce" {
-			return nil, agentRequestRefused(fiber.StatusBadRequest, agentRequestNonceRequiredCode,
-				"the signed statement has no nonce")
+			return nil, agentRequestNonceRequired
 		}
-		return nil, agentRequestInvalid("the payload is missing %s", name)
+		return nil, agentRequestStatementInvalid("the payload is missing %s", name)
 	}
 
 	stmt := &agentRequestStatement{payload: payload}
@@ -516,21 +572,26 @@ func (s *agentRequestStatement) mismatch(c fiber.Ctx, audience string) *agentReq
 		return agentRequestAudienceMismatch
 	}
 	if s.method != c.Method() {
-		return agentRequestMismatch("the statement's method is not this request's method")
+		return agentRequestMismatch(metrics.AgentRequestV2ReasonMethodMismatch,
+			"the statement's method is not this request's method")
 	}
 	if s.target != c.OriginalURL() {
-		return agentRequestMismatch("the statement's target is not this request's path and query")
+		return agentRequestMismatch(metrics.AgentRequestV2ReasonTargetMismatch,
+			"the statement's target is not this request's path and query")
 	}
 	body := c.BodyRaw()
 	switch {
 	case len(body) > 0 && s.bodySHA256 == nil:
-		return agentRequestMismatch("this request has a body and the statement has no body_sha256")
+		return agentRequestMismatch(metrics.AgentRequestV2ReasonBodyMismatch,
+			"this request has a body and the statement has no body_sha256")
 	case len(body) == 0 && s.bodySHA256 != nil:
-		return agentRequestMismatch("the statement has body_sha256 and this request has no body")
+		return agentRequestMismatch(metrics.AgentRequestV2ReasonBodyMismatch,
+			"the statement has body_sha256 and this request has no body")
 	case len(body) > 0:
 		sum := sha256.Sum256(body)
 		if !bytes.Equal(sum[:], s.bodySHA256) {
-			return agentRequestMismatch("body_sha256 is not the SHA-256 of this request's body")
+			return agentRequestMismatch(metrics.AgentRequestV2ReasonBodyMismatch,
+				"body_sha256 is not the SHA-256 of this request's body")
 		}
 	}
 	return nil
@@ -571,9 +632,9 @@ func parseAgentRequestSignatures(lines []string) ([]agentRequestSignature, *agen
 	}
 	switch {
 	case len(values) == 0:
-		return nil, agentRequestInvalid("%s is required", domain.AgentRequestSignatureHeader)
+		return nil, agentRequestSignatureHeaderInvalid("%s is required", domain.AgentRequestSignatureHeader)
 	case len(values) > 2:
-		return nil, agentRequestInvalid("%s carries more than two signatures", domain.AgentRequestSignatureHeader)
+		return nil, agentRequestSignatureHeaderInvalid("%s carries more than two signatures", domain.AgentRequestSignatureHeader)
 	}
 	signatures := make([]agentRequestSignature, 0, len(values))
 	for _, v := range values {
@@ -581,13 +642,13 @@ func parseAgentRequestSignatures(lines []string) ([]agentRequestSignature, *agen
 		alg, known := agentRequestSignatureAlgorithms[name]
 		sig, decoded := decodeAgentRequestBase64URL(encoded)
 		if !found || !known || !decoded || len(sig) == 0 {
-			return nil, agentRequestInvalid("each %s value is an algorithm, a colon and an unpadded base64url "+
+			return nil, agentRequestSignatureHeaderInvalid("each %s value is an algorithm, a colon and an unpadded base64url "+
 				"signature; the algorithm is Ed25519, ML-DSA-44, ML-DSA-65 or ML-DSA-87", domain.AgentRequestSignatureHeader)
 		}
 		signatures = append(signatures, agentRequestSignature{alg: alg, sig: sig})
 	}
 	if len(signatures) == 2 && (signatures[0].alg == pqc.AlgorithmEd25519) == (signatures[1].alg == pqc.AlgorithmEd25519) {
-		return nil, agentRequestInvalid("two signatures are one Ed25519 and one ML-DSA signature")
+		return nil, agentRequestSignatureHeaderInvalid("two signatures are one Ed25519 and one ML-DSA signature")
 	}
 	return signatures, nil
 }

@@ -35,6 +35,7 @@ func TestServedMetricsPassPromlint(t *testing.T) {
 	UpdateActiveAPIKeys(1)
 	RecordAuditLog("create", "agent")
 	RecordS1Refusal(S1ReasonInvalidTimestamp, "aim-sdk-python/1.0")
+	RecordAgentRequestV2Refusal(AgentRequestV2ReasonSkewPast, "AIM-SDK-TypeScript/1.4.0")
 
 	app := fiber.New()
 	app.Get("/metrics", PrometheusHandler())
