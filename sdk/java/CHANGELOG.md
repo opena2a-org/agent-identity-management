@@ -56,6 +56,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GEMINI`, `LLAMA`, `MISTRAL`, `COHERE`, `LLAMAINDEX`, `LANGGRAPH`, `HAYSTACK`, `SEMANTIC_KERNEL`, `COPILOT`,
   `ASSISTANT`, `CHATBOT`, `AUTOGPT`, `BABYAGI` and `AI_AGENT` (`ai_agent`). `AgentType.fromString` returns
   the constant for each of their values, where it returned `UNKNOWN` (#716).
+- An `agent-request-v2` signer, `AgentRequestV2` in `org.opena2a.aim.client`. The class is not public and no
+  SDK code calls it, so no request the SDK sends changes. `AgentRequestV2.headers` signs a request as an
+  `agent-request-v2` statement and returns the two headers that carry it, `X-Agent-Request` and
+  `X-Agent-Request-Signature`. The statement names the method, the path and query string OkHttp sends for the
+  URL, the URL's origin as the audience, the SHA-256 of the body when the body is not empty, the agent ID, this
+  host's clock in whole seconds and a random 16-byte nonce drawn for each call; each signature covers its DSSE v1
+  pre-authentication encoding. The agent's Ed25519 key signs the statement. Given the agent's ML-DSA key pair,
+  for an agent in hybrid mode, that key signs it too, and `X-Agent-Request-Signature` carries both signatures
+  separated by a comma and a space. A method other than GET, POST, PUT, PATCH or DELETE in upper case, a URL that
+  is not an absolute http or https URL or that carries a username, an agent ID that is not a UUID of 36
+  characters, and an Ed25519 or ML-DSA private key that is not 32 bytes long, the length of its seed, are refused
+  with `ConfigurationException` before anything is signed.
+- Tests: `AgentRequestV2Test`. Of the eight requests in `docs/specs/agent-request-v2-vectors.json` that AIM's
+  verifier accepts, the signer reproduces six byte for byte, the statement and the signature header, ML-DSA-65
+  signatures included (for the vector sent on two header lines, the one line the signer writes equals the two
+  lines joined by a comma and a space); the other two are forms it does not write, an ML-DSA-65 signature alone
+  and a statement with line breaks and its members in another order. The tests also send signed requests with
+  OkHttp to a MockWebServer on 127.0.0.1 and check each statement against the request received, verifying the
+  Ed25519 signature with the JDK's SunEC provider.
 
 ### Changed
 
