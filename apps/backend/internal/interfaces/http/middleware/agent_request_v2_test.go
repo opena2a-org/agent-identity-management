@@ -683,7 +683,7 @@ func TestAgentRequestV2_RefusesAPayloadOutsideItsForm(t *testing.T) {
 			return []byte(strings.Replace(string(v), `{"method":"GET",`, `{"method":"GET","method":"GET",`, 1))
 		}, code: "invalidRequest", message: "the payload repeats a member name"},
 		{name: "the same name twice through an escape", payload: func(v []byte) []byte {
-			return []byte(strings.Replace(string(v), `{"method":"GET",`, `{"method":"GET","method":"GET",`, 1))
+			return []byte(strings.Replace(string(v), `{"method":"GET",`, `{"method":"GET","meth\u006fd":"GET",`, 1))
 		}, code: "invalidRequest", message: "the payload repeats a member name"},
 		{name: "a member the format does not define", edit: map[string]string{"resource": `"agents"`},
 			code: "invalidRequest", message: "the payload has a member agent-request-v2 does not define"},
@@ -711,6 +711,21 @@ func TestAgentRequestV2_RefusesAPayloadOutsideItsForm(t *testing.T) {
 			code: "invalidRequest", message: form("nonce")},
 		{name: "a body_sha256 of 31 bytes", edit: map[string]string{"body_sha256": jsonString(b64url(make([]byte, 31)))},
 			code: "invalidRequest", message: form("body_sha256")},
+	}
+	// No cell repeats another's header, edit and payload: a repeated cell sends an
+	// input the table already covers.
+	type input struct{ header, edit, payload string }
+	sample := valid(newV2Harness(v2Audience, agent))
+	sentBy := map[input]string{}
+	for _, cell := range cells {
+		in := input{header: cell.header, edit: fmt.Sprintf("%q", cell.edit)}
+		if cell.payload != nil {
+			in.payload = string(cell.payload(sample))
+		}
+		if other, ok := sentBy[in]; ok {
+			t.Errorf("cell %q repeats the input of cell %q", cell.name, other)
+		}
+		sentBy[in] = cell.name
 	}
 	for _, cell := range cells {
 		t.Run(cell.name, func(t *testing.T) {
