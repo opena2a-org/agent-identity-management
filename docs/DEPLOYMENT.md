@@ -449,7 +449,7 @@ The backend forwards security events to a Splunk HTTP Event Collector (HEC) once
 | Event | `eventType` | `severity` |
 |-------|-------------|------------|
 | Every audit log entry the backend writes | `aim.audit.<action>` | `high`, `medium` or `info`, by action (see below) |
-| Every password sign-in that `POST /api/v1/public/login` or `POST /api/v1/auth/login/local` answers 401 | `aim.auth.signin_failed` | `low` |
+| Every password sign-in that `POST /api/v1/public/login` or `POST /api/v1/auth/login/local` answers 401, and each one they answer 403 because the user's organization requires sign-in through its identity provider or 500 because that requirement could not be read | `aim.auth.signin_failed` | `low` |
 | Every FGA decision of `POST /api/v1/agents/:id/authorize` that does not allow the request | `aim.fga.denied` | `medium` |
 | Every alert the backend raises | `aim.alert.created` | `info`, `medium`, `high` or `critical`, by the alert's severity (see below) |
 
@@ -521,18 +521,22 @@ The `event` of a failed sign-in is:
 }
 ```
 
-The event never carries the submitted email, the password or a token, and the caller's answer is unchanged: an unknown email and a wrong password are still answered alike. `reason` names the check that refused the sign-in:
+The event never carries the submitted email, the password or a token, and the caller's answer is unchanged: an unknown email and a wrong password are still answered alike. `reason` names the check that refused the sign-in, and Answer is the status the route answered:
 
-| Route | `reason` | Check |
-|-------|----------|-------|
-| `POST /api/v1/public/login` | `account_deactivated` | The user is deactivated or deleted. |
-| `POST /api/v1/public/login` | `registration_rejected` | The email and password match a rejected registration request. |
-| `POST /api/v1/public/login` | `email_or_password_mismatch` | No user or registration request has the email and password. |
-| `POST /api/v1/auth/login/local` | `account_locked` | The email is locked out after repeated failures. |
-| `POST /api/v1/auth/login/local` | `unknown_email` | No user with the email was read. |
-| `POST /api/v1/auth/login/local` | `account_deactivated` | The user is deactivated or deleted. |
-| `POST /api/v1/auth/login/local` | `password_not_set` | The user has no password. |
-| `POST /api/v1/auth/login/local` | `password_mismatch` | The password is not the user's. |
+| Route | Answer | `reason` | Check |
+|-------|--------|----------|-------|
+| `POST /api/v1/public/login` | 401 | `account_deactivated` | The user is deactivated or deleted. |
+| `POST /api/v1/public/login` | 401 | `registration_rejected` | The email and password match a rejected registration request. |
+| `POST /api/v1/public/login` | 401 | `email_or_password_mismatch` | No user or registration request has the email and password. |
+| `POST /api/v1/public/login` | 403 | `provider_sign_in_required` | The password is the user's, the user is not an administrator, and the user's organization requires sign-in through its identity provider. |
+| `POST /api/v1/public/login` | 500 | `sign_in_refused` | The password is the user's, the user is not an administrator, and whether the user's organization requires sign-in through its identity provider could not be read. |
+| `POST /api/v1/auth/login/local` | 401 | `account_locked` | The email is locked out after repeated failures. |
+| `POST /api/v1/auth/login/local` | 401 | `unknown_email` | No user with the email was read. |
+| `POST /api/v1/auth/login/local` | 401 | `account_deactivated` | The user is deactivated or deleted. |
+| `POST /api/v1/auth/login/local` | 401 | `password_not_set` | The user has no password. |
+| `POST /api/v1/auth/login/local` | 401 | `password_mismatch` | The password is not the user's. |
+| `POST /api/v1/auth/login/local` | 403 | `provider_sign_in_required` | The password is the user's, the user is not an administrator, and the user's organization requires sign-in through its identity provider. |
+| `POST /api/v1/auth/login/local` | 500 | `sign_in_refused` | The password is the user's, the user is not an administrator, and whether the user's organization requires sign-in through its identity provider could not be read. |
 
 A request answered 400, without an email or a password or with a body that does not parse, is not forwarded.
 
@@ -586,7 +590,7 @@ Forwarding loses events within a stated bound and keeps no copy of its own. A ba
 |-------|-------------------------|
 | Audit log entry (`aim.audit.<action>`) | The entry stays in the audit log: it is forwarded only after it is written. |
 | Alert (`aim.alert.created`) | The alert stays in the `alerts` table: it is forwarded only after it is written. |
-| Failed sign-in (`aim.auth.signin_failed`) | On `POST /api/v1/auth/login/local`, the reasons `unknown_email`, `account_deactivated` and `password_mismatch` also write an `auth_failures` row, which the lockout count reads and a later successful `POST /api/v1/auth/login/local` or `POST /api/v1/auth/reauth` with that email deletes; a successful `POST /api/v1/public/login` does not delete it. The reasons `account_locked` and `password_not_set`, and every refused `POST /api/v1/public/login`, are not stored by AIM outside the SIEM stream. |
+| Failed sign-in (`aim.auth.signin_failed`) | On `POST /api/v1/auth/login/local`, the reasons `unknown_email`, `account_deactivated` and `password_mismatch` also write an `auth_failures` row, which the lockout count reads and a later successful `POST /api/v1/auth/login/local` or `POST /api/v1/auth/reauth` with that email deletes; a successful `POST /api/v1/public/login` does not delete it. The reasons `account_locked`, `password_not_set`, `provider_sign_in_required` and `sign_in_refused`, and every refused `POST /api/v1/public/login`, are not stored by AIM outside the SIEM stream. |
 | FGA denial (`aim.fga.denied`) | When an FGA policy covers the agent and capability, the denial also writes an `access_attestations` row with its outcome. A denial without a policy, and an `ERROR` outcome, are not stored by AIM outside the SIEM stream. |
 
 The loss shows in three places:

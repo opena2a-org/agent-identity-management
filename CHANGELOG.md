@@ -277,6 +277,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   requirement. On the commit this builds on, both tests fail, the route answering `401` with the code `invalidPassword`
   in place of `202` and `500`.
 
+### Fixed — the deployment guide names the failed sign-in reasons `provider_sign_in_required` and `sign_in_refused` (#812)
+
+- `POST /api/v1/public/login` and `POST /api/v1/auth/login/local` answer a user who is not an administrator `403` for
+  their own password when the user's organization requires sign-in through its identity provider, and `500` when that
+  requirement cannot be read, and the SIEM receives each as `aim.auth.signin_failed` with the reason
+  `provider_sign_in_required` or `sign_in_refused`. `docs/DEPLOYMENT.md` said the event is sent for the sign-ins the two
+  routes answer `401`, and its reason table named neither reason.
+- The guide's event table now names the `403` and the `500`, its reason table gives both reasons for both routes and
+  the status each reason is answered with, and its table of records outside the SIEM names both reasons among those of
+  `POST /api/v1/auth/login/local` that AIM does not store.
+- Tests: `apps/backend/internal/interfaces/http/handlers/sign_in_failure_siem_docs_test.go` sends eight sign-ins to
+  both routes and holds the guide's three tables to the answers, the reasons reported and the failed attempts
+  recorded. On the commit this builds on, it fails: the event table names `401` where the routes answered `401`, `403`
+  and `500`, and the reason table has no answer column. `apps/backend/cmd/server/siem_provider_sign_in_refusals_test.go`
+  sends the `403` and the `500` of both routes through the SIEM forwarder to a collector stub and reads the two reasons
+  from the events it receives.
+
 ### Fixed: `GET /api/v1/verification-events` with `agent_id` answers `500` when the read of the agent's events fails, and reads an `offset` that is not an integer as `0`
 
 - With `agent_id` set, `ListVerificationEvents` parsed the agent id into an `err` declared inside that branch, and
