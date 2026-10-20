@@ -272,6 +272,8 @@ var admittedStatusReads = map[string]struct {
 }{
 	"interfaces/http/middleware/pqc_agent_auth.go#PQCAgentMiddleware":         {1, "after the signature verifies, through LoadVerifiedAgent"},
 	"interfaces/http/middleware/ed25519_agent_auth.go#Ed25519AgentMiddleware": {1, "after the signature verifies, through LoadVerifiedAgent"},
+	"interfaces/http/middleware/agent_request_v2.go#AgentRequestV2Middleware": {
+		1, "after the statement's signatures verify and its nonce is admitted, through LoadVerifiedAgent"},
 	"interfaces/http/handlers/oauth_token_handler.go#*OAuthTokenHandler.processTokenRequest": {
 		1, "after the assertion's signature verifies, through LoadVerifiedAgent"},
 	"interfaces/http/handlers/verification_handler.go#*VerificationHandler.CreateVerification": {
