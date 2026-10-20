@@ -11,6 +11,28 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: `/metrics` counts the `agent-request-v2` requests the server refuses, by reason and calling SDK
+
+- `aim_agent_request_v2_refusals_total` counts each request carrying an `agent-request-v2` statement that
+  `AgentRequestV2Middleware` refuses, by `reason`, the kind of refusal, and by `sdk`, the calling SDK derived from the
+  `User-Agent` header as for `aim_s1_refusals_total`. The middleware counts a refusal in the one place it answers a
+  statement it refuses, before it writes the response, and moves no `aim_s1_refusals_total` series.
+- `reason` takes 21 values: `audience_not_configured`, `conflicting_authentication`, `statement_malformed`,
+  `nonce_missing`, `signature_header_malformed`, `audience_mismatch`, `method_mismatch`, `target_mismatch`,
+  `body_mismatch`, `agent_lookup_failed`, `no_registered_key`, `registered_key_malformed`,
+  `signature_invalid_ed25519`, `signature_invalid_mldsa`, `hybrid_required`, `single_signature_required`,
+  `skew_past`, `skew_future`, `nonce_reused`, `freshness_check_unavailable` and `agent_status_denied`. A value
+  outside this set is counted as `unclassified`, which the middleware does not pass.
+- The responses are unchanged. Where one `reasonCode` answers several causes (`invalidRequest`, `requestMismatch`,
+  `agentKeyNotRecognized`, `signatureInvalid`, `timestampOutsideWindow`), `reason` tells them apart for operators.
+  `apps/backend/docs/OBSERVABILITY.md` lists each reason with the response it counts.
+- No route mounts `AgentRequestV2Middleware`, so no request is counted here yet.
+- Tests: `apps/backend/internal/infrastructure/metrics/agent_request_v2_refusals_test.go` and
+  `apps/backend/internal/interfaces/http/middleware/agent_request_v2_refusal_count_test.go`, which sends 37 refused
+  requests, at least one for each of the 21 reasons, and reads both refusal families from `/metrics` before and after
+  each, and checks the middleware's source: its handler answers a statement only by passing the request on or
+  through the counting refusal, and every refusal names a reason of the set.
+
 ### Added: `/metrics` counts the requests each agent signing scheme authenticates
 
 - `aim_agent_requests_authenticated_total` counts the requests an agent's signature authenticated, by `type`, the

@@ -165,6 +165,59 @@ Two patterns the split is there to show:
 sum by (reason, sdk) (rate(aim_s1_refusals_total[5m]))
 ```
 
+### Refused `agent-request-v2` statements
+
+A request that carries an `agent-request-v2` statement in `X-Agent-Request` is checked by `AgentRequestV2Middleware`. A request it refuses is counted on the backend's `/metrics` endpoint in `aim_agent_request_v2_refusals_total{reason, sdk}`, and in no `aim_s1_refusals_total` series. No route mounts the middleware yet, so no request is counted here until one does.
+
+| `reason` | The request was refused because | Response |
+|---|---|---|
+| `audience_not_configured` | the server has no configured public origin, so it accepts no statement | 503 `audienceNotConfigured` |
+| `conflicting_authentication` | the request also carries `Authorization`, `X-API-Key` or a header the other agent signature checks read | 400 `conflictingAuthentication` |
+| `statement_malformed` | `X-Agent-Request` is not sent once, is not unpadded base64url, or does not carry one JSON object whose members are each defined, present once and in their form | 400 `invalidRequest` |
+| `nonce_missing` | the payload has no `nonce` | 400 `nonceRequired` |
+| `signature_header_malformed` | `X-Agent-Request-Signature` is absent, carries more than two values, a value that is not an algorithm, a colon and an unpadded base64url signature, or two values that are not one Ed25519 and one ML-DSA signature | 400 `invalidRequest` |
+| `audience_mismatch` | the statement's `audience` is not the configured public origin, compared byte for byte | 401 `audienceMismatch` |
+| `method_mismatch` | the statement's `method` is not the request's method | 401 `requestMismatch` |
+| `target_mismatch` | the statement's `target` is not the request's path and query as received | 401 `requestMismatch` |
+| `body_mismatch` | `body_sha256` is absent beside a body, present beside none, or the SHA-256 of other bytes | 401 `requestMismatch` |
+| `agent_lookup_failed` | the agent does not exist, or loading it failed | 401 `agentKeyNotRecognized` |
+| `no_registered_key` | the agent has no registered key for an algorithm a signature names, including an ML-DSA key of another level | 401 `agentKeyNotRecognized` |
+| `registered_key_malformed` | the registered key does not decode to a key of its algorithm family | 401 `agentKeyNotRecognized` |
+| `signature_invalid_ed25519` | the Ed25519 signature does not verify over the statement | 401 `signatureInvalid` |
+| `signature_invalid_mldsa` | the ML-DSA signature does not verify over the statement | 401 `signatureInvalid` |
+| `hybrid_required` | the agent is in hybrid mode and the request carries one signature | 401 `hybridSignatureRequired` |
+| `single_signature_required` | the agent is not in hybrid mode and the request carries two signatures | 401 `singleSignatureRequired` |
+| `skew_past` | the timestamp is more than 30 seconds behind the database clock | 401 `timestampOutsideWindow` |
+| `skew_future` | the timestamp is more than 30 seconds ahead of the database clock | 401 `timestampOutsideWindow` |
+| `nonce_reused` | the agent has already used the nonce | 401 `nonceReused` |
+| `freshness_check_unavailable` | the timestamp and nonce could not be checked against the database | 503 `freshnessCheckUnavailable` |
+| `agent_status_denied` | the agent's status is neither `verified` nor `pending` | 401 `agentStatusDenied` |
+
+Where one `reasonCode` answers several causes, `reason` tells them apart for operators only: `agent_lookup_failed`, `no_registered_key` and `registered_key_malformed` all answer `{"error":"the signing key is not the registered key of a known agent","reasonCode":"agentKeyNotRecognized"}`, so a caller holding only an agent id learns nothing about that agent. The agent's status is read only after the signatures verify and the nonce is admitted, so `agent_status_denied` counts requests signed with the agent's own keys.
+
+The set is closed. `unclassified` exists only as a guard: the middleware never produces it, and seeing it means a refusal was recorded without a reason from the table. `sdk` is derived from `User-Agent` as for `aim_s1_refusals_total`. Neither label carries anything the request sent: no agent id, statement, signature or raw `User-Agent`.
+
+Three patterns the split is there to show:
+
+- `skew_past` or `skew_future` rising for every `sdk` at once points at the database clock. A fast database clock shows as `skew_past`, a slow one as `skew_future`.
+- `hybrid_required` rising at one deployment while Ed25519 requests pass can point at a proxy that drops a repeated `X-Agent-Request-Signature` header line.
+- `target_mismatch` rising for every `sdk` can point at a proxy that rewrites the path or query between the agent and the server.
+
+```promql
+sum by (reason, sdk) (rate(aim_agent_request_v2_refusals_total[5m]))
+```
+
+The share of `agent-request-v2` requests refused, with `aim_agent_requests_authenticated_total`, which counts the ones authenticated:
+
+```promql
+sum(rate(aim_agent_request_v2_refusals_total[5m]))
+/
+(
+  sum(rate(aim_agent_request_v2_refusals_total[5m]))
+  + sum(rate(aim_agent_requests_authenticated_total{type="agent-request-v2"}[5m]))
+)
+```
+
 ## Sample queries
 
 ### Tempo (TraceQL)
