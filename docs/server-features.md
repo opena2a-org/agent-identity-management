@@ -1,6 +1,6 @@
 # AIM server features
 
-What the AIM server adds over the SDKs' local checks: the authorization engine, the trust score, attestation of MCP servers, privileged access management, security event forwarding to Splunk and Microsoft Sentinel, and the web dashboard. Available in the self-hosted and AIM Cloud deployment modes, except SIEM forwarding, which runs in self-hosted deployments only. A CyberArk connector is planned.
+What the AIM server adds over the SDKs' local checks: the authorization engine, the trust score, attestation of MCP servers, privileged access management, security event forwarding to Splunk and Microsoft Sentinel, agent credentials read from a CyberArk vault, and the web dashboard. Available in the self-hosted and AIM Cloud deployment modes, except SIEM forwarding and the CyberArk secrets backend, which run in self-hosted deployments only.
 
 ## 5-step Fine-Grained Authorization
 
@@ -36,9 +36,11 @@ Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and report
 
 Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. Human approval gates, break-glass override, and certification campaigns.
 
-## CyberArk integration (planned)
+## CyberArk integration
 
-Not available yet. The `cyberark` package in the source tree is not connected to the server. A Central Credential Provider (CCP) connector for vaulted credential retrieval is planned for self-hosted deployments. Sending session events to Privileged Session Manager (PSM) is under evaluation: no CyberArk interface that accepts them has been identified.
+A self-hosted server reads agent credentials from a CyberArk vault through the Central Credential Provider (CCP). With `CYBERARK_CCP_URL`, `CYBERARK_CCP_APP_ID` and `CYBERARK_CCP_SAFE` set, a secrets namespace created with `"backendType": "cyberark_ccp"` is held by the account named `aim-secrets-<namespace id>` in that safe: `POST /api/v1/secrets/resolve` reads the account through CCP for the agent that owns the namespace and answers with its content encrypted to the agent's key. The credential is stored and rotated in CyberArk; a store or a rotation through AIM is answered `409`. See [CyberArk Central Credential Provider](DEPLOYMENT.md#cyberark-central-credential-provider).
+
+Sending session events to Privileged Session Manager (PSM) is under evaluation: no CyberArk interface that accepts them has been identified.
 
 ## SIEM adapters
 

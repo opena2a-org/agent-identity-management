@@ -139,6 +139,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   request, and the curl bodies the guide posts to the agent route and the quickstart posts to the agent and MCP server
   routes against the member names of each route's request type.
 
+### Added — agents read credentials from a CyberArk vault through the Central Credential Provider, turned on by `CYBERARK_CCP_URL` (#657)
+
+- On the base commit no non-test Go file imported `internal/integrations/cyberark`. With `CYBERARK_CCP_URL`,
+  `CYBERARK_CCP_APP_ID` and `CYBERARK_CCP_SAFE` set, the server now registers a `cyberark_ccp` secrets backend and logs
+  `CyberArk CCP backend registered at <url> for safe "<safe>"`. `CYBERARK_CCP_CERT_PATH` and `CYBERARK_CCP_KEY_PATH`
+  set a PEM client certificate and its key, and `CYBERARK_CCP_CA_CERT_PATH` a PEM bundle that verifies the CCP server.
+  With no application ID or safe, a URL that is not `https`, or an application ID or safe holding `+`, `&`, `%` or `;`,
+  the server logs `WARNING: CyberArk CCP backend configured but failed to initialize: <reason>` and starts without the
+  backend. The environment table records the setting and startup line of each variable for unset, empty, whitespace,
+  valid and invalid values.
+- A secrets namespace created with `"backendType": "cyberark_ccp"` is held by the account named
+  `aim-secrets-<namespace id>` in that safe. `POST /api/v1/secrets/resolve` sends CCP one
+  `GET /AIMWebService/api/Accounts` naming `AppID`, `Safe` and, as `Object`, that account, and answers with the
+  account's content encrypted to the agent's key. On such a namespace, `POST /api/v1/secrets/namespaces/:id/credentials`
+  and `POST /api/v1/secrets/namespaces/:id/rotate` answer `409` with `the namespace's backend is read-only: store and
+  rotate its credential in the backend`, send nothing to CCP and write no audit entry; deleting the namespace sends
+  nothing to CCP. A resolve request is answered `403 Secret resolution refused` when the server runs without the
+  backend (deny reason `backend not available: cyberark_ccp`) and when CCP answers 404 or 500 (deny reason
+  `credential retrieval failed`).
+- `cyberark.CCPRequest.Validate` returns the error `RetrieveCredential` returns for the same request before it sends
+  anything; the backend calls it at startup with its application ID and safe.
+- Sending session events to Privileged Session Manager stays under evaluation, and the PAM service is not wired into
+  the server yet.
+- Tests: `apps/backend/internal/infrastructure/secrets/cyberark_ccp_server_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/secrets_cyberark_ccp_test.go` and
+  `apps/backend/internal/integrations/cyberark/connector_test.go` (`TestCCPRequestValidate`) against the CCP stub in
+  `ccptest`, which serves TLS and requires a client certificate signed by its own CA;
+  `TestSecretsService_CyberArkCCPRoundTrip` in `apps/backend/internal/application/secrets_external_backends_integration_test.go`
+  (integration tag) with the namespace, agent, audit and nonce repositories on PostgreSQL 16.
+
 ### Added: conformance vectors for `agent-request-v2` statements
 
 - `docs/specs/agent-request-v2-vectors.json` holds 33 requests signed as `agent-request-v2` statements, each with the

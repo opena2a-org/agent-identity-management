@@ -369,6 +369,9 @@ func (h *SecretsHandler) StoreCredential(c fiber.Ctx) error {
 		if errors.Is(err, application.ErrCredentialBlobTooLarge) {
 			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": credentialTooLargeLine})
 		}
+		if errors.Is(err, secrets.ErrBackendReadOnly) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": readOnlyBackendLine})
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	h.recordSecretsChange(c, orgID, domain.AuditActionCreate, secretCredentialResource, ns)
@@ -427,6 +430,9 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 	if err := h.secretsService.RotateCredential(nsID, blob, alg); err != nil {
 		if errors.Is(err, application.ErrCredentialBlobTooLarge) {
 			return c.Status(fiber.StatusRequestEntityTooLarge).JSON(fiber.Map{"error": credentialTooLargeLine})
+		}
+		if errors.Is(err, secrets.ErrBackendReadOnly) {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": readOnlyBackendLine})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
@@ -566,6 +572,10 @@ func getUserID(c fiber.Ctx) (uuid.UUID, error) {
 
 // credentialTooLargeLine states the size rule an encryptedBlob breaks.
 var credentialTooLargeLine = fmt.Sprintf("encryptedBlob must decode to at most %d bytes", application.MaxCredentialBlobSize)
+
+// readOnlyBackendLine answers a store or a rotation in a namespace whose
+// backend AIM reads and never writes, such as cyberark_ccp.
+const readOnlyBackendLine = "the namespace's backend is read-only: store and rotate its credential in the backend"
 
 // resolveRefusalLine is the answer to a refused resolve request. A refusal
 // the caller can correct names the member and the rule; any other refusal is

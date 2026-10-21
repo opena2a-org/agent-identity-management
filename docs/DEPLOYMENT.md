@@ -657,6 +657,29 @@ AIMSecurityEvents_CL
 | project TimeGenerated, EventType, Severity, AgentId, Details
 ```
 
+### CyberArk Central Credential Provider
+
+The backend reads agent credentials from a CyberArk vault through the Central Credential Provider (CCP) web service once `CYBERARK_CCP_URL`, `CYBERARK_CCP_APP_ID` and `CYBERARK_CCP_SAFE` are set. A secrets namespace created with `"backendType": "cyberark_ccp"` then reads its credential from CyberArk; the backend stores and rotates nothing there.
+
+| Variable | Value |
+|----------|-------|
+| `CYBERARK_CCP_URL` | The `https` base URL of the CCP web service, such as `https://ccp.example.com`, with no user information or query. The backend sends `GET <url>/AIMWebService/api/Accounts`. |
+| `CYBERARK_CCP_APP_ID` | The application ID the backend is registered under in CyberArk, sent as `AppID`. |
+| `CYBERARK_CCP_SAFE` | The safe that holds the namespaces' accounts, sent as `Safe`. |
+| `CYBERARK_CCP_CERT_PATH` | Optional. A PEM client certificate the backend presents to CCP. Set it together with `CYBERARK_CCP_KEY_PATH`, or neither. |
+| `CYBERARK_CCP_KEY_PATH` | Optional. The PEM private key of that certificate. |
+| `CYBERARK_CCP_CA_CERT_PATH` | Optional. A PEM bundle that verifies the CCP server's certificate. Unset, the system roots verify it. |
+
+With the backend registered, startup logs `CyberArk CCP backend registered at <url> for safe "<safe>"`. When the application ID or the safe is not set, the URL is not an `https` URL with a host or carries user information or a query, the application ID or the safe holds `+`, `&`, `%` or `;`, only one of the certificate pair is set, or a certificate, key or CA file cannot be read or holds no PEM the backend can use, startup logs `WARNING: CyberArk CCP backend configured but failed to initialize: <reason>` and the server runs without the backend.
+
+To give an agent a credential from CyberArk:
+
+1. Create a namespace for the agent with `POST /api/v1/secrets/namespaces`, sending `"backendType": "cyberark_ccp"`. The answer carries the namespace's `id`.
+2. In the safe, vault the credential as an account named `aim-secrets-<id>`, and let the application ID retrieve it.
+3. The agent that owns the namespace resolves it with `POST /api/v1/secrets/resolve`. The backend sends CCP one request naming `AppID`, `Safe` and, as `Object`, the account name, and the answer carries the account's content encrypted to the agent's key.
+
+`POST /api/v1/secrets/namespaces/:id/credentials` and `POST /api/v1/secrets/namespaces/:id/rotate` on such a namespace are answered `409 {"error":"the namespace's backend is read-only: store and rotate its credential in the backend"}`; nothing is sent to CCP and no audit entry is written. Deleting the namespace sends nothing to CCP, so the account stays in the safe. A resolve request is answered `403 {"error":"Secret resolution refused"}` when the server runs without the backend (the secrets audit entry's deny reason is `backend not available: cyberark_ccp`), and when CCP finds no account for the namespace or answers with an error (`credential retrieval failed`).
+
 ### Database Migrations and the Application Role
 
 `aim-server migrate` applies the pending migrations and exits without starting the server. It reads only the `POSTGRES_*` variables and is meant to run as the role that owns the schema. A missing `POSTGRES_HOST`, `POSTGRES_USER` or `POSTGRES_DB` stops it with one line that names each missing variable.

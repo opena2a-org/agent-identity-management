@@ -2235,6 +2235,276 @@
       "line": ""
     },
     {
+      "variable": "CYBERARK_CCP_URL",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_SAFE": "AIM-Secrets"
+      },
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_URL",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_SAFE": "AIM-Secrets"
+      },
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_SAFE": "AIM-Secrets"
+      },
+      "setting": "\"   \"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: CCPURL must be an https URL with a host"
+    },
+    {
+      "variable": "CYBERARK_CCP_URL",
+      "input": "valid",
+      "value": "https://ccp.example.com",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_SAFE": "AIM-Secrets"
+      },
+      "setting": "\"https://ccp.example.com\"",
+      "line": "CyberArk CCP backend registered at https://ccp.example.com for safe \"AIM-Secrets\""
+    },
+    {
+      "variable": "CYBERARK_CCP_URL",
+      "input": "invalid",
+      "value": "http://ccp.example.com",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_SAFE": "AIM-Secrets"
+      },
+      "setting": "\"http://ccp.example.com\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: CCPURL must be an https URL with a host"
+    },
+    {
+      "variable": "CYBERARK_CCP_APP_ID",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "CYBERARK_CCP_SAFE": "AIM-Secrets",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: AppID is required"
+    },
+    {
+      "variable": "CYBERARK_CCP_APP_ID",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "CYBERARK_CCP_SAFE": "AIM-Secrets",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: AppID is required"
+    },
+    {
+      "variable": "CYBERARK_CCP_APP_ID",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "CYBERARK_CCP_SAFE": "AIM-Secrets",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"   \"",
+      "line": "CyberArk CCP backend registered at https://ccp.example.com for safe \"AIM-Secrets\""
+    },
+    {
+      "variable": "CYBERARK_CCP_APP_ID",
+      "input": "valid",
+      "value": "AIM-Server",
+      "with": {
+        "CYBERARK_CCP_SAFE": "AIM-Secrets",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"AIM-Server\"",
+      "line": "CyberArk CCP backend registered at https://ccp.example.com for safe \"AIM-Secrets\""
+    },
+    {
+      "variable": "CYBERARK_CCP_APP_ID",
+      "input": "invalid",
+      "value": "AIM&Server",
+      "with": {
+        "CYBERARK_CCP_SAFE": "AIM-Secrets",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"AIM&Server\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: CCP parameter AppID holds a character CCP does not accept in a URL value (+, & or %)"
+    },
+    {
+      "variable": "CYBERARK_CCP_SAFE",
+      "input": "unset",
+      "value": null,
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: Safe is required"
+    },
+    {
+      "variable": "CYBERARK_CCP_SAFE",
+      "input": "empty",
+      "value": "",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: Safe is required"
+    },
+    {
+      "variable": "CYBERARK_CCP_SAFE",
+      "input": "whitespace",
+      "value": "   ",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"   \"",
+      "line": "CyberArk CCP backend registered at https://ccp.example.com for safe \"   \""
+    },
+    {
+      "variable": "CYBERARK_CCP_SAFE",
+      "input": "valid",
+      "value": "AIM-Secrets",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"AIM-Secrets\"",
+      "line": "CyberArk CCP backend registered at https://ccp.example.com for safe \"AIM-Secrets\""
+    },
+    {
+      "variable": "CYBERARK_CCP_SAFE",
+      "input": "invalid",
+      "value": "AIM;Secrets",
+      "with": {
+        "CYBERARK_CCP_APP_ID": "AIM-Server",
+        "CYBERARK_CCP_URL": "https://ccp.example.com"
+      },
+      "setting": "\"AIM;Secrets\"",
+      "line": "WARNING: CyberArk CCP backend configured but failed to initialize: cyberark: CCP parameter Safe holds a ';', which CCP does not accept in a property name or value"
+    },
+    {
+      "variable": "CYBERARK_CCP_CERT_PATH",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CERT_PATH",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CERT_PATH",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CERT_PATH",
+      "input": "valid",
+      "value": "/etc/aim/ccp/client-cert.crt",
+      "setting": "\"/etc/aim/ccp/client-cert.crt\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CERT_PATH",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_KEY_PATH",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_KEY_PATH",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_KEY_PATH",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_KEY_PATH",
+      "input": "valid",
+      "value": "/etc/aim/ccp/client-private-key",
+      "setting": "\"/etc/aim/ccp/client-private-key\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_KEY_PATH",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CA_CERT_PATH",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CA_CERT_PATH",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CA_CERT_PATH",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CA_CERT_PATH",
+      "input": "valid",
+      "value": "/etc/aim/ccp/ca-bundle.crt",
+      "setting": "\"/etc/aim/ccp/ca-bundle.crt\"",
+      "line": ""
+    },
+    {
+      "variable": "CYBERARK_CCP_CA_CERT_PATH",
+      "input": "invalid",
+      "value": "two\nlines",
+      "setting": "\"two\\nlines\"",
+      "line": ""
+    },
+    {
       "variable": "FGA_DAEMON_URL",
       "input": "unset",
       "value": null,

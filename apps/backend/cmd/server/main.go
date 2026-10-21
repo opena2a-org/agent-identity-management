@@ -1306,6 +1306,11 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		}
 	}
 
+	// CyberArk Central Credential Provider: enabled when CYBERARK_CCP_URL is set.
+	if ccpBackend := cyberArkCCPBackend(cfg.Secrets.CyberArkCCP); ccpBackend != nil {
+		secretsBackends[domainsecrets.BackendTypeCyberArkCCP] = ccpBackend
+	}
+
 	// Admission store for signed requests: action-request statements and
 	// secrets resolve requests each admit a nonce once through it.
 	actionRequestNonces := application.NewActionRequestNonceService(repository.NewAgentRequestNonceRepository(db))

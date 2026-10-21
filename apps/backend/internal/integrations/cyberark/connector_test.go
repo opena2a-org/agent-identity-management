@@ -678,3 +678,58 @@ func TestNewConnectorConfig(t *testing.T) {
 		})
 	}
 }
+
+// Validate returns the error RetrieveCredential returns for the same request
+// before it sends anything, and nil for a request it sends.
+func TestCCPRequestValidate(t *testing.T) {
+	stub := ccptest.New(t)
+	stub.AddAccount(ccptest.Account{AppID: testAppID, Safe: testSafe, Object: "aim-secrets-0", Content: runtimeContent(t)})
+	// No Config.AppID, so RetrieveCredential sends the request's own AppID.
+	c := connectorFor(t, stub, func(cfg *Config) { cfg.AppID = "" })
+
+	sent := CCPRequest{AppID: testAppID, Safe: testSafe, Object: "aim-secrets-0"}
+	if err := sent.Validate(); err != nil {
+		t.Fatalf("Validate refused a request CCP accepts: %v", err)
+	}
+	if _, err := c.RetrieveCredential(context.Background(), sent); err != nil {
+		t.Fatalf("RetrieveCredential: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		req  CCPRequest
+		want string
+	}{
+		{"no AppID", CCPRequest{Safe: testSafe, Object: testObject},
+			"cyberark: CCP request has no AppID; set CCPRequest.AppID or Config.AppID"},
+		{"an AppID holding +", CCPRequest{AppID: "AIM+App", Safe: testSafe, Object: testObject},
+			"cyberark: CCP parameter AppID holds a character CCP does not accept in a URL value (+, & or %)"},
+		{"an AppID holding &", CCPRequest{AppID: "AIM&App", Safe: testSafe, Object: testObject},
+			"cyberark: CCP parameter AppID holds a character CCP does not accept in a URL value (+, & or %)"},
+		{"an AppID holding %", CCPRequest{AppID: "AIM%App", Safe: testSafe, Object: testObject},
+			"cyberark: CCP parameter AppID holds a character CCP does not accept in a URL value (+, & or %)"},
+		{"an AppID holding ;", CCPRequest{AppID: "AIM;App", Safe: testSafe, Object: testObject},
+			"cyberark: CCP parameter AppID holds a ';', which CCP does not accept in a property name or value"},
+		{"a Safe holding +", CCPRequest{AppID: testAppID, Safe: "AIM+Secrets", Object: testObject},
+			"cyberark: CCP parameter Safe holds a character CCP does not accept in a URL value (+, & or %)"},
+		{"a Safe holding &", CCPRequest{AppID: testAppID, Safe: "AIM&Secrets", Object: testObject},
+			"cyberark: CCP parameter Safe holds a character CCP does not accept in a URL value (+, & or %)"},
+		{"a Safe holding %", CCPRequest{AppID: testAppID, Safe: "AIM%Secrets", Object: testObject},
+			"cyberark: CCP parameter Safe holds a character CCP does not accept in a URL value (+, & or %)"},
+		{"a Safe holding ;", CCPRequest{AppID: testAppID, Safe: "AIM;Secrets", Object: testObject},
+			"cyberark: CCP parameter Safe holds a ';', which CCP does not accept in a property name or value"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.req.Validate(); err == nil || err.Error() != tc.want {
+				t.Errorf("Validate() = %v, want %q", err, tc.want)
+			}
+			_, err := c.RetrieveCredential(context.Background(), tc.req)
+			if err == nil || err.Error() != tc.want {
+				t.Errorf("RetrieveCredential() = %v, want %q", err, tc.want)
+			}
+		})
+	}
+	if got := len(stub.Requests()); got != 1 {
+		t.Errorf("the stub received %d requests, want the one request Validate accepted", got)
+	}
+}

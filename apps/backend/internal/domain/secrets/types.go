@@ -18,11 +18,18 @@ const (
 	BackendTypeAzureKV   BackendType = "azure_keyvault"
 	BackendTypeGCPSM     BackendType = "gcp_secret_manager"
 	BackendType1Password BackendType = "1password"
+	// BackendTypeCyberArkCCP reads a namespace's credential from a CyberArk
+	// vault through the Central Credential Provider. It is read-only.
+	BackendTypeCyberArkCCP BackendType = "cyberark_ccp"
 )
 
 // ErrBackendUnavailable is returned when a backend cannot be reached.
 // Callers must NOT fall back to another backend or return plaintext.
 var ErrBackendUnavailable = errors.New("secrets backend unavailable")
+
+// ErrBackendReadOnly is returned by Store and Rotate on a backend whose
+// credentials are stored and rotated outside AIM, such as CyberArk.
+var ErrBackendReadOnly = errors.New("secrets backend is read-only")
 
 // NamespaceStatus represents the lifecycle state of a secret namespace.
 type NamespaceStatus string

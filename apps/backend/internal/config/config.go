@@ -222,13 +222,15 @@ type RegistryConfig struct {
 
 // SecretsBackendsConfig holds the external secrets backends. Each one is
 // turned on by its first variable: VAULT_ADDR, AWS_SECRETS_REGION,
-// AZURE_KEYVAULT_URL, GCP_SECRETS_PROJECT and OP_CONNECT_HOST.
+// AZURE_KEYVAULT_URL, GCP_SECRETS_PROJECT, OP_CONNECT_HOST and
+// CYBERARK_CCP_URL.
 type SecretsBackendsConfig struct {
 	Vault         VaultConfig
 	AWS           AWSSecretsConfig
 	AzureVaultURL string
 	GCPProject    string
 	OnePassword   OnePasswordConfig
+	CyberArkCCP   CyberArkCCPConfig
 }
 
 // VaultConfig holds the HashiCorp Vault backend settings (VAULT_*).
@@ -253,6 +255,20 @@ type OnePasswordConfig struct {
 	ConnectHost  string
 	ConnectToken string
 	VaultUUID    string
+}
+
+// CyberArkCCPConfig holds the CyberArk Central Credential Provider backend
+// settings (CYBERARK_CCP_*): the https base URL of the CCP web service, the
+// application ID and safe the server asks CCP for, the PEM client certificate
+// and private key the server presents, and a PEM CA bundle that verifies the
+// CCP server.
+type CyberArkCCPConfig struct {
+	URL        string
+	AppID      string
+	Safe       string
+	CertPath   string
+	KeyPath    string
+	CACertPath string
 }
 
 // FGAConfig holds the authorization engine's endpoints; empty keeps the
@@ -446,6 +462,14 @@ func Load() (*Config, error) {
 				ConnectHost:  getEnv("OP_CONNECT_HOST", ""),
 				ConnectToken: getEnv("OP_CONNECT_TOKEN", ""),
 				VaultUUID:    getEnv("OP_VAULT_UUID", ""),
+			},
+			CyberArkCCP: CyberArkCCPConfig{
+				URL:        getEnv("CYBERARK_CCP_URL", ""),
+				AppID:      getEnv("CYBERARK_CCP_APP_ID", ""),
+				Safe:       getEnv("CYBERARK_CCP_SAFE", ""),
+				CertPath:   getEnv("CYBERARK_CCP_CERT_PATH", ""),
+				KeyPath:    getEnv("CYBERARK_CCP_KEY_PATH", ""),
+				CACertPath: getEnv("CYBERARK_CCP_CA_CERT_PATH", ""),
 			},
 		},
 		FGA: FGAConfig{

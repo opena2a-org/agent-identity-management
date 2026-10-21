@@ -192,6 +192,9 @@ func startupLine(t *testing.T, name string, cfg *config.Config) string {
 			return "error: " + forwardErr.Error()
 		}
 		return line
+	case "CYBERARK_CCP_URL", "CYBERARK_CCP_APP_ID", "CYBERARK_CCP_SAFE",
+		"CYBERARK_CCP_CERT_PATH", "CYBERARK_CCP_KEY_PATH", "CYBERARK_CCP_CA_CERT_PATH":
+		return logLines("CyberArk CCP", func() { cyberArkCCPBackend(cfg.Secrets.CyberArkCCP) })
 	case "REGISTRY_URL", "ATC_CRL_ENDPOINT":
 		line, err := revocationListStartupLine(cfg.Registry)
 		if err != nil {
