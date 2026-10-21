@@ -34,7 +34,14 @@ Multi-agent consensus. 3+ attesters across 2+ owners, each connecting and report
 
 ## Privileged Access Management
 
-Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. Human approval gates, break-glass override, and certification campaigns.
+Three tiers: STANDARD, PRIVILEGED, SUPER_PRIVILEGED. The routes under `/api/v1/pam` keep the approvals, break-glass declarations and certification campaigns of the caller's organization; a record of another organization is answered `404`.
+
+- `GET /api/v1/pam/tiers` lists the tier registry. A capability the registry does not hold is STANDARD.
+- A member, manager or admin requests approval for a SUPER_PRIVILEGED capability of one of the organization's agents with `POST /api/v1/pam/approvals`. The request waits five minutes for an admin other than the requester to answer `APPROVED` or `DENIED` with `POST /api/v1/pam/approvals/:id/decision`; `GET /api/v1/pam/approvals/:id` reads its status.
+- An admin declares a break-glass emergency for agents of the organization with `POST /api/v1/pam/emergencies`, for at most 60 minutes. An admin other than the declarer extends it once, by 15 minutes, with `POST /api/v1/pam/emergencies/:id/extend`, and an admin ends it with `POST /api/v1/pam/emergencies/:id/revoke`.
+- An admin creates a certification campaign with `POST /api/v1/pam/campaigns`. While it is open, a manager or admin records a decision on an agent's capability with `POST /api/v1/pam/campaigns/:id/decisions`.
+
+Requesting and deciding an approval, and declaring, extending and revoking an emergency, write an audit log entry. The capability verification and authorization routes do not read approvals, emergency declarations or certification decisions.
 
 ## CyberArk integration
 

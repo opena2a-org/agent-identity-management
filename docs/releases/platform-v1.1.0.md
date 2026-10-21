@@ -406,21 +406,21 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 42 migrations, `098_mcp_manifest_baselines.sql` to
-`140_organization_references_allow_organization_delete.sql`. Measured on 2026-10-19 on an Apple M4 Max laptop with
+Upgrading from 1.0.0 applies 43 migrations, `098_mcp_manifest_baselines.sql` to
+`141_pam_records_belong_to_an_organization.sql`. Measured on 2026-10-21 on an Apple M4 Max laptop with
 PostgreSQL 18.3: a database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own
-transaction and recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. Then
-`aim-server migrate`, built from a tree whose last migration is
-`140_organization_references_allow_organization_delete.sql`, was timed against it with `/usr/bin/time -p`, three runs
-on separate copies, each copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that
-laptop, while the laptop ran other work and its one-minute load average read 7.04 before the runs and 6.10 after them.
-Each run logged `Successfully applied 42 pending migration(s)`:
+transaction and recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. The two databases
+with 1,000,000 rows were then vacuumed and analyzed. Then `aim-server migrate`, built from a tree whose last migration
+is `141_pam_records_belong_to_an_organization.sql`, was timed against it with `/usr/bin/time -p`, three runs on
+separate copies, each copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that laptop,
+while the laptop ran other work and its one-minute load average read 18.45 before the runs and 16.96 after them.
+Each run logged `Successfully applied 43 pending migration(s)`:
 
 | 1.0.0 database | Wall time, three runs |
 |----------------|-----------------------|
-| only the rows the migrations write, 14 MB | 0.20 s, 0.10 s, 0.10 s |
-| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 823 MB | 0.88 s, 1.35 s, 3.61 s |
-| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 827 MB | 5.83 s, 3.20 s, 2.79 s |
+| only the rows the migrations write, 14 MB | 0.18 s, 0.10 s, 0.09 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 994 MB | 0.71 s, 0.93 s, 1.17 s |
+| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 993 MB | 2.83 s, 2.56 s, 2.88 s |
 
 The time grows with the size of the tables the migrations alter or index. The third database is the second with
 10,000 of its `audit_logs` rows written as such role changes;

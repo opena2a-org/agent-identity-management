@@ -11,6 +11,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — routes under `/api/v1/pam` for the capability tier registry, approvals of SUPER_PRIVILEGED capabilities, break-glass declarations and certification campaigns of an organization (#657)
+
+- On the base commit no non-test Go file called `NewPAMService`, and a request to `/api/v1/pam/tiers` or any of the
+  routes below was answered `404`. The server now builds the PAM service and mounts thirteen routes behind the
+  dashboard session check: any signed-in user of an organization reads them; a member, manager or admin requests an
+  approval; an admin decides one, declares, extends and revokes an emergency and creates a campaign; a manager or admin
+  records a certification decision.
+- An approval is requested for a capability the tier registry holds as SUPER_PRIVILEGED, for an agent of the caller's
+  organization, and waits five minutes for a decision. The user who requested it cannot decide it (`403`); a decided
+  or expired one is answered `409`. A break-glass declaration names agents of the organization and lasts at most 60
+  minutes; an admin other than the declarer extends it once, by 15 minutes from its expiry, and an admin can revoke it
+  while it is active. A certification decision is recorded while its campaign is open, for the agent and tier the
+  campaign covers. An approval, declaration, campaign or agent of another organization is answered `404`. The
+  verification and authorization routes do not read these records.
+- Migration `141_pam_records_belong_to_an_organization.sql` adds `organization_id` to `emergency_declarations` and
+  `certification_campaigns` (`ON DELETE CASCADE`) and `requested_by` to `pending_approvals` (`ON DELETE SET NULL`).
+  The upgrade from 1.0.0 now applies 43 migrations; `docs/releases/platform-v1.1.0.md` carries its timing again.
+- Tests: `apps/backend/internal/application/pam_service_test.go` (sqlmock),
+  `apps/backend/internal/interfaces/http/handlers/pam_handler_test.go`, and
+  `apps/backend/cmd/server/pam_routes_test.go`, which sends each route a request with no session and with a viewer,
+  member, manager and admin session through the route table `mountAPIRoutes` builds; on the base commit all 65 of
+  those requests were answered `404`.
+
 ### Fixed — the server refuses to start with a signing key the card attestation conformance vector publishes (#617)
 
 `docs/specs/card-attestation-v2-vector.json` publishes two Ed25519 seeds so that anyone can reproduce its signatures, and so anyone can sign with them. The server now stops at startup when `AIM_SIGNING_KEY_CARD_ATTESTATION` or `AIM_SIGNING_KEY_ATC_ISSUER` holds either seed, or when `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` or `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED` lists the public key of either seed, with an error that names the variable and not its value. A seed of your own loads as before.
