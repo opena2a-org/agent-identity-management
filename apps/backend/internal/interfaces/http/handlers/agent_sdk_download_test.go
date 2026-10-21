@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -26,6 +27,13 @@ import (
 // agentSDKDownload answers GET /agents/:id/sdk<query> for a member of the agent's organization,
 // and returns the status, the headers and the body.
 func agentSDKDownload(t *testing.T, query string) (int, http.Header, []byte) {
+	t.Helper()
+	return agentSDKDownloadAt(t, "", query)
+}
+
+// agentSDKDownloadAt is agentSDKDownload for a request whose Host header is host; an empty
+// host leaves the header httptest gives the request.
+func agentSDKDownloadAt(t *testing.T, host, query string) (int, http.Header, []byte) {
 	t.Helper()
 	orgID, userID, agentID := uuid.New(), uuid.New(), uuid.New()
 	agents := &MockAgentServiceImpl{
@@ -52,7 +60,11 @@ func agentSDKDownload(t *testing.T, query string) (int, http.Header, []byte) {
 	app := createTestAppWithAuth(handler, orgID, userID)
 	app.Get("/agents/:id/sdk", handler.DownloadSDK)
 
-	resp, err := app.Test(httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk"+query, nil))
+	req := httptest.NewRequest("GET", "/agents/"+agentID.String()+"/sdk"+query, nil)
+	if host != "" {
+		req.Host = host
+	}
+	resp, err := app.Test(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
@@ -154,6 +166,60 @@ func TestAgentSDKDownload_NamesTheVersionTheSDKDownloadNames(t *testing.T) {
 	require.Equal(t, fiber.StatusOK, status, string(body))
 	assert.Equal(t, sdkHeader.Get("Content-Disposition"), header.Get("Content-Disposition"))
 	assert.Equal(t, "attachment; filename=aim-sdk-python-v"+string(bytes.TrimSpace(version))+".zip", header.Get("Content-Disposition"))
+}
+
+// The package's config.py and README name the server at the host and port the request reached
+// it on: a package downloaded from 127.0.0.1:18080 names http://127.0.0.1:18080, where it named
+// http://127.0.0.1 (#792).
+func TestAgentSDKDownload_NamesThePortTheRequestReached(t *testing.T) {
+	t.Setenv("SDK_BASE_DIR", sdkTreeWithPythonVersion(t, "7.8.9\n"))
+
+	cases := []struct {
+		host   string
+		aimURL string
+	}{
+		{"127.0.0.1:18080", "http://127.0.0.1:18080"},
+		{"localhost:8080", "http://localhost:8080"},
+		{"[::1]:8080", "http://[::1]:8080"},
+		// A public host gets https and keeps its port.
+		{"aim.example.com:8443", "https://aim.example.com:8443"},
+		// No port in the request: none in the URL.
+		{"aim.example.com", "https://aim.example.com"},
+		{"127.0.0.1", "http://127.0.0.1"},
+		// The scheme's own port is left out before a public host gets https.
+		{"aim.example.com:80", "https://aim.example.com"},
+		{"localhost:80", "http://localhost"},
+		// A port that is not a number from 1 to 65535 is left out.
+		{"aim.example.com:0", "https://aim.example.com"},
+		{"aim.example.com:65536", "https://aim.example.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.host, func(t *testing.T) {
+			status, _, body := agentSDKDownloadAt(t, tc.host, "?language=python")
+			require.Equal(t, fiber.StatusOK, status, string(body))
+
+			files := zipTexts(t, body)
+			assert.Contains(t, files["aim_sdk/config.py"], "AIM_URL = \""+tc.aimURL+"\"\n")
+			assert.Contains(t, files["README.md"], "- **AIM Server**: "+tc.aimURL+"\n")
+		})
+	}
+}
+
+// A Host header whose port is empty or holds something other than digits is left without its
+// port. app.Test refuses to send aim.example.com:abc, so this sets the header on the request
+// context.
+func TestGetAIMBaseURL_LeavesOutAPortThatIsNotANumber(t *testing.T) {
+	app := fiber.New()
+	for _, host := range []string{"aim.example.com:abc", "aim.example.com:+80", "aim.example.com:"} {
+		t.Run(host, func(t *testing.T) {
+			fctx := &fasthttp.RequestCtx{}
+			fctx.Request.Header.SetHost(host)
+			c := app.AcquireCtx(fctx)
+			defer app.ReleaseCtx(c)
+			require.Equal(t, host, c.Host(), "the request carries the header as written")
+			assert.Equal(t, "https://aim.example.com", getAIMBaseURL(c))
+		})
+	}
 }
 
 // Without a version to name, the route sends no package rather than one stamped with a number

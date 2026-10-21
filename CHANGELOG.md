@@ -11,6 +11,26 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `GET /api/v1/agents/:id/sdk` names the server with the port the request reached it on (#792)
+
+- The Python package's `aim_sdk/config.py` (`AIM_URL`) and `README.md` (`AIM Server`) name the host of the request
+  the package was downloaded with together with its port: a request to `127.0.0.1:18080` names
+  `http://127.0.0.1:18080`. Before this change both files left the port out for each of the four hosts with a port
+  the tests send (`127.0.0.1:18080`, `localhost:8080`, `[::1]:8080` and `aim.example.com:8443`), and a request to
+  `127.0.0.1:18080` named `http://127.0.0.1`. The scheme's own port (80 for http, 443 for https) and a port that is
+  not a number from 1 to 65535 are left out: a plain-http request to `aim.example.com:80` names
+  `https://aim.example.com`.
+- The comments on the compliance, drift detection and user feedback factors in
+  `apps/backend/internal/application/trust_calculator.go` say that the calculation leaves a factor with no data out
+  of the weighted mean and counts its 0.5 placeholder in the 9-factor sum that caps the composite. They said the
+  factor was excluded from the composite and the 0.5 a display placeholder only. The calculation is unchanged.
+- Tests: `TestAgentSDKDownload_NamesThePortTheRequestReached` and `TestGetAIMBaseURL_LeavesOutAPortThatIsNotANumber`
+  in `apps/backend/internal/interfaces/http/handlers/agent_sdk_download_test.go`, `TestGetAIMBaseURL_HTTP` and
+  `TestGetAIMBaseURL_DifferentHosts` in `apps/backend/internal/interfaces/http/handlers/agent_handler_test.go`, and
+  `apps/backend/internal/application/trust_score_excluded_factors_docs_test.go`, which now also reads the
+  calculator, `apps/backend/internal/domain/trust_score.go` and
+  `apps/backend/internal/interfaces/http/handlers/trust_score_handler.go`.
+
 ### Added — `GET /api/v1/agents/:id/feedback` returns the counts and the average of an agent's user ratings (#666)
 
 - The route answers the number of ratings users have given the agent (`total`), how many are positive (4 or 5),

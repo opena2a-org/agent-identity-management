@@ -57,12 +57,17 @@ func TestTrustScoreDocs_ListedFactorsCountThroughTheCap(t *testing.T) {
 		"docs/sdk/trust-scoring.md",
 		"docs/API.md",
 		"sdk/python/aim_sdk/client.py",
+		// The comments on the calculation, the score type and the routes that answer it.
+		"apps/backend/internal/application/trust_calculator.go",
+		"apps/backend/internal/domain/trust_score.go",
+		"apps/backend/internal/interfaces/http/handlers/trust_score_handler.go",
 	} {
 		text := strings.ToLower(aim02ReadFile(t, root, rel))
 		for _, claim := range []string{
 			"excluded from the composite",
 			"excluded from the score",
 			"never contributes a fabricated neutral value",
+			"never a contribution",
 		} {
 			assert.NotContains(t, text, claim, "%s says the factors excludedFactors lists are left out of the score", rel)
 		}
