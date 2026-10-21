@@ -936,6 +936,9 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 			offset = parsedOffset
 		}
 	}
+	if offset < 0 {
+		offset = 0 // read a negative offset as the first page
+	}
 
 	// Get alerts
 	alerts, total, err := h.getAlertService().GetAlerts(

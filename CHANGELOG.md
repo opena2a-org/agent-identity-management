@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a negative offset on the agent alert, agent violation, admin alert and A2A violation routes is read as 0 (#844)
+
+- `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations`, `GET /api/v1/admin/alerts` and
+  `GET /api/v1/a2a/security/violations` read a negative `offset` as 0. `offset=-1` and `offset=-100` reach the page
+  query (`LIMIT $2 OFFSET $3`) as offset 0 and are answered 200 with the first page; the first three routes echo
+  `"offset": 0`. `offset=0` and `offset=2` reach the query as sent.
+- Before, each of the four handlers sent the negative offset to that query unchanged. PostgreSQL refuses a negative
+  `OFFSET` (`ERROR: OFFSET must not be negative`, measured on PostgreSQL 14.21 with a bound offset of -1 and of
+  -100), and with the page query refused, a member's session was answered 500: `Failed to fetch alerts` on both
+  alert routes, `An internal error occurred. Please try again later.` on the agent violation route and
+  `Failed to get security violations` on the A2A route.
+- Tests: `apps/backend/internal/interfaces/http/handlers/list_routes_negative_offset_test.go`.
+
 ### Fixed — a negative offset on the MCP server audit log route is read as 0 (#841)
 
 - `GET /api/v1/mcp-servers/:id/audit-logs` reads a negative `offset` as 0. `offset=-1` and `offset=-100` are answered

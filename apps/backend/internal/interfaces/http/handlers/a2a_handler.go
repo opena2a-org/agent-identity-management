@@ -2014,6 +2014,9 @@ func (h *A2AHandler) GetSecurityViolations(c fiber.Ctx) error {
 			offset = o
 		}
 	}
+	if offset < 0 {
+		offset = 0 // read a negative offset as the first page
+	}
 
 	violations, err := h.a2aService.GetSecurityViolations(c.Context(), orgID, limit, offset)
 	if err != nil {
