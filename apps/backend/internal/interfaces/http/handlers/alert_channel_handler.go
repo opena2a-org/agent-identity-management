@@ -14,6 +14,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // AlertChannelServicer is what AlertChannelHandler needs of the alert channel
@@ -129,7 +130,7 @@ func (h *AlertChannelHandler) CreateAlertChannel(c fiber.Ctx) error {
 	userID, _ := c.Locals("user_id").(uuid.UUID)
 
 	// A revoked session cannot have the organization's alerts sent to a destination it chooses.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "alert_channel_create") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, middleware.CredentialRouteAlertChannelCreate) {
 		return nil
 	}
 
@@ -210,7 +211,7 @@ func (h *AlertChannelHandler) UpdateAlertChannel(c fiber.Ctx) error {
 	}
 
 	// A revoked session cannot have the organization's alerts sent to a destination it chooses.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, "alert_channel_update") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.audit, middleware.CredentialRouteAlertChannelUpdate) {
 		return nil
 	}
 

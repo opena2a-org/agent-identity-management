@@ -123,8 +123,11 @@ func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 		// through the revoker's cache: at once on the instance that wrote the
 		// revocation, and on another once its cached answer lapses. Both answer
 		// the same body. A token minted before sessions carried a family has
-		// none to read.
+		// none to read. At a credential route a refusal whose session the
+		// store confirms revoked is recorded as credential_mint_refused, as
+		// the route records the refusals it makes itself.
 		if jwtService.IsSessionRevoked(c.Context(), claims.ID, claims.AccessFamilyID()) {
+			recordRevokedSessionAtCredentialRoute(c, jwtService, claims)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Token has been revoked",
 			})

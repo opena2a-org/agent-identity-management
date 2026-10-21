@@ -19,6 +19,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // SDKHandler handles SDK download operations
@@ -89,7 +90,7 @@ func (h *SDKHandler) DownloadSDK(c fiber.Ctx) error {
 	// 90-day SDK credential, and neither can an access token minted from an
 	// SDK-download token: a download starts a new family, and that needs a
 	// sign-in.
-	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, "sdk_download") {
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, middleware.CredentialRouteSDKDownload) {
 		return nil
 	}
 

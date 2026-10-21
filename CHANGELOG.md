@@ -11,6 +11,38 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the session middleware records a revoked session's refused request at a credential route (#738)
+
+- When the session middleware refuses an access token because its session (token family) is revoked, and the
+  request was made at a credential route, the middleware records the refusal as the route's own check records the
+  refusals it makes: one `credential_mint_refused` audit row and one `SECURITY credential_mint_refused` log line, with
+  the route's label, the cause `sessionRevoked`, the session, the token's id, the user and the organization (the
+  row's metadata holds `route`, `cause`, `familyId` and `jti`). The answer is unchanged: `401`
+  `{"error":"Token has been revoked"}`.
+- The credential routes are the 14 routes whose handler records `credential_mint_refused`, listed in
+  `middleware.CredentialRoutes`: `GET /api/v1/sdk/download`, `POST /api/v1/oauth/device/approve`,
+  `POST /api/v1/auth/sdk/recover`, `POST /api/v1/api-keys`, `GET /api/v1/agents/:id/sdk`,
+  `GET /api/v1/agents/:id/credentials`, `POST /api/v1/agents/:id/rotate-credentials`, `PUT /api/v1/agents/:id/keys`,
+  `POST /api/v1/secrets/namespaces/:id/rotate`, `POST /api/v1/webhooks`, `PUT /api/v1/webhooks/:id`,
+  `POST /api/v1/webhooks/:id/rotate-secret`, `POST /api/v1/alert-channels` and `PUT /api/v1/alert-channels/:id`. The
+  middleware and the handlers record each route under one label, taken from the same constant.
+- The refusal is recorded only when an uncached read of the revocation store confirms the session's revocation, as
+  the routes' own check requires. A token revoked by its own id while its session lives, a token that carries no
+  session, and a token whose session the store cannot read (with the revoker failing closed) are refused as before
+  and record nothing.
+- Before this change, at each of the 14 routes a sign-in's access token whose session was revoked was answered `401`
+  and no audit row was written (the new middleware tests, run against the previous middleware). In the backend's
+  handler test, a download with the access token of an SDK token family, made right after a dashboard revoke of one
+  of the family's tokens, was answered `401` and wrote no audit row and no `SECURITY` line.
+- Tests: `apps/backend/internal/interfaces/http/middleware/auth_credential_route_refusal_test.go`;
+  `apps/backend/cmd/server/credential_route_refusal_census_test.go`, which sends a revoked session's access token to
+  each GET, POST, PUT, PATCH and DELETE route the server mounts under `/api/v1` and fails unless exactly the 14
+  routes record the refusal, each under its own label;
+  `apps/backend/internal/interfaces/http/handlers/credential_route_labels_census_test.go`, which fails unless each
+  label in the table is named by exactly one handler's check and no check names a label outside it; and the dashboard
+  revoke tests in `apps/backend/internal/interfaces/http/handlers/sdk_token_handler_family_test.go`, which now expect
+  the row.
+
 ### Changed — an agent reads its own audit log with a request it signs or with its service token (#666)
 
 - `GET /api/v1/agents/:id/audit-logs` answers a request an agent signs with its Ed25519 key, and one it sends with its

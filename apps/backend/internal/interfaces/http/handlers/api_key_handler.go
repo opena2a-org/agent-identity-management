@@ -8,6 +8,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 type APIKeyHandler struct {
@@ -126,7 +127,7 @@ func (h *APIKeyHandler) CreateAPIKey(c fiber.Ctx) error {
 	// Creating an API key requires a live sign-in session: an access token
 	// minted from an SDK-download token, or one whose session was revoked, is
 	// refused.
-	if !refuseUnlessLiveSignIn(c, h.jwtService, h.auditService, "api_key_create") {
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.auditService, middleware.CredentialRouteAPIKeyCreate) {
 		return nil
 	}
 

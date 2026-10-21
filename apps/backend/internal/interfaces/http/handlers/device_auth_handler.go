@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // DeviceAuthHandler handles HTTP endpoints for the OAuth Device Authorization Grant (RFC 8628).
@@ -169,7 +170,7 @@ func (h *DeviceAuthHandler) ApproveDevice(c fiber.Ctx) error {
 
 	// A revoked browser session cannot approve a new sign-in for a command
 	// line, and neither can an access token minted from an SDK-download token.
-	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, "device_approve") {
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, middleware.CredentialRouteDeviceApprove) {
 		return nil
 	}
 

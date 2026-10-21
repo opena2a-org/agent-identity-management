@@ -13,6 +13,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/sdkgen"
 )
@@ -1034,7 +1035,7 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	}
 
 	// The SDK carries the agent's private key: a revoked session cannot download it.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_sdk_download") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, middleware.CredentialRouteAgentSDKDownload) {
 		return nil
 	}
 
@@ -1165,7 +1166,7 @@ func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 	}
 
 	// A revoked session cannot read an agent's private key with its still-valid access token.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_credentials") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, middleware.CredentialRouteAgentCredentials) {
 		return nil
 	}
 
@@ -2229,7 +2230,7 @@ func (h *AgentHandler) RotateCredentials(c fiber.Ctx) error {
 	}
 
 	// A revoked session cannot rotate an agent's key and take the new private key.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_rotate_credentials") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, middleware.CredentialRouteAgentRotateCredentials) {
 		return nil
 	}
 
@@ -2311,7 +2312,7 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 	}
 
 	// A revoked session cannot replace an agent's key with one it holds.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "agent_keys_update") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, middleware.CredentialRouteAgentKeysUpdate) {
 		return nil
 	}
 

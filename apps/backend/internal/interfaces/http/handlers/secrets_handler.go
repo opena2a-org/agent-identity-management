@@ -16,6 +16,7 @@ import (
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // SecretsHandler handles HTTP requests for the identity-native secrets
@@ -388,7 +389,7 @@ func (h *SecretsHandler) RotateCredential(c fiber.Ctx) error {
 	}
 
 	// A revoked session cannot rotate a credential with its still-valid access token.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, "secret_rotate") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.auditService, middleware.CredentialRouteSecretRotate) {
 		return nil
 	}
 
