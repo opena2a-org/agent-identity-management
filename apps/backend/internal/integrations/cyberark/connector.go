@@ -299,6 +299,14 @@ func (c *Connector) RetrieveCredential(ctx context.Context, req CCPRequest) (*CC
 	return &account, nil
 }
 
+// Validate returns the error RetrieveCredential returns for req before it sends
+// anything, and nil for a request it would send. It does not fill an empty
+// AppID from Config.AppID.
+func (r CCPRequest) Validate() error {
+	_, err := r.encode()
+	return err
+}
+
 type ccpParam struct {
 	name  string
 	value string

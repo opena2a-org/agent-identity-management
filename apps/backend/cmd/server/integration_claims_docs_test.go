@@ -17,10 +17,10 @@ import (
 // What the documentation says about integrations the server does not ship yet.
 // Measured 2026-10-16 at c679aff: the cyberark package is imported by nothing,
 // the Microsoft Sentinel adapter is not loaded, and Splunk forwarding runs in
-// self-hosted deployments only. A Markdown line that names CyberArk, Sentinel,
-// PagerDuty or Microsoft Teams states its status. When one of them is proved end
-// to end in CI, the change that proves it takes its term out of
-// unshippedIntegration and rewrites its lines in the same commit.
+// self-hosted deployments only. A Markdown line that names an integration in
+// unshippedIntegration states its status. When one of them is proved end to end
+// in CI, the change that proves it takes its term out of unshippedIntegration
+// and rewrites its lines in the same commit.
 //
 // PagerDuty is out of the term list: an organization's alerts reach it through
 // the Events API v2, proved by TestAlertChannelsRoundTrip
@@ -33,10 +33,17 @@ import (
 // Microsoft Sentinel is out of the term list: security events reach it through
 // the Logs Ingestion API, proved by TestSIEMSentinelRoundTrip
 // (siem_sentinel_integration_test.go, integration tag).
+//
+// CyberArk is out of the term list: a credential vaulted in CyberArk reaches
+// the agent that owns a cyberark_ccp secrets namespace through the Central
+// Credential Provider, proved by TestSecretsService_CyberArkCCPRoundTrip
+// (internal/application/secrets_external_backends_integration_test.go,
+// integration tag). Sending session events to CyberArk's Privileged Session
+// Manager is not shipped, so its name is the term in CyberArk's place.
 
 // unshippedIntegration matches the name of an integration the server does not
 // ship.
-var unshippedIntegration = regexp.MustCompile(`(?i)cyberark`)
+var unshippedIntegration = regexp.MustCompile(`(?i)privileged session manager|\bpsm\b`)
 
 // integrationStatus matches the words that state such an integration's status.
 var integrationStatus = regexp.MustCompile(`(?i)\b(planned|under evaluation|not available|not loaded|not supported)\b`)
@@ -55,6 +62,9 @@ var retiredIntegrationClaims = map[string][]string{
 		"A CyberArk connector and a Microsoft Sentinel adapter are planned.",
 		"The Microsoft Sentinel adapter is not loaded",
 		"A Sentinel adapter for the Logs Ingestion API is planned.",
+		"A CyberArk connector is planned.",
+		"## CyberArk integration (planned)",
+		"The `cyberark` package in the source tree is not connected to the server.",
 	},
 	"docs/DEPLOYMENT.md": {
 		"targets was retired on 14 September 2026",
@@ -80,14 +90,15 @@ var measuredIntegrationClaims = map[string][]string{
 		"MCP attestation, PAM, audit log forwarding to Splunk. |",
 	},
 	"docs/server-features.md": {
-		"except SIEM forwarding, which runs in self-hosted deployments only. A CyberArk connector is planned.",
-		"## CyberArk integration (planned)",
+		"except SIEM forwarding and the CyberArk secrets backend, which run in self-hosted deployments only.",
+		"a secrets namespace created with `\"backendType\": \"cyberark_ccp\"` is held by the account named `aim-secrets-<namespace id>` in that safe",
 		"Sending session events to Privileged Session Manager (PSM) is under evaluation",
 		"through the Azure Monitor Logs Ingestion API, with the client credentials of a Microsoft Entra application. The server does not use the HTTP Data Collector API, for which Microsoft ended support on 14 September 2026.",
 	},
 	"docs/DEPLOYMENT.md": {
 		"The backend sends events to Microsoft Sentinel through the Azure Monitor Logs Ingestion API",
 		"It does not use the HTTP Data Collector API.",
+		"The backend reads agent credentials from a CyberArk vault through the Central Credential Provider (CCP) web service",
 	},
 	"docs/API.md": {
 		"The create answer is the only one that carries the secret",
@@ -169,18 +180,22 @@ func TestUnshippedIntegrationsCarryAStatusInTheDocs(t *testing.T) {
 }
 
 // Slack is not in the term list: the example guides post to Slack from the
-// agent's own code, not through the server. PagerDuty, Microsoft Teams and
-// Microsoft Sentinel are not in it either: the server ships them.
+// agent's own code, not through the server. PagerDuty, Microsoft Teams,
+// Microsoft Sentinel and CyberArk's Central Credential Provider are not in it
+// either: the server ships them.
 func TestUnshippedIntegrationFindings(t *testing.T) {
 	sample := strings.Join([]string{
+		"PSM for privileged session recording.",
+		"Sending session events to Privileged Session Manager (PSM) is under evaluation.",
 		"CCP for vaulted credential retrieval through CyberArk.",
-		"## CyberArk integration (planned)",
 		"Microsoft Sentinel is not supported: the source tree's adapter is not loaded.",
 		"Send alerts to PagerDuty",
 		"Slack Notifications for Business Travel",
 		"Security events reach Microsoft Sentinel through the Logs Ingestion API.",
+		"Session recording in CyberArk privileged session manager.",
 	}, "\n")
 	assert.Equal(t, []string{
-		"sample.md:1: CCP for vaulted credential retrieval through CyberArk.",
+		"sample.md:1: PSM for privileged session recording.",
+		"sample.md:8: Session recording in CyberArk privileged session manager.",
 	}, unshippedIntegrationFindings("sample.md", sample))
 }

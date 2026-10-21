@@ -238,6 +238,18 @@ func renderSetting(cfg *Config, name string) (string, bool) {
 		return q(cfg.Secrets.OnePassword.ConnectToken), true
 	case "OP_VAULT_UUID":
 		return q(cfg.Secrets.OnePassword.VaultUUID), true
+	case "CYBERARK_CCP_URL":
+		return q(cfg.Secrets.CyberArkCCP.URL), true
+	case "CYBERARK_CCP_APP_ID":
+		return q(cfg.Secrets.CyberArkCCP.AppID), true
+	case "CYBERARK_CCP_SAFE":
+		return q(cfg.Secrets.CyberArkCCP.Safe), true
+	case "CYBERARK_CCP_CERT_PATH":
+		return q(cfg.Secrets.CyberArkCCP.CertPath), true
+	case "CYBERARK_CCP_KEY_PATH":
+		return q(cfg.Secrets.CyberArkCCP.KeyPath), true
+	case "CYBERARK_CCP_CA_CERT_PATH":
+		return q(cfg.Secrets.CyberArkCCP.CACertPath), true
 	case "FGA_DAEMON_URL":
 		return q(cfg.FGA.DaemonURL), true
 	case "FGA_REGISTRY_ASC_URL":
