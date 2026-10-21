@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `client.secrets.resolve()` checks, signs and sends the text a `str` subclass holds, so a member of an enum that mixes in `str` is signed as it is sent (#831)
+
+- `resolve()` read the namespace and the operation through `str()` for its refusals, signed them as an f-string
+  formats them, and sent them in a JSON body, which writes a `str` subclass as the text it holds. For a member of an
+  enum that mixes in `str`, `str()` gives `<Class>.<member>` and JSON gives the member's value; an f-string gives the
+  value on Python 3.9 and 3.10 and `<Class>.<member>` on 3.11 to 3.14 (measured on 3.9.6, 3.10.19, 3.11.14, 3.12.12,
+  3.13.12 and 3.14.3). Measured with the previous `secrets.py` for `class Namespace(str, Enum)` and
+  `class Operation(str, Enum)`:
+  - On Python 3.12.12, `resolve(Namespace.CREDS, "read")` (value `creds`) signed `Namespace.CREDS|read|<nonce>` and
+    sent `creds` as the namespace, and the signature did not verify over `creds|read|<nonce>`, the text the server
+    verifies (`namespace|operation|nonce`, built from the fields of the request). `resolve("creds", Operation.READ)`
+    (value `read`) signed `creds|Operation.READ|<nonce>` and sent `read`.
+  - On Python 3.9.6, the refusals read `<Class>.<member>`: a namespace member with the value `a|b` was signed as
+    `a|b|read|<nonce>` and sent, and one with the value `DSSEv1 x` was signed as `DSSEv1 x|read|<nonce>` and sent,
+    while `resolve("a|b")` and `resolve("DSSEv1 x")` raised `SecretsError`.
+- `resolve()` now takes the text each field holds once, and the refusals, the signed text and the request body read
+  that text. Measured on Python 3.9.6 and 3.12.12: the two members above are signed as `creds|read|<nonce>` and sent
+  as `creds` and `read`, and the members with the values `a|b` and `DSSEv1 x` raise `SecretsError` before anything
+  is signed or sent.
+- A namespace or operation that is not a `str` raises `SecretsError` (`namespace must be a str, not NoneType`, for
+  example) before anything is signed or sent. Before, `resolve(None)` signed `None|read|<nonce>` and sent the
+  namespace as `null`.
+- Tests: `tests/test_secrets.py`, `TestResolveSignsAndSendsTheTextAFieldHolds`. Two `str` subclasses stand in for the
+  two Python behaviours, so both are tested on the interpreter that runs the suite (each renders the same on 3.9.6
+  and 3.12.12): one whose `str()` and `format()` give other text than it holds (as an enum member renders on 3.11 to
+  3.14), and one whose `format()` gives the held text while `str()` gives other text (as on 3.9 and 3.10). Enum
+  members are tested as the running interpreter renders them, and `None`, an `int` and `bytes` in either field. On
+  the previous `secrets.py`, 26 of the class's 30 tests fail on Python 3.9.6 and 28 fail on 3.12.12.
+
 ### Fixed — `client.secrets.create_namespace()` refuses a namespace that `resolve()` refuses to sign (#830)
 
 - `create_namespace(agent_id, namespace, operations, url_patterns)` now raises `SecretsError` before anything is sent

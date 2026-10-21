@@ -47,9 +47,24 @@ _UNSIGNABLE_CHARACTERS = (
 )
 
 
-def _refuse_unsignable(field: str, value: Any) -> None:
+def _field_text(field: str, value: Any) -> str:
+    """Return the text a field of the signed message holds, as the request sends it.
+
+    json.dumps writes a str subclass in the request body as the text it holds.
+    str() and format() of a str subclass can give other text: a member of an
+    enum that mixes in str gives "<Class>.<member>" from str(), and from
+    format() on Python 3.11 to 3.14. The held text is taken here once, and
+    the refusals, the signed message and the request body read it.
+    """
+    if not isinstance(value, str):
+        raise SecretsError(
+            f"Cannot resolve secret: {field} must be a str, not {type(value).__name__}."
+        )
+    return str.__str__(value)
+
+
+def _refuse_unsignable(field: str, text: str) -> None:
     """Raise SecretsError if a field of the signed message holds a character it cannot carry."""
-    text = str(value)  # the text the signed message interpolates
     for character, name in _UNSIGNABLE_CHARACTERS:
         if character in text:
             raise SecretsError(
@@ -67,9 +82,9 @@ def _refuse_unsignable(field: str, value: Any) -> None:
 _DSSE_PREFIX = "DSSEv1 "
 
 
-def _refuse_dsse_prefix(namespace: Any) -> None:
+def _refuse_dsse_prefix(namespace_text: str) -> None:
     """Raise SecretsError if the namespace starts the signed message as a DSSE statement starts."""
-    if str(namespace).startswith(_DSSE_PREFIX):
+    if namespace_text.startswith(_DSSE_PREFIX):
         raise SecretsError(
             "Cannot resolve secret: namespace begins with 'DSSEv1 ', the first bytes of a DSSE "
             "statement an agent key signs. A namespace cannot begin with 'DSSEv1 '."
@@ -121,6 +136,10 @@ class SecretsClient:
         in the SDK's memory, never in the agent's application memory if used via
         the context manager pattern.
 
+        A namespace or operation that is a str subclass is checked, signed and
+        sent as the text it holds, the text JSON writes for it: for the member
+        CREDS = "creds" of an enum that mixes in str, that text is "creds".
+
         Args:
             namespace: The namespace to resolve (e.g., "github-creds")
             operation: The operation type (e.g., "read", "write")
@@ -129,9 +148,10 @@ class SecretsClient:
             Dict with "credential" (bytes), "encryptionAlg" (str), "namespace" (str)
 
         Raises:
-            SecretsError: If resolution fails, if namespace or operation contains
-                a line feed, a carriage return or "|", or if namespace begins with
-                "DSSEv1 " (in those three cases nothing is signed or sent)
+            SecretsError: If resolution fails, if namespace or operation is not
+                a str or contains a line feed, a carriage return or "|", or if
+                namespace begins with "DSSEv1 " (in those cases nothing is
+                signed or sent)
             AuthenticationError: If agent auth fails
         """
         if not self._client.signing_key:
@@ -139,22 +159,24 @@ class SecretsClient:
         if not self._client.public_key:
             raise SecretsError("Public key required for secrets resolution")
 
-        _refuse_unsignable("namespace", namespace)
-        _refuse_unsignable("operation", operation)
-        _refuse_dsse_prefix(namespace)
+        namespace_text = _field_text("namespace", namespace)
+        operation_text = _field_text("operation", operation)
+        _refuse_unsignable("namespace", namespace_text)
+        _refuse_unsignable("operation", operation_text)
+        _refuse_dsse_prefix(namespace_text)
 
         # Build nonce: timestamp:uuid (server rejects nonces older than 30s)
         nonce = f"{time.strftime('%Y-%m-%dT%H:%M:%S.000000000Z', time.gmtime())}:{uuid4()}"
 
         # Sign: namespace|operation|nonce
-        message = f"{namespace}|{operation}|{nonce}"
+        message = f"{namespace_text}|{operation_text}|{nonce}"
         signed = self._client.signing_key.sign(message.encode("utf-8"))
         signature_b64 = base64.b64encode(signed.signature).decode("utf-8")
 
         # Build request
         payload = {
-            "namespace": namespace,
-            "operation": operation,
+            "namespace": namespace_text,
+            "operation": operation_text,
             "nonce": nonce,
             "signature": signature_b64,
             "agentPublicKey": self._client.public_key,
