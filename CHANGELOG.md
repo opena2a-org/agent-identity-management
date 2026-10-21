@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the API reference states the record refusal of a verification, a reactivation, an agent delete and a capability request approval only for a server that writes their audit record (#740)
+
+- `docs/API.md` said that a verification, a reactivation and an agent delete, and the dashboard's API reference said
+  that a capability request approval, are made only together with their audit record, and that the route answers
+  `503` with `recordUnavailable` when the record cannot be written. The services make those changes together with an
+  audit record only when a transition recorder is set on them, and no non-test Go file under `apps/backend` builds
+  one with `transition.NewRecorder` or sets one with `SetTransitionRecorder`: this server makes the four changes
+  without an audit record and does not answer that `503`.
+- The reference now states each refusal for a server that writes an audit record for the change, and says that this
+  version of the server writes none and does not answer the refusal, as it said for an addition of MCP servers. The
+  comments of `respondAgentStatusActError` and `ApproveCapabilityRequest`, and the three earlier entries of this
+  section that introduced these refusals, state the same condition.
+- Tests: `apps/backend/cmd/server/record_refusal_reference_test.go` holds the reference to the server's wiring. While
+  no non-test Go file under `apps/backend` builds or sets a transition recorder, it fails when `docs/API.md` or
+  `apps/web/lib/api-documentation.ts` lacks the statement that this server does not answer a record refusal, for the
+  four changes and for an addition of MCP servers; once one is built or set, it fails while either still says so. It
+  fails as well on any of the four sentences that promised a refusal without its condition. On the reference before
+  this change it failed six of its eight checks.
+
 ### Fixed — a dashboard path whose percent-escape does not decode is answered with the not-found page, and the readability sweep answers the onboarding metrics (#683)
 
 - `GET /dashboard/agents/%E0%A4%A`, `/dashboard/agents/%`, `/dashboard/agents/%ff` and `/dashboard/mcp/%E0%A4%A` were
@@ -3427,9 +3446,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - A reactivation or a verification of an agent refused because its audit record could not be written answers `503`
   with `recordUnavailable` and `Retry-After`, and the agent page says nothing changed and when to try again.
-- Both let the agent act again, an expansion, made only together with its audit record; when the record path cannot
-  be used the service refuses the act whole and the agent's status is unchanged. `POST /api/v1/agents/:id/reactivate`
-  and `POST /api/v1/agents/:id/verify` now answer that refusal as the agent delete does: `503`, `Retry-After: 300` and
+- Both let the agent act again, an expansion. When the agent service has a transition recorder, each is made only
+  together with its audit record; when the record path cannot be used the service refuses the act whole and the
+  agent's status is unchanged. The server does not set a transition recorder, so a reactivation or a verification is
+  made without an audit record and this refusal does not occur. `POST /api/v1/agents/:id/reactivate` and
+  `POST /api/v1/agents/:id/verify` now answer that refusal as the agent delete does: `503`, `Retry-After: 300` and
   `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in the
   server log. A suspension narrows what the agent can do and is never refused by the record path. Any other failure
   of the three routes still answers as before.
@@ -3448,8 +3469,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 - An approval of a capability request refused because its audit record could not be written answers `503` with
   `recordUnavailable` and `Retry-After`, and the approve dialog says nothing changed and when to try again.
-- The approval and its grant are an expansion, made only together with their audit record; when the record path
-  cannot be used the service refuses the approval whole and nothing is approved or granted.
+- The approval and its grant are an expansion. When the capability request service has a transition recorder, they
+  are made only together with their audit record; when the record path cannot be used the service refuses the
+  approval whole and nothing is approved or granted. The server does not set a transition recorder, so an approval
+  is made without an audit record and this refusal does not occur.
   `POST /api/v1/admin/capability-requests/:id/approve` now answers that refusal as the agent delete does: `503`,
   `Retry-After: 300` and `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`.
   The cause stays in the server log. Any other failure still answers as before.
@@ -3466,9 +3489,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Changed — a delete refused because its audit record could not be written answers 503 with `recordUnavailable` and `Retry-After`, and the delete dialog says nothing changed and when to try again
 
-- An agent's deletion is made only together with its audit record; when the record cannot be written the service
-  refuses the delete whole and nothing is removed. `DELETE /api/v1/agents/:id` now answers that refusal with `503`,
-  `Retry-After: 300` (the seconds a failed record write keeps the server's record path unavailable) and
+- When the agent service has a transition recorder, an agent's deletion is made only together with its audit record;
+  when the record cannot be written the service refuses the delete whole and nothing is removed. The server does not
+  set a transition recorder, so a delete is made without an audit record and this refusal does not occur.
+  `DELETE /api/v1/agents/:id` now answers that refusal with `503`, `Retry-After: 300` (the seconds a failed record
+  write keeps the server's record path unavailable) and
   `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in the
   server log. Any other delete failure still answers `500` with the route's own line and no `Retry-After`.
 - Measured with the handler of the previous commit, for the recorder's refusal and for the same refusal wrapped once

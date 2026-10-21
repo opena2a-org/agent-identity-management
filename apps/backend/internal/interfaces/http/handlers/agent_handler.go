@@ -358,9 +358,11 @@ func respondRegistrationError(c fiber.Ctx, err error) error {
 // respondAgentStatusActError answers a verify, suspend or reactivate failure. An act the
 // agent's status does not allow (domain.AgentStatusTransition) is a 409 that states the
 // refusal and the act that applies instead. A reactivation or a verification lets the
-// agent act again, so it is made only together with its audit record: a refusal of the
-// record path answers 503 with its reason and Retry-After, and its cause stays in the
-// server log. Anything else is a server error.
+// agent act again: when the agent service has a transition recorder, it is made only
+// together with its audit record, and a refusal of the record path answers 503 with its
+// reason and Retry-After while its cause stays in the server log. The server sets no
+// transition recorder, so these acts are made without that record. Anything else is a
+// server error.
 func respondAgentStatusActError(c fiber.Ctx, err error) error {
 	var refusal *domain.AgentStatusTransitionError
 	if errors.As(err, &refusal) {

@@ -292,8 +292,10 @@ func (h *CapabilityRequestHandlers) ApproveCapabilityRequest(c fiber.Ctx) error 
 		return nil
 	}
 
-	// An approval grants the capability, so it is made only together with its audit
-	// record: a refusal of the record path answers 503 with its reason and Retry-After.
+	// An approval grants the capability: when the capability request service has a
+	// transition recorder, it is made only together with its audit record, and a refusal
+	// of the record path answers 503 with its reason and Retry-After. The server sets no
+	// transition recorder, so an approval is made without that record.
 	if err := h.service.ApproveRequest(c.Context(), id, userID); err != nil {
 		if refused, resp := respondDecisionRefused(c, err); refused {
 			return resp
