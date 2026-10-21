@@ -23,7 +23,40 @@ docker build -t hma-vhs:0.33.0 <hackmyagent>/docs/vhs/docker
 Output: `docs/demo/out/quickstart-selfhosted/<video>.mp4`, its sidecar
 `recording.json` (versions, digests, README commit, scene boundaries, edits,
 hashes), `captions.srt`, and the census report. The `out/` directory is
-ignored by git; videos are never committed.
+ignored by git; this video is never committed.
+
+## Terminal recording (README format)
+
+```bash
+docs/demo/record-quickstart.sh            # --dry-run prints what it would use and write
+```
+
+`quickstart.tape` records the Quick start in the terminal only: `aim-sdk
+login --url http://localhost:8080`, then `secure()`, a call the agent holds and
+a call it does not, at a reading pace (100 ms per typed character, a pause
+before each Enter, and a hold after each step sized from
+`quickstart.narration.json` and the lines on screen). The record script starts
+the API alone from `stack/compose.yml` (nothing published on the host), renders
+the tape in the terminal container with this checkout's `sdk/python`, and
+writes, only when its checks pass:
+
+| File | What it is |
+|---|---|
+| `quickstart.gif` | the recording (committed) |
+| `quickstart-s1.png` to `-s4.png` | the last screen of each step (committed) |
+| `quickstart-capture.txt` | the same lines run once more with `NO_COLOR=1`: the text version (committed) |
+| `quickstart.json` | the sidecar, schema `demo-sidecar/2`: version, `prerelease`, hashes, steps, pace, edits (committed) |
+| `out/quickstart.mp4` | the same recording as MP4 (not committed) |
+
+Three dashboard steps happen off screen, through the API the dashboard calls,
+by `quickstart-admin.py`: strict mode is set before the tape, the device code
+is approved, and the agent is verified once it registers. The sidecar lists
+them under `edits`. The checks: the README's outcomes appear in the recorded
+session and the text version, a census of both finds no run secret, credential
+shape, local path, email outside example.com or host outside the allow-list,
+and the pace rule holds. Prerequisites are the ones above. Exit 0
+rendered, 2 precondition, 3 a check failed (nothing written to `docs/demo`),
+4 stack-safety refusal.
 
 ## How a render works
 

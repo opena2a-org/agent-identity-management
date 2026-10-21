@@ -1,0 +1,176 @@
+{
+  "schema": "demo-sidecar/2",
+  "surfaceClass": "terminal",
+  "tool": "aim-sdk",
+  "version": "2.0.3",
+  "prerelease": true,
+  "script": "docs/demo/quickstart.tape",
+  "scriptSha256": "beb6c3b834fe57e10df3ec64f36c8cb191f5d28eb0508ed4dca81b7e99cb02b8",
+  "recorder": {
+    "name": "vhs",
+    "version": "v0.12.0+render-context-patch",
+    "container": "docs/demo/terminal/Dockerfile on hma-vhs:0.33.0 (Debian GNU/Linux 13 (trixie))",
+    "baseImageId": "sha256:cd4a1efc6c7ffb488c90dfa65c429c8a65eb4fce5f2c1c00429c0cdc89d47861"
+  },
+  "commands": [
+    "aim-sdk login --url http://localhost:8080",
+    "python3",
+    "from aim_sdk import secure",
+    "agent = secure(\"my-first-agent\", capabilities=[\"db:read\"])",
+    "@agent.perform_action(capability=\"db:read\")",
+    "def get_customer(customer_id):",
+    "    return customers[customer_id]",
+    "get_customer(42)",
+    "@agent.perform_action(capability=\"db:write\")",
+    "def delete_customer(customer_id):",
+    "    del customers[customer_id]",
+    "delete_customer(42)"
+  ],
+  "steps": [
+    {
+      "id": "s1",
+      "title": "Sign in",
+      "anchorFrame": "docs/demo/quickstart-s1.png",
+      "holdSeconds": 7.5,
+      "requiredHoldSeconds": 7,
+      "linesOnScreen": 28,
+      "narrationWords": 15
+    },
+    {
+      "id": "s2",
+      "title": "Register an agent",
+      "anchorFrame": "docs/demo/quickstart-s2.png",
+      "holdSeconds": 5,
+      "requiredHoldSeconds": 4.1,
+      "linesOnScreen": 13,
+      "narrationWords": 9
+    },
+    {
+      "id": "s3",
+      "title": "A call the agent holds",
+      "anchorFrame": "docs/demo/quickstart-s3.png",
+      "holdSeconds": 6,
+      "requiredHoldSeconds": 5.3,
+      "linesOnScreen": 6,
+      "narrationWords": 12
+    },
+    {
+      "id": "s4",
+      "title": "A call the agent does not hold",
+      "anchorFrame": "docs/demo/quickstart-s4.png",
+      "holdSeconds": 6.5,
+      "requiredHoldSeconds": 6.1,
+      "linesOnScreen": 17,
+      "narrationWords": 14
+    }
+  ],
+  "fixture": "a local AIM API from docs/demo/stack/compose.yml (its postgres, redis and backend services, images pinned in docs/demo/stack/images.env); administrator admin@example.com with a password generated for the run; the organization set to strict mode",
+  "fixtureSha": "082a286d52c5637faaa3190bdb077aac001365633149c85cc07841a306b1714b",
+  "fixtureFiles": [
+    "docs/demo/stack/compose.yml",
+    "docs/demo/stack/images.env",
+    "docs/demo/lib/gw.mjs",
+    "docs/demo/quickstart-admin.py"
+  ],
+  "fixtureUncommittedChanges": 0,
+  "ranAtUtc": "2026-10-21T03:29:01Z",
+  "durationSeconds": 81.6,
+  "outputs": {
+    "gif": {
+      "path": "docs/demo/quickstart.gif",
+      "bytes": 334639,
+      "sha256": "f607d3c590087df0f03ac6bcd8d83f97d505ca0f33a7049a6dab2406c7b4e5a1",
+      "width": 1062,
+      "height": 564,
+      "frames": 400
+    },
+    "mp4": {
+      "path": "docs/demo/out/quickstart.mp4",
+      "bytes": 405486,
+      "sha256": "76ab15dcdd6870927a8f22a5422a6148b64632dcf182625714b5c04a6749d6f1"
+    },
+    "frames": [
+      {
+        "path": "docs/demo/quickstart-s1.png",
+        "bytes": 224044,
+        "sha256": "a3c8cc20d54033afc02607d2d2df7d15f9aedf9d9e8164a0d9b670e7119bb1e6"
+      },
+      {
+        "path": "docs/demo/quickstart-s2.png",
+        "bytes": 98183,
+        "sha256": "780dc7cb24973be2ca6a2542b66ef25f44d5ac96ca7cc2cd0e63e66339938dc6"
+      },
+      {
+        "path": "docs/demo/quickstart-s3.png",
+        "bytes": 39681,
+        "sha256": "6fc1d1b99fb7ef379d26d3a158dd4d0d4fc1789079528401dc44418141e8ca87"
+      },
+      {
+        "path": "docs/demo/quickstart-s4.png",
+        "bytes": 226004,
+        "sha256": "79d6aeb9df0b9d0ce6c6bb3f55a67ecd871e04989087748c9aea9e63da898f6f"
+      }
+    ]
+  },
+  "capture": "docs/demo/quickstart-capture.txt",
+  "narration": "docs/demo/quickstart.narration.json",
+  "pace": {
+    "typingSpeedMs": 100,
+    "preEnterHoldMs": 700,
+    "minHoldSeconds": 5,
+    "maxLineChars": 58
+  },
+  "exitCodes": [
+    0
+  ],
+  "meteredCostUsd": 0,
+  "lengthClass": "multi-step",
+  "lengthLimitSeconds": 90,
+  "build": {
+    "package": "aim-sdk[rich]",
+    "source": "sdk/python",
+    "commit": "a7d2aded8c12c4c32bffcff4c21713a231749cb5",
+    "installedVersion": "2.0.3",
+    "python": "Python 3.13.5"
+  },
+  "stack": {
+    "compose": "docs/demo/stack/compose.yml",
+    "services": [
+      "postgres",
+      "redis",
+      "backend"
+    ],
+    "aimServer": {
+      "image": "ghcr.io/opena2a-org/aim-server@sha256:dc7f4ea04159e1f40111778c17acd8b262c12ef5ffb706c24481bb703b8c5944",
+      "revision": "dfc5719f5c1084e61232ee1186d5de6a941c67a9"
+    },
+    "postgres": "timescale/timescaledb@sha256:f495f2bc25ca7596ca8e1606c6241ca250ccc56a0c082b9f2ec0d290e0126cd9",
+    "redis": "redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499"
+  },
+  "homePath": "/home/demo",
+  "columns": 110,
+  "rows": 28,
+  "fontSize": 14,
+  "framerate": 10,
+  "gifsicle": "-O3 --lossy=40 --batch",
+  "edits": [
+    "aim-sdk[rich] is installed before the tape from wheels built from this checkout's sdk/python; the README's pip install line is not shown",
+    "before the tape, docs/demo/quickstart-admin.py sets the organization's enforcement mode to strict through the API (PUT /api/v1/admin/enforcement-settings), the README's precondition for the refusal",
+    "off screen, docs/demo/quickstart-admin.py approves the device code (POST /api/v1/oauth/device/approve, the call the dashboard's /device page makes) and verifies my-first-agent once it is registered (POST /api/v1/agents/:id/verify)",
+    "the sample record customers = {42: ...} is defined off screen, with a fictional name in place of the README's",
+    "the screen is cleared at each step boundary"
+  ],
+  "wallClockSeconds": 89.3,
+  "census": {
+    "inputs": [
+      "recorded session",
+      "text version",
+      "narration",
+      "sidecar"
+    ],
+    "classes": 10,
+    "runSecretsChecked": 5,
+    "controlReportedAll": true,
+    "hits": 0
+  }
+}
