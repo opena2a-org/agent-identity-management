@@ -413,7 +413,7 @@ func TestAimBackendScript_StopsTheRunWhenTheRequiredPasswordChangeDoesNotComplet
 		message          string
 		signIns, changes int
 	}{
-		{"the seeded password is refused", func(s *seededAdminServer) { s.password = "FAKE-other-PLACEHOLDER-Aa1!" },
+		{"the seeded password is refused", func(s *seededAdminServer) { s.password = "not-" + seeded },
 			"the seeded admin's sign-in, POST /api/v1/auth/login/local, answered 401", 1, 0},
 		{"the change is refused", func(s *seededAdminServer) { s.refuseChange = http.StatusBadRequest },
 			"POST /api/v1/auth/change-password answered 400", 1, 1},

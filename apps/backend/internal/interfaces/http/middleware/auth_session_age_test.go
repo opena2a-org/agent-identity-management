@@ -21,7 +21,7 @@ import (
 // the sign-in's time, and AuthMiddleware refuses one whose sign-in is past
 // the limit by comparing that claim with the clock: no store is read.
 
-const sessionAgeTestSecret = "test-only-jwt-secret-not-a-real-value-0123456789"
+const sessionAgeTestSecret = "test-only-jwt-secret-not-a-real-value"
 
 // loginAccessToken signs an access token of a login family whose sign-in
 // happened at signedIn and which was issued now; a zero signedIn leaves
