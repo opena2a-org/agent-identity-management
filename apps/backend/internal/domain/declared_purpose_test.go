@@ -191,8 +191,12 @@ func TestDeclaredPurpose_CoherenceWarnings(t *testing.T) {
 func TestPurposeCategoryHelpers(t *testing.T) {
 	assert.False(t, IsCustomPurposeCategory("financial-operations"), "core category is not custom")
 	assert.True(t, IsCustomPurposeCategory("acme.fx-trading"))
+	assert.True(t, IsCustomPurposeCategory("acme2.fx-trading-v2"))
 	assert.False(t, IsCustomPurposeCategory("nodot"))
 	assert.False(t, IsCustomPurposeCategory("a.b.c"))
+	for _, category := range []string{"acme.", ".fx-trading", "acme.Fx-trading", "2acme.fx-trading", "acme.-fx", "acme.fx_trading", "acme.fx trading"} {
+		assert.False(t, IsCustomPurposeCategory(category), "category %q", category)
+	}
 
 	assert.Equal(t, PurposeBreadthBroad, CategoryBreadthClass("acme.fx-trading"), "custom defaults to broad")
 	assert.Equal(t, PurposeBreadthNarrow, CategoryBreadthClass("customer-support"))
@@ -203,4 +207,10 @@ func TestPurposeCategoryHelpers(t *testing.T) {
 
 	assert.Len(t, CorePurposeCategories, 15, "locked core vocab has 15 categories, no catch-all")
 	assert.Len(t, ReservedTaskScopeNamespaces, 17, "locked core vocab has 17 reserved taskScope namespaces")
+}
+
+func TestPurposeError_NamesTheFieldWhenItHasOne(t *testing.T) {
+	assert.Equal(t, "declaredPurpose.category: category is required",
+		(&PurposeError{Field: "category", Message: "category is required"}).Error())
+	assert.Equal(t, "declaredPurpose: must be an object", (&PurposeError{Message: "must be an object"}).Error())
 }

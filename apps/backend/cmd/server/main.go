@@ -2129,8 +2129,13 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	mcpServersAgentAuth.Use(middleware.PQCAgentMiddleware(services.Agent))           // PQC signature verification (Ed25519, ML-DSA, or hybrid)
 	mcpServersAgentAuth.Use(middleware.AgentActivityTouchMiddleware(services.Agent)) // Touches agents.last_active on agent-authed responses (#167)
 	mcpServersAgentAuth.Use(middleware.RateLimitMiddleware())
-	mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge) // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
-	mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)                 // ✅ Submit agent attestation (Ed25519 signed, with challenge)
+	// PQCAgentMiddleware passes on a request it did not authenticate (one with an
+	// Authorization header, or without X-Agent-ID or X-Timestamp); AuthMiddleware answers
+	// it on these two routes, as on the /agents, /detection and /a2a groups. It is set per
+	// route because the JWT group below shares the /mcp-servers prefix, and a Use here
+	// would run it a second time on every request to that group.
+	mcpServersAgentAuth.Get("/:id/challenge", middleware.AuthMiddleware(jwtService), h.MCPAttestation.GetAttestationChallenge) // 🔐 Get challenge for proof of key possession (MUST be called before /attest)
+	mcpServersAgentAuth.Post("/:id/attest", middleware.AuthMiddleware(jwtService), h.MCPAttestation.AttestMCP)                 // ✅ Submit agent attestation (Ed25519 signed, with challenge)
 	// A dashboard request carries a bearer token, which the agent middleware above does not
 	// authenticate; it continues to the same path in the JWT group below.
 	mcpServersAgentAuth.Get("/:id/attestations", middleware.DeferBearerRequests(h.MCPAttestation.GetMCPAttestations)) // ✅ Get all attestations for this MCP

@@ -11,6 +11,44 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the MCP attestation challenge and attest routes answer an unauthenticated request in AuthMiddleware
+
+- `GET /api/v1/mcp-servers/:id/challenge` and `POST /api/v1/mcp-servers/:id/attest` run `AuthMiddleware` after the
+  agent signature check, as the `/agents`, `/detection` and `/a2a` groups do. A request without credentials, or with
+  `X-Agent-ID` and no `X-Timestamp`, is answered 401 `{"error":"No authentication token provided"}`, and a bearer
+  value that is not a token 401 `{"error":"Invalid or expired token"}`. Before, these requests reached the handler,
+  which answered 401 only because no organization was set; a signed-in user's session got the same 401, and now
+  reaches the handler with its organization.
+- Tests: `apps/backend/cmd/server/mcp_attestation_routes_auth_test.go`.
+
+### Added — the card attestation conformance vector exercises the alg, issuer, purpose and expiry checks
+
+- `docs/specs/card-attestation-v2-vector.json` publishes an ATC-issuer key (seed `inputs.atcIssuerSeed`) beside the
+  card-attestation key and holds twelve cases. Three are each decided by one check and carry a signature valid over
+  their own payload: a card attestation signed by the ATC-issuer key (`unknown-key`), `alg` `ES256`
+  (`unsupported-format`) and issuer `aim-server.example` (`malformed`). Two carry `now`: one second before
+  `expiresAt` (`verified`) and at `expiresAt` (`expired`).
+- `verify-card-attestation.mjs` compares a vector case that carries `now` with that time, through the same
+  `isExpired` its two-file mode uses. Step 7 of `card-attestation-v2.md` names the result `expired`.
+- `TestCardAttestationConformanceVectorIsWhatTheServerSigns` compares the vector's whole JWK Set with the one the
+  server publishes for the two seeds, and `TestCardAttestationConformanceVectorCheckCasesCarryAValidSignature` checks
+  the signatures of the three cases decided by one check.
+
+### Changed — the response census follows an error's text into a variable of another name
+
+- `TestResponsesCarryNoErrorText` also fails on a response body that names a local variable assigned an error value
+  or its text (`detail := err.Error()`, `reason = fmt.Sprintf("...: %v", lookupErr)`, `cause := err`), followed
+  through further assignments in the same file. A variable assigned the result of another function that receives
+  the error, such as `resolveRefusalLine(err)`, is not followed. With a probe file in the handlers package holding a
+  500 body built from `message := "lookup failed: " + detail` after `detail := err.Error()`, the census on the base
+  commit reported the probe's other body only, and now reports both. The handlers hold no such body: 2216 response
+  bodies, none built from an error value.
+
+### Changed — tests cover the ten domain functions that had none
+
+- The `internal/domain` function average that the CI coverage step computes rose from 90.6% to 98.9% over 126
+  functions (`go test -race -covermode=atomic ./internal/domain/...`, averaged as the step does; its minimum is 90%).
+
 ### Added: conformance vectors for `agent-request-v2` statements
 
 - `docs/specs/agent-request-v2-vectors.json` holds 33 requests signed as `agent-request-v2` statements, each with the

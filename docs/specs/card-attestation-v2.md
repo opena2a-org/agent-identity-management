@@ -86,13 +86,15 @@ Each step either continues or ends with the result named.
 4. Decode the key's `x` member (base64url, no padding) to the 32-byte public key.
 5. Build the payload from the values of steps 1 and 2, then the signing input, then its SHA-256 digest (section 3).
 6. Verify the Ed25519 signature over the digest with the public key. If it fails: **signature-invalid**. Otherwise: **verified**.
-7. Compare `expiresAt` with your own clock. A verified attestation whose `expiresAt` has passed is expired; the owner refreshes it with `POST /api/v1/a2a/agents/<agent-id>/card/refresh`.
+7. Compare `expiresAt` with your own clock. A verified attestation is **expired** from its `expiresAt` on; the owner refreshes it with `POST /api/v1/a2a/agents/<agent-id>/card/refresh`.
 
 ## 5. Conformance Vector
 
-[`card-attestation-v2-vector.json`](card-attestation-v2-vector.json) holds a complete worked example: a fixed Ed25519 seed, the card bytes, the JWK Set the server publishes for that seed, the intermediate values (`cardHash`, payload, signing input, digest), and seven cases with the result a conforming verifier returns for each.
+[`card-attestation-v2-vector.json`](card-attestation-v2-vector.json) holds a complete worked example: fixed Ed25519 seeds for the card-attestation and ATC-issuer keys, the card bytes, the JWK Set the server publishes for those seeds, the intermediate values (`cardHash`, payload, signing input, digest), and twelve cases with the result a conforming verifier returns for each.
 
-The seed is public test data. Never configure it as a signing key.
+The cases for the `alg` check, the `issuer` check and the `purpose` filter each carry a signature that is valid over their own payload with the key their `keyId` names, so only that check decides their result. A case that carries `now` is also compared with that time as in step 7; the other cases cover steps 1 to 6.
+
+The seeds are public test data. Never configure either one as a signing key.
 
 ```bash
 node verify-card-attestation.mjs --vector card-attestation-v2-vector.json
@@ -106,6 +108,11 @@ ok   a different agent ID does not verify: signature-invalid
 ok   a timestamp with a fractional second is malformed: malformed
 ok   a key ID that is not in the JWK Set is an unknown key: unknown-key
 ok   an attestation without the v2 format label cannot be verified by a third party: unsupported-format
+ok   a key published for another purpose does not verify a card attestation, though its signature is valid: unknown-key
+ok   an algorithm other than EdDSA is an unsupported format, though the signature is valid: unsupported-format
+ok   an issuer other than aim-server is malformed, though the signature over it is valid: malformed
+ok   a verified attestation one second before its expiresAt has not expired: verified
+ok   a verified attestation is expired from its expiresAt on: expired
 ```
 
 The same vector checked with OpenSSL 3 instead of the script:
@@ -120,7 +127,7 @@ openssl pkeyutl -verify -pubin -keyform DER -inkey pub.der -rawin -in digest.bin
 # Signature Verified Successfully
 ```
 
-The server's test suite signs the vector's inputs with the seed and checks that the result matches the first case exactly, so the vector changes only with a new format label.
+The server's test suite signs the vector's inputs with the seed and checks that the result matches the first case exactly, and checks that the vector's JWK Set is the one the server publishes for the two seeds, member for member.
 
 ## 6. Attestations Issued Before v2
 

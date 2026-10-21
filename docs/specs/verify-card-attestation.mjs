@@ -7,7 +7,8 @@
 //   node verify-card-attestation.mjs --vector card-attestation-v2-vector.json
 //
 // The first form prints the result and exits 0 only when the signature verifies and the
-// attestation has not expired. The second runs every case of the conformance vector.
+// attestation has not expired. The second runs every case of the conformance vector; a case
+// that carries now is also compared with that time.
 
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -50,12 +51,19 @@ export function verifyCardAttestation(agentId, attestation, jwks) {
   return verify(null, digest, key, signature) ? 'verified' : 'signature-invalid';
 }
 
+// Step 7: an attestation is expired from its expiresAt on.
+export function isExpired(attestation, now) {
+  return new Date(attestation.expiresAt) <= now;
+}
+
 const args = process.argv.slice(2);
 if (args[0] === '--vector' && args.length === 2) {
   const vector = JSON.parse(readFileSync(args[1], 'utf8'));
   let failed = 0;
   for (const c of vector.cases) {
-    const result = verifyCardAttestation(c.agentId, c.attestation, vector.jwks);
+    let result = verifyCardAttestation(c.agentId, c.attestation, vector.jwks);
+    // A case that carries now is also compared with that time, as step 7 compares with a clock.
+    if (result === 'verified' && c.now !== undefined && isExpired(c.attestation, new Date(c.now))) result = 'expired';
     const ok = result === c.result;
     if (!ok) failed++;
     console.log(`${ok ? 'ok  ' : 'FAIL'} ${c.name}: ${result}${ok ? '' : ` (expected ${c.result})`}`);
@@ -68,7 +76,7 @@ if (args[0] === '--vector' && args.length === 2) {
   const result = verifyCardAttestation(card.aim?.agentId, attestation, jwks);
   console.log(`signature: ${result}`);
   if (result !== 'verified') process.exit(1);
-  const expired = new Date(attestation.expiresAt) <= new Date();
+  const expired = isExpired(attestation, new Date());
   console.log(`expiresAt: ${utc(attestation.expiresAt)}${expired ? ' (expired)' : ''}`);
   console.log(`cardHash: ${attestation.cardHash}`);
   process.exit(expired ? 1 : 0);
