@@ -74,3 +74,46 @@ func TestAgentSignedRouteGroupsAdmitEverySignatureAlgorithm(t *testing.T) {
 		})
 	}
 }
+
+// The detection report handlers take a report on the agent's own ID as the agent's,
+// whichever algorithm the agent signed the request with: Ed25519, ML-DSA-65, or both. Each
+// report here has an empty body, so it is answered by the handler's check of the body,
+// which runs only after the handler has taken the caller; a caller it does not take is
+// answered 401.
+func TestDetectionReportRoutesTakeAReportTheAgentSignedWithEachAlgorithm(t *testing.T) {
+	keys := newAttestationRouteKeys(t)
+	agent, hybridAgent := keys.agent(false), keys.agent(true)
+	app := agentSignedRoutesApp(t, agent, hybridAgent)
+
+	noDetections := map[string]any{"error": "detections array is required and must not be empty"}
+	routes := []struct {
+		path   string
+		answer map[string]any
+	}{
+		{"/api/v1/detection/agents/:id/report", noDetections},
+		{"/api/v1/detection/agents/:id/capabilities/report", map[string]any{"error": "detectedAt is required"}},
+		{"/api/v1/sdk-api/agents/:id/detection/report", noDetections},
+	}
+	probes := []struct {
+		name  string
+		agent *domain.Agent
+		alg   pqc.Algorithm
+	}{
+		{"Ed25519", agent, pqc.AlgorithmEd25519},
+		{"ML-DSA-65", agent, pqc.AlgorithmMLDSA65},
+		{"Ed25519+ML-DSA-65", agent, pqc.AlgorithmHybridEd25519MLDSA65},
+		{"Ed25519+ML-DSA-65 from an agent in hybrid mode", hybridAgent, pqc.AlgorithmHybridEd25519MLDSA65},
+	}
+
+	for _, route := range routes {
+		for _, probe := range probes {
+			t.Run(route.path+"/"+probe.name, func(t *testing.T) {
+				path := strings.Replace(route.path, ":id", probe.agent.ID.String(), 1)
+				status, body := keys.send(t, app, probe.agent.ID, probe.alg, fiber.MethodPost, path, "{}")
+
+				assert.Equal(t, fiber.StatusBadRequest, status)
+				assert.Equal(t, route.answer, body, "the handler's check of the body, after it took the caller")
+			})
+		}
+	}
+}
