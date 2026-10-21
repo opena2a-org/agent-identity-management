@@ -37,12 +37,16 @@ import { ConfigurationError, SecretsError } from '../exceptions';
  * - a namespace that starts with `DSSEv1 `, as a DSSE statement signed with an
  *   agent key starts (the DSSE v1 pre-authentication encoding), so the text
  *   never starts as such a statement does.
+ *
+ * `createNamespace` refuses those namespaces before anything is sent, so it
+ * creates no namespace that `resolve` refuses.
  */
 const RESOLVE_FIELD_SEPARATORS = /[\n\r|]/;
 const DSSE_PREFIX = 'DSSEv1 ';
 const RESOLVE_NOT_SENT = 'the request was not sent';
 const RESOLVE_FIELD_FIX =
   'Pass a namespace and an operation that contain no line feed, carriage return or vertical bar (|).';
+const NAMESPACE_FIELD_FIX = 'Pass a namespace that contains no line feed, carriage return or vertical bar (|).';
 const DSSE_PREFIX_FIX = 'Pass a namespace that does not begin with "DSSEv1 ".';
 
 function resolveRefusal(line: string, fix: string): ConfigurationError {
@@ -295,12 +299,31 @@ export class SecretsClient {
   // Namespace CRUD (JWT/API key auth)
   // ---------------------------------------------------------------------------
 
+  /**
+   * Create a namespace for an agent.
+   *
+   * @throws ConfigurationError when the namespace contains a line feed, a
+   *   carriage return or `|`, or begins with `DSSEv1 `, which `resolve`
+   *   refuses to sign; nothing is sent.
+   */
   async createNamespace(
     agentId: string,
     namespace: string,
     operations: string[],
     urlPatterns: string[] = [],
   ): Promise<Record<string, unknown>> {
+    // The namespace as resolve's signed text renders it.
+    const namespaceText = `${namespace}`;
+    if (RESOLVE_FIELD_SEPARATORS.test(namespaceText)) {
+      throw resolveRefusal(
+        'the namespace contains a line feed, a carriage return or a vertical bar (|), which resolve refuses to sign',
+        NAMESPACE_FIELD_FIX,
+      );
+    }
+    if (namespaceText.startsWith(DSSE_PREFIX)) {
+      throw resolveRefusal('the namespace begins with "DSSEv1 ", which resolve refuses to sign', DSSE_PREFIX_FIX);
+    }
+
     return this.host.request('POST', '/api/v1/secrets/namespaces', {
       agentId,
       namespace,

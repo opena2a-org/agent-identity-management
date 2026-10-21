@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `POST /api/v1/secrets/namespaces` refuses a namespace name that the Python and TypeScript SDKs refuse to resolve (#830)
+
+- A resolve request signs `namespace|operation|nonce`. `client.secrets.resolve()` in the Python SDK and
+  `SecretsClient.resolve` in the TypeScript SDK refuse, before signing, a namespace that contains a line feed, a
+  carriage return or a vertical bar (`|`), or that begins with the seven characters `DSSEv1 `. The route now answers
+  `400` for such a name, and its `error` names the rule: `namespace must not contain a vertical bar (|): resolve signs
+  namespace|operation|nonce` for `team|prod`, the same line naming a line feed or a carriage return for a name that
+  holds one, and `namespace must not begin with "DSSEv1 ", the first bytes of a DSSE statement an agent key signs`.
+  The agent is not looked up, and no namespace and no audit entry is written for the request.
+- Before this change, the route answered `201` and stored the namespace for each of `team|prod`, `team`, a line feed
+  and `prod`, `team`, a carriage return and `prod`, and
+  `DSSEv1 46 application/vnd.opena2a.action-request.v1+json 2 {}`, names that neither SDK's `resolve` signs.
+- A name that holds `DSSEv1` without the space, in lower case, or after its first character is stored as before.
+- Tests: `apps/backend/internal/interfaces/http/handlers/secrets_namespace_name_test.go`, one refusal for each of the
+  four, and five names that are stored.
+
 ### Fixed — `node scripts/lint-token-literals.mjs` exits 0 on the tracked tree (#829)
 
 - On the commit this builds on, the lint exited 1 with six `credential-assignment` findings, each a test value in a

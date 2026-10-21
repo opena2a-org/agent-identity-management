@@ -159,6 +159,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   fails it names the directory and the error code (`ENOTDIR`, `EACCES`), says the token has not been used, and sends
   nothing. The README describes the command under Quick Start.
 
+### Fixed — `SecretsClient.createNamespace` refuses a namespace that `resolve` refuses to sign (#830)
+
+- `createNamespace(agentId, namespace, operations, urlPatterns)` now throws `ConfigurationError` before anything is
+  sent when the namespace contains a line feed, a carriage return or a vertical bar (`|`), or begins with the seven
+  characters `DSSEv1 `: the namespaces `resolve` refuses to sign.
+- The message is `the namespace contains a line feed, a carriage return or a vertical bar (|), which resolve refuses
+  to sign; the request was not sent` and `Fix: Pass a namespace that contains no line feed, carriage return or
+  vertical bar (|).`, or for the prefix `the namespace begins with "DSSEv1 ", which resolve refuses to sign; the
+  request was not sent` and `Fix: Pass a namespace that does not begin with "DSSEv1 ".`
+- Before this change, `createNamespace` sent each of `team|prod`, `team`, a line feed and `prod`, `team`, a carriage
+  return and `prod`, and `DSSEv1 46 application/vnd.opena2a.action-request.v1+json 2 {}`. A namespace that holds
+  `DSSEv1` without the space, in lower case, or after its first character is sent as before.
+- Tests: `src/secrets/SecretsClient.test.ts`, one refusal for each of the four, and five namespaces that are sent once.
+
 ### Fixed: `SecretsClient.resolve` refuses a namespace or operation that holds a line feed, a carriage return or `|`, and a namespace that begins with `DSSEv1 `
 
 - `resolve(namespace, operation)` signs the text `namespace|operation|nonce`. It now throws `ConfigurationError`

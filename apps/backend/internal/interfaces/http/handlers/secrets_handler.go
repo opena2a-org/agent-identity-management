@@ -188,6 +188,12 @@ func (h *SecretsHandler) CreateNamespace(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing required fields: agentId, namespace"})
 	}
 
+	// A name the SDKs' resolve refuses to sign is refused before the agent is
+	// looked up, so no namespace is created that they cannot resolve.
+	if refusal := secrets.NamespaceNameRefusal(req.Namespace); refusal != "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": refusal})
+	}
+
 	// SECURITY: agentId arrives in the REQUEST BODY and was previously used without
 	// checking who owns it, so any authenticated user of any organization could attach a
 	// secrets namespace to another organization's agent by naming its UUID. Registration
