@@ -3591,7 +3591,8 @@ class AIMClient:
               driftDetection, userFeedback, executionIsolation
             - calculatedAt: str - ISO timestamp
             - excludedFactors: List[str] - present when one or more factors
-              were excluded from the score
+              had no data; their values in factors are placeholders, not
+              measurements, and count in score only through its cap
 
         Example:
             result = client.get_trust_score()

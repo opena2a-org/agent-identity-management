@@ -757,6 +757,8 @@ sudo certbot certonly --standalone -d yourdomain.com -d api.yourdomain.com
 
 The repository ships no reverse-proxy configuration. Run a TLS-terminating reverse proxy (nginx, Caddy, Traefik or a cloud load balancer) in front of the dashboard on port 3000 and the API on port 8080, using the certificate from the previous command.
 
+`docker-compose.yml` publishes those two ports on every interface of the host, while every other port it publishes is bound to `127.0.0.1`, so the dashboard and the API also answer over plain HTTP on each address of the host. When the proxy runs on the same host, write `127.0.0.1:` before the host port in the `ports` entries of the `backend` and `frontend` services, as `docker-compose.quickstart.yml` does.
+
 Then set `FRONTEND_API_URL` to the API's public origin, and `FRONTEND_URL` and `ALLOWED_ORIGINS` to the dashboard's, in `.env`, and run `docker compose up -d` again:
 
 ```bash
@@ -1047,8 +1049,8 @@ The host ports and the container names come from the environment, with the value
 
 | Variable | Default | Sets |
 |---|---|---|
-| `AIM_BACKEND_PORT` | `8080` | host port of the API (`aim-backend`) |
-| `AIM_FRONTEND_PORT` | `3000` | host port of the dashboard (`aim-frontend`) |
+| `AIM_BACKEND_PORT` | `8080` | host port of the API (`aim-backend`), bound to `127.0.0.1` |
+| `AIM_FRONTEND_PORT` | `3000` | host port of the dashboard (`aim-frontend`), bound to `127.0.0.1` |
 | `AIM_POSTGRES_PORT` | `5432` | host port of PostgreSQL (`aim-postgres`), bound to `127.0.0.1` |
 | `AIM_REDIS_PORT` | `6379` | host port of Redis (`aim-redis`), bound to `127.0.0.1` |
 | `AIM_PROJECT` | `aim` | prefix of the four container names |
@@ -1061,7 +1063,7 @@ AIM_DIR=aim2 AIM_PROJECT=aim2 AIM_BACKEND_PORT=8081 AIM_FRONTEND_PORT=3001 AIM_P
 
 Compose names the volumes and the network after its project (`COMPOSE_PROJECT_NAME`, or the install directory's name), so two stacks also need two projects; `AIM_DIR` gives each its own directory and project.
 
-The dashboard hands the browser the API URL in `FRONTEND_API_URL`, or `http://localhost:<AIM_BACKEND_PORT>` when it is not set, so with an image that reads that URL when it renders a page (below), the second stack's dashboard calls `http://localhost:8081`. To open the dashboard from another machine or through a reverse proxy, set `FRONTEND_API_URL` to the URL the browser reaches the API at, and `FRONTEND_URL` and `ALLOWED_ORIGINS` to the dashboard's origin, as [Enable HTTPS](#4-enable-https-lets-encrypt) shows. The fallback on a `-frontend` host name described there does not apply to a stack started from this compose file.
+The dashboard hands the browser the API URL in `FRONTEND_API_URL`, or `http://localhost:<AIM_BACKEND_PORT>` when it is not set, so with an image that reads that URL when it renders a page (below), the second stack's dashboard calls `http://localhost:8081`. To open the dashboard from another machine or through a reverse proxy, set `FRONTEND_API_URL` to the URL the browser reaches the API at, and `FRONTEND_URL` and `ALLOWED_ORIGINS` to the dashboard's origin, as [Enable HTTPS](#4-enable-https-lets-encrypt) shows. The fallback on a `-frontend` host name described there does not apply to a stack started from this compose file. The quickstart publishes the API and the dashboard on `127.0.0.1` only, as it does PostgreSQL and Redis, so a reverse proxy on the same host reaches them there. To publish the two on every interface of the host instead, change `127.0.0.1` to `0.0.0.0` in the `ports` entries of the `backend` and `frontend` services in the install's `docker-compose.quickstart.yml` and run `docker compose -f docker-compose.quickstart.yml up -d` in that directory.
 
 An `aim-dashboard` image built from code that reads `NEXT_PUBLIC_API_URL` only when it is built ignores `FRONTEND_API_URL`: its browser code holds the URL it was built with. On 2026-10-17, `latest` pointed to such an image, revision `3ab8285e`, published 2026-10-02 and built for `http://localhost:8080`; started with `NEXT_PUBLIC_API_URL=http://localhost:8081`, it served a sign-in page that named no `localhost:8081`. To check the image a stack runs, read the policy its sign-in page carries with the command below: on an image that reads the URL when it renders a page, it prints a `connect-src` that lists the API's origin, and on one that does not, it prints nothing.
 
@@ -1075,7 +1077,7 @@ Merges to `main` no longer publish images: only a push of a `platform-vX.Y.Z` ta
 
 New accounts wait for an administrator's approval. To bootstrap the first administrator, set `AIM_PLATFORM_ADMINS` (comma-separated emails) before starting the backend: accounts on that list are approved automatically and approve everyone else from the dashboard's admin area. Until a listed address has registered, or some administrator exists, other sign-ups are refused with an error that says so; nothing is queued. The backend logs how the variable was read at startup, so a mistyped entry is visible there.
 
-The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0`, and the `aim-server` tags `1.22` and `1.22.0`, are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. If a pull of one of them fails with `manifest unknown`, it is because the tag was removed from the registry. The images behind them bundle components with critical-rated vulnerabilities, described in [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) for the dashboard and [GHSA-fxfm-hhhw-3mgf](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-fxfm-hhhw-3mgf) for the server. The dashboard images are also affected by [GHSA-638x-gwq7-xfh7](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-638x-gwq7-xfh7), rated high. Each of these advisories lists the images it affects and shows how to check a deployment.
+The `aim-server` and `aim-dashboard` image tags `1.23`, `1.23.0`, `1.5` and `1.5.0`, and the `aim-server` tags `1.22` and `1.22.0`, are withdrawn: their numbers sort above `1.0.0`, but no platform release has used them. Not every withdrawn tag is gone from the registries. On 2026-10-21, Docker Hub (`opena2a/aim-server` and `opena2a/aim-dashboard`) answered `MANIFEST_UNKNOWN` for `1.22`, `1.22.0`, `1.23` and `1.23.0` and still served `1.5` and `1.5.0` of both images, and the GitHub Container Registry (`ghcr.io/opena2a-org/aim-server` and `ghcr.io/opena2a-org/aim-dashboard`) still served every tag named above. Do not run an image pulled by one of these tags. The images behind them bundle components with critical-rated vulnerabilities, described in [GHSA-rqgr-f9m6-xphr](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-rqgr-f9m6-xphr) for the dashboard and [GHSA-fxfm-hhhw-3mgf](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-fxfm-hhhw-3mgf) for the server. The dashboard images are also affected by [GHSA-638x-gwq7-xfh7](https://github.com/opena2a-org/agent-identity-management/security/advisories/GHSA-638x-gwq7-xfh7), rated high. Each of these advisories lists the images it affects and shows how to check a deployment.
 
 ### From source
 

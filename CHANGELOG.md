@@ -11,6 +11,53 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `GET /api/v1/agents/:id/sdk` answers for the language in `?language=` and carries the Python SDK's version (#792)
+
+- The route reads the SDK language from `?language=`, the parameter the dashboard's agent download sends, and from
+  `?lang=` when `?language=` is not given. Before this change it read `?lang=` alone: `?language=java`,
+  `?language=rust`, `?language=nodejs` and `?language=go` each answered 200 with the Python package, and
+  `?language=python&lang=java` answered 400. Now `?language=java` and `?language=rust` answer 400
+  `Invalid language. Supported: python, nodejs, go`, and `?language=nodejs` and `?language=go` answer 501, as
+  `?lang=nodejs` and `?lang=go` do.
+- The Python package carries the version in `sdk/python/VERSION`, the version `GET /api/v1/sdk/download` names its
+  Python archive after: in the archive's name (`aim-sdk-python-v<version>.zip`), `aim_sdk/__init__.py`, the
+  `User-Agent` in `aim_sdk/client.py`, `aim_sdk/config.py`, `setup.py` and `README.md`. Each of them said `1.6.0`
+  before. The server reads the file where it reads the SDKs `GET /api/v1/sdk/download` serves: under `SDK_BASE_DIR`
+  when it is set, and otherwise under `./sdk`, where the server image copies the SDKs, or `../../sdk` when `./sdk`
+  has no `python` folder. When the server cannot read the file, or the file holds anything other than a digit
+  followed by up to 63 letters, digits, dots, plus signs and hyphens, the route answers 500
+  `Failed to generate SDK` and sends no package.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_sdk_download_test.go`.
+
+### Changed — the quick-start publishes the API and the dashboard on `127.0.0.1`, and the guide says `docker-compose.yml` publishes them on every interface (#792)
+
+- `docker-compose.quickstart.yml` publishes the backend's host port (`AIM_BACKEND_PORT`, default 8080) and the
+  dashboard's (`AIM_FRONTEND_PORT`, default 3000) on `127.0.0.1`, as it publishes PostgreSQL's and Redis's. Their
+  `ports` entries named no host address before this change, and Docker publishes such a port on every interface of
+  the host. To open the dashboard from another machine, change `127.0.0.1` to `0.0.0.0` in the two entries of the
+  install's `docker-compose.quickstart.yml`, as the Docker section of `docs/DEPLOYMENT.md` now says.
+- `docker-compose.yml` still publishes the two ports on every interface, and every other port it publishes on
+  `127.0.0.1`. Comments at its `backend` and `frontend` ports and the Enable HTTPS section of `docs/DEPLOYMENT.md`
+  say so, and say to write `127.0.0.1:` before the host port when the reverse proxy runs on the same host.
+- Tests: `sdk/typescript/tests/quickstart-ports-and-project-from-environment.test.ts`.
+
+### Fixed — the deployment guide names the withdrawn image tags the registries still serve, and the trust score texts say how the factors in `excludedFactors` count (#792)
+
+- `docs/DEPLOYMENT.md` called the `aim-server` and `aim-dashboard` tags `1.5`, `1.5.0`, `1.23` and `1.23.0`, and the
+  `aim-server` tags `1.22` and `1.22.0`, withdrawn, and put a `manifest unknown` pull down to the tag's removal from
+  the registry. On 2026-10-21 Docker Hub answered `MANIFEST_UNKNOWN` for `1.22`, `1.22.0`, `1.23` and `1.23.0` and
+  still served `1.5` and `1.5.0` of both images, and the GitHub Container Registry still served each of the withdrawn
+  tags. The paragraph now says so and says not to run an image pulled by one of them.
+- `excludedFactors` lists the factors with no data. The trust score's weighted mean leaves them out, and the score is
+  that mean capped at the 9-factor sum in which each listed factor counts at its placeholder (0.5, or 0.3 for
+  Execution Isolation), so when the cap applies the listed factors count in the score. `docs/sdk/trust-scoring.md`,
+  `docs/API.md`, the server's comments and the Python SDK's `get_trust_score()` docstring said the listed factors
+  were excluded from the composite or from the score; they now say how the factors count, and the trust scoring
+  guide gives an example: an agent verified today whose verifications succeeded, with no compliance snapshot, no user
+  feedback and no isolation attestation, has a mean of 0.881 over its seven measured factors and a published score of
+  0.835. The calculation is unchanged.
+- Tests: `apps/backend/internal/application/trust_score_excluded_factors_docs_test.go`.
+
 ### Added — a check that the root and `apps/web` manifests, the newest `CHANGELOG.md` release section and a `platform-v` tag name one platform version (#688)
 
 - The root `package.json` holds the platform version. `node scripts/check-platform-version.mjs` exits 1, with one

@@ -41,7 +41,7 @@ Implemented in `apps/backend/internal/application/trust_calculator.go`.
 
 ## Liveness Status
 
-Not every factor is wired to a live signal source in every AIM deployment. Per AIP-SPEC §6.1, a factor with no data is **excluded from the composite and its weight redistributed proportionally** across the measured factors. It never contributes a fabricated neutral value. The honest matrix:
+Not every factor is wired to a live signal source in every AIM deployment. A factor with no data (no data recorded, no wired source, or a failed read) is listed in `excludedFactors`. Per AIP-SPEC §6.1, the weighted mean **leaves it out and redistributes its weight proportionally** across the measured factors. The published score is that mean capped at the 9-factor sum in which each listed factor counts at its placeholder value (0.5, or 0.3 for Execution Isolation): when the cap applies, the listed factors count in the published score at those values. The honest matrix:
 
 | # | Factor | Status today | When not live |
 |---|---|---|---|
@@ -49,7 +49,7 @@ Not every factor is wired to a live signal source in every AIM deployment. Per A
 | 2 | Uptime & Availability | **Live**: derived from the same verification-event success rate, with a recency boost/penalty | Status-based 0.50-0.98 (always measured) |
 | 3 | Action Success Rate | **Live**: `verificationEventRepo.GetAgentStatistics` success rate | Status-based 0.70-0.95 (always measured) |
 | 4 | Security Alerts | **Live**: `alertRepo.GetUnacknowledgedByResourceID` + `capabilityRepo.GetViolationsByAgentID` (90-day window). Optional NanoMind TME score blends in at 30% influence when wired. | 1.0 (no penalties applied) |
-| 5 | Compliance Score | **Conditional**: requires `ComplianceSnapshotRepository` to be wired AND an AIM-framework snapshot to exist for the agent's organization | **Excluded** from the composite (weight redistributed); reported in `excludedFactors` |
+| 5 | Compliance Score | **Conditional**: requires `ComplianceSnapshotRepository` to be wired AND an AIM-framework snapshot to exist for the agent's organization | **Excluded**: left out of the weighted mean (weight redistributed) and counted at 0.5 in the cap; reported in `excludedFactors` |
 | 6 | Age & History | **Live**: bucketed from `agent.CreatedAt` (<7d: 0.30, <30d: 0.50, <90d: 0.75, 90+: 1.0) | N/A (always measured) |
 | 7 | Drift Detection | **Conditional**: requires `alertRepo`; a wired repo with zero drift alerts scores 1.0 (measured absence of drift) | **Excluded** when `alertRepo` is nil OR the agent-alert query errors |
 | 8 | User Feedback | **Conditional**: requires `UserFeedbackRepository` (wired in production `main.go`) AND at least one feedback row (`POST /api/v1/trust-score/agents/:id/feedback`) | **Excluded** when un-wired, on query error, or with zero feedback rows |
@@ -65,6 +65,10 @@ Implications:
   would give (otherwise never submitting a snapshot would outscore a measured
   0.9 compliance). Poor agents get the honest renormalized value; exclusion no
   longer props them up toward 0.5.
+- Example: for an agent verified today whose verifications so far all succeeded,
+  with no compliance snapshot, no user feedback and no isolation attestation, the mean of the seven measured factors is 0.881
+  and the 9-factor sum with compliance and user feedback at 0.5 is 0.835.
+  The published score is 0.835: the two listed factors count in it at 0.5.
 - Fresh calculations report the excluded factor names in the `excludedFactors` field of the trust-score, calculate, and breakdown responses; the per-factor values for excluded factors are display placeholders, not measurements. With exclusions present, the breakdown's Σ contributions can exceed `overall` (contributions use the placeholder values).
 - Exclusions caused by an un-wired repository or a failed query are logged as warnings (they indicate a deployment defect: production `main.go` wires all repositories); exclusions from genuinely absent data (no snapshot yet, no feedback yet) are silent, normal lifecycle states. Excluded compliance/feedback also withhold their confidence contribution.
 - Reaching the higher trust bands (>0.85) requires either real signal in the conditional factors OR strong showings across the live ones.
@@ -520,7 +524,7 @@ print(f"Trust Score: {result['score']:.2f}")  # 0.95
 
 `get_trust_score()` reads `GET /api/v1/agents/{id}/trust-score`. It returns
 `agentId`, `agentName`, `score`, `factors`, `calculatedAt` and, when one or more
-factors were excluded from the score, `excludedFactors`. Pass another agent's ID to read
+factors had no data, `excludedFactors`, which names them (see [Liveness Status](#liveness-status)). Pass another agent's ID to read
 an agent in your organization: `agent.get_trust_score("uuid-of-other-agent")`.
 
 ### Detailed Breakdown

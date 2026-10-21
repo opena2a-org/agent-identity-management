@@ -1021,7 +1021,8 @@ func (h *AgentHandler) LogCapabilityResult(c fiber.Ctx) error {
 // @Tags agents
 // @Produce application/zip
 // @Param id path string true "Agent ID"
-// @Param lang query string false "SDK language (python, nodejs, go)" default(python)
+// @Param language query string false "SDK language (python, nodejs, go)" default(python)
+// @Param lang query string false "SDK language, read when language is not given"
 // @Success 200 {file} binary "SDK package as zip file"
 // @Failure 400 {object} ErrorResponse "Invalid agent ID or language"
 // @Failure 404 {object} ErrorResponse "Agent not found"
@@ -1044,8 +1045,12 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 		})
 	}
 
-	// Get SDK language (default: python)
-	language := c.Query("lang", "python")
+	// SDK language: ?language=, which the dashboard sends, or ?lang= when ?language= is not
+	// given; python when neither is.
+	language := c.Query("language")
+	if language == "" {
+		language = c.Query("lang", "python")
+	}
 	if language != "python" && language != "nodejs" && language != "go" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid language. Supported: python, nodejs, go",
@@ -1076,11 +1081,17 @@ func (h *AgentHandler) DownloadSDK(c fiber.Ctx) error {
 	sdkBytes := make([]byte, 0)
 	var filename string
 
-	// SDK version - keep in sync with sdk/python/VERSION and sdk/python/aim_sdk/__init__.py
-	const sdkVersion = "1.6.0"
-
 	switch language {
 	case "python":
+		// The package carries the version sdk/python/VERSION states, the version GET
+		// /sdk/download names its Python archive after. Without one, no package is sent.
+		sdkVersion, versionErr := readSDKVersion("python")
+		if versionErr != nil {
+			log.Printf("agent SDK download: no Python SDK version: %v", versionErr)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to generate SDK",
+			})
+		}
 		sdkBytes, err = sdkgen.GeneratePythonSDK(sdkgen.PythonSDKConfig{
 			AgentID:    agentID.String(),
 			PublicKey:  publicKey,

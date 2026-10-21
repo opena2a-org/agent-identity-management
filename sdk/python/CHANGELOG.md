@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `get_trust_score()`'s docstring says how the factors in `excludedFactors` count in `score` (#792)
+
+- The docstring said `excludedFactors` is present when one or more factors "were excluded from the score". It now
+  says the field is present when one or more factors had no data, that their values in `factors` are placeholders,
+  not measurements, and that they count in `score` only through its cap. `docs/sdk/trust-scoring.md` (Liveness
+  Status) describes the cap. The method is unchanged.
+
 ### Fixed — `aim-sdk init` links to the dashboard address the server reports in the exchange answer (#740)
 
 - After it registered the agent, `aim-sdk init` printed a dashboard link derived from `--url` by `dashboard_url_for`
