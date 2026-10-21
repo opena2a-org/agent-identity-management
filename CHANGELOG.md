@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a negative offset on the MCP server audit log route is read as 0 (#841)
+
+- `GET /api/v1/mcp-servers/:id/audit-logs` reads a negative `offset` as 0. `offset=-1` and `offset=-100` are answered
+  200 with the first page of the server's timeline, the same body `offset=0` gets; before, both panicked with
+  `runtime error: slice bounds out of range` where the handler pages the timeline, and the request was answered 500.
+  Measured from a member's session, behind the recovery middleware the server mounts, with zero events on the
+  server's timeline and with three (an audit record, an attestation and a detected capability).
+- Tests: `apps/backend/internal/interfaces/http/handlers/mcp_audit_logs_offset_test.go`.
+
 ### Fixed — `GET /api/v1/agents/:id/sdk` names the server with the port the request reached it on (#792)
 
 - The Python package's `aim_sdk/config.py` (`AIM_URL`) and `README.md` (`AIM Server`) name the host of the request
