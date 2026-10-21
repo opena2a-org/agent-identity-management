@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `node scripts/lint-public-surface.mjs` exits 0 on the tracked tree (#838)
+
+- On the commit this builds on, the lint exited 1 with one `local-home-path` finding at
+  `apps/web/components/agents/detect-mcp-servers-dialog.test.tsx:109`: the mocked error of the test "keeps waiting
+  when a read fails, and shows nothing from the failure" named a home directory path.
+- That mocked error now names `/etc/mcp/servers.json`, and the test also checks that the dialog does not show that
+  path.
+- Tests: the lint reports 0 findings; `node --test scripts/test-lint-public-surface.mjs` reports 13 pass, 0 fail,
+  where the commit this builds on reported 12 pass, 1 fail (the test that runs the lint on this repository's tracked
+  tree). The six tests in `detect-mcp-servers-dialog.test.tsx` pass.
+
 ### Fixed — a negative offset on the agent audit log route is read as 0 (#834)
 
 - `GET /api/v1/agents/:id/audit-logs` reads a negative `offset` as 0 and answers 200 with the first page. Before,
