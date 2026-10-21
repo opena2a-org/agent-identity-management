@@ -160,6 +160,9 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 	offset := 0 // default
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		fmt.Sscanf(offsetStr, "%d", &offset)
+		if offset < 0 {
+			offset = 0 // read a negative offset as the first page
+		}
 	}
 
 	// SECURITY: replace the pre-fix existence oracle (404 "Agent not

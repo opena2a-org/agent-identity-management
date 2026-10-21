@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a negative offset on the agent audit log route is read as 0 (#834)
+
+- `GET /api/v1/agents/:id/audit-logs` reads a negative `offset` as 0 and answers 200 with the first page. Before,
+  `offset=-1` and `offset=-100` were answered 500 with a `runtime error: slice bounds out of range` body, measured
+  from a member's session, from the agent's Ed25519-signed request and from its service token, with zero and with
+  three records of the agent.
+- `AuditService.GetAuditLogs` reads a negative offset as 0 before it queries by entity, by user or by organization.
+  Before, a query by entity type and ID with offset -1 or -50 panicked, measured with zero, one and five records, and
+  the user and organization queries were handed the negative offset.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_audit_logs_offset_test.go`,
+  `TestAuditService_GetAuditLogs_ByEntityTypeAndID_NegativeOffsetReadsAsZero` and
+  `TestAuditService_GetAuditLogs_NegativeOffsetReachesTheRepositoryAsZero` in
+  `apps/backend/internal/application/audit_service_test.go`.
+
 ### Fixed — secrets resolve refuses a namespace or operation that holds a vertical bar, a carriage return or a line feed (#832)
 
 - `POST /api/v1/secrets/resolve` verifies the agent's signature over `namespace|operation|nonce`, the fields joined
