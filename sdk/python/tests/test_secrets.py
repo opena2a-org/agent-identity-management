@@ -425,6 +425,7 @@ class Namespace(str, enum.Enum):
     CREDS = "creds"
     PIPED = "a|b"
     LINE_FEED = "a\nb"
+    CARRIAGE_RETURN = "a\rb"
     DSSE = "DSSEv1 x"
 
 
@@ -649,6 +650,19 @@ UNRESOLVABLE_NAMESPACES = [
     ),
 ]
 
+# The message create_namespace() raises for each class of UNRESOLVABLE_NAMESPACES, by id.
+CREATE_NAMESPACE_REFUSALS = {case.id: case.values[1] for case in UNRESOLVABLE_NAMESPACES}
+
+# A member of an enum that mixes in str for each class of UNRESOLVABLE_NAMESPACES.
+# str() of each gives "Namespace.<member>", which holds none of the refused
+# characters and does not begin with "DSSEv1 ".
+UNRESOLVABLE_NAMESPACE_MEMBERS = [
+    pytest.param(Namespace.LINE_FEED, CREATE_NAMESPACE_REFUSALS["LF"], id="LF"),
+    pytest.param(Namespace.CARRIAGE_RETURN, CREATE_NAMESPACE_REFUSALS["CR"], id="CR"),
+    pytest.param(Namespace.PIPED, CREATE_NAMESPACE_REFUSALS["pipe"], id="pipe"),
+    pytest.param(Namespace.DSSE, CREATE_NAMESPACE_REFUSALS["dsse-prefix"], id="dsse-prefix"),
+]
+
 
 class TestCreateNamespaceRefusesWhatResolveRefuses:
     """A namespace created under a name resolve() refuses to sign could not be resolved."""
@@ -677,6 +691,69 @@ class TestCreateNamespaceRefusesWhatResolveRefuses:
             "/api/v1/secrets/namespaces",
             data={"agentId": "agent-1", "namespace": namespace, "operations": ["read"], "urlPatterns": []},
         )
+
+    @pytest.mark.parametrize("namespace, refusal", UNRESOLVABLE_NAMESPACE_MEMBERS)
+    def test_refuses_an_enum_member_by_its_value(self, namespace, refusal):
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.create_namespace("agent-1", namespace, operations=["read"])
+
+        assert str(excinfo.value) == refusal
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize("subclass", STR_SUBCLASSES)
+    @pytest.mark.parametrize("namespace, refusal", UNRESOLVABLE_NAMESPACES)
+    def test_refuses_the_text_a_str_subclass_holds(self, namespace, refusal, subclass):
+        """str() of each value gives "Other.TEXT", which holds no refused character."""
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.create_namespace("agent-1", subclass(namespace), operations=["read"])
+
+        assert str(excinfo.value) == refusal
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "value, type_name",
+        [
+            pytest.param(None, "NoneType", id="None"),
+            pytest.param(5, "int", id="int"),
+            pytest.param(b"team-prod", "bytes", id="bytes"),
+        ],
+    )
+    def test_refuses_a_namespace_that_is_not_a_str(self, value, type_name):
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.create_namespace("agent-1", value, operations=["read"])
+
+        assert str(excinfo.value) == f"Cannot create namespace: namespace must be a str, not {type_name}."
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "namespace",
+        [
+            pytest.param(RendersOtherText("creds"), id="renders-other-text"),
+            pytest.param(FormatsHeldText("creds"), id="formats-held-text"),
+            pytest.param(Namespace.CREDS, id="enum-member"),
+        ],
+    )
+    def test_sends_the_text_a_str_subclass_holds_once(self, namespace):
+        """Control: a str subclass holding a namespace resolve() signs is sent once, as that text."""
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request", return_value={"id": "ns-123"}) as mock_req:
+            client.secrets.create_namespace("agent-1", namespace, operations=["read"])
+
+        mock_req.assert_called_once()
+        assert mock_req.call_args[0] == ("POST", "/api/v1/secrets/namespaces")
+        # The body as the server reads it.
+        body = json.loads(json.dumps(mock_req.call_args[1]["data"], sort_keys=True))
+        assert body == {"agentId": "agent-1", "namespace": "creds", "operations": ["read"], "urlPatterns": []}
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no feedback method.
 - Tests: `tests/test_user_feedback_reads.py`.
 
+### Fixed — `client.secrets.create_namespace()` checks and sends the text a `str` subclass holds, so it refuses a member of an enum that mixes in `str` whose value `resolve()` refuses to sign (#840)
+
+- `create_namespace()` read the namespace through `str()` for its refusals and sent it in a JSON body, which writes a
+  `str` subclass as the text it holds. Measured with the previous `secrets.py` on Python 3.9.6 and 3.14.3, through
+  `AIMClient` against a server on 127.0.0.1, for `class NS(str, Enum)`: `str()` of each member gave `NS.<member>`, and
+  `create_namespace("agent-1", NS.BAD, ["read"])`, `BAD` holding `team|prod`, sent `POST /api/v1/secrets/namespaces`
+  with the namespace `team|prod`. The members holding `DSSEv1 x`, `team`, a line feed and `prod`, and `team`, a
+  carriage return and `prod` were each sent as the text they hold, and so was a `str` subclass whose `str()` gives
+  other text, holding `team|prod` or `DSSEv1 x`. `resolve()` raised `SecretsError` for each of them before anything
+  was sent.
+- `create_namespace()` now takes the text the namespace holds once, with the helper `resolve()` uses, and its refusals
+  and the request body read that text. Each namespace above raises `SecretsError` before anything is sent, with the
+  message a `str` holding the same text gets.
+- A namespace that is not a `str` raises `SecretsError` (`Cannot create namespace: namespace must be a str, not
+  NoneType.`, for example) before anything is sent, as `resolve()` refuses it. Before, `create_namespace()` sent
+  `None` as `null` and `5` as `5`.
+- Tests: `tests/test_secrets.py`, `TestCreateNamespaceRefusesWhatResolveRefuses`: an enum member and two `str`
+  subclasses for each of the four refusals, `None`, an `int` and `bytes`, and three `str` subclasses holding `creds`,
+  which are sent once as `creds`. On the previous `secrets.py`, 15 of the class's 27 tests fail on Python 3.9.6 and on
+  3.14.3.
+
 ### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
 
 - `get_namespace`, `delete_namespace`, `store_credential` and `rotate_credential` put `namespace_id` into the request

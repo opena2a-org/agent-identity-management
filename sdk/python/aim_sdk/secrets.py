@@ -48,18 +48,20 @@ _UNSIGNABLE_CHARACTERS = (
 )
 
 
-def _field_text(field: str, value: Any) -> str:
-    """Return the text a field of the signed message holds, as the request sends it.
+def _field_text(field: str, value: Any, action: str = "resolve secret") -> str:
+    """Return the text a namespace or operation holds, as the request sends it.
 
     json.dumps writes a str subclass in the request body as the text it holds.
     str() and format() of a str subclass can give other text: a member of an
     enum that mixes in str gives "<Class>.<member>" from str(), and from
-    format() on Python 3.11 to 3.14. The held text is taken here once, and
-    the refusals, the signed message and the request body read it.
+    format() on Python 3.11 to 3.14. resolve() and create_namespace() take the
+    held text here once, and their refusals, the message resolve() signs and
+    their request bodies read it. A value that is not a str is refused with
+    "Cannot <action>: <field> must be a str, not <type>."
     """
     if not isinstance(value, str):
         raise SecretsError(
-            f"Cannot resolve secret: {field} must be a str, not {type(value).__name__}."
+            f"Cannot {action}: {field} must be a str, not {type(value).__name__}."
         )
     return str.__str__(value)
 
@@ -92,9 +94,13 @@ def _refuse_dsse_prefix(namespace_text: str) -> None:
         )
 
 
-def _refuse_unresolvable_namespace(namespace: Any) -> None:
-    """Raise SecretsError if resolve() refuses to sign the namespace, so none is created under it."""
-    text = str(namespace)  # the text resolve() signs
+def _refuse_unresolvable_namespace(namespace: Any) -> str:
+    """Return the text the namespace holds, the text resolve() signs for it.
+
+    Raise SecretsError if the namespace is not a str, or if resolve() refuses
+    to sign the text it holds, so no namespace is created under it.
+    """
+    text = _field_text("namespace", namespace, "create namespace")
     for character, name in _UNSIGNABLE_CHARACTERS:
         if character in text:
             raise SecretsError(
@@ -106,6 +112,7 @@ def _refuse_unresolvable_namespace(namespace: Any) -> None:
             "Cannot create namespace: namespace begins with 'DSSEv1 ', the first bytes of a DSSE statement "
             "an agent key signs. resolve() refuses to sign a namespace that begins with 'DSSEv1 '."
         )
+    return text
 
 
 # A namespace ID is the UUID the server answers as a namespace's "id", and the
@@ -305,15 +312,20 @@ class SecretsClient:
     ) -> Dict[str, Any]:
         """Create a secret namespace for an agent.
 
+        A namespace that is a str subclass is checked and sent as the text it
+        holds, the text resolve() checks and signs for it: for the member
+        CREDS = "creds" of an enum that mixes in str, that text is "creds".
+
         Raises:
-            SecretsError: If namespace contains a line feed, a carriage return or "|", or
-                begins with "DSSEv1 ", which resolve() refuses to sign (nothing is sent)
+            SecretsError: If namespace is not a str, or contains a line feed, a carriage
+                return or "|", or begins with "DSSEv1 ", which resolve() refuses to sign
+                (nothing is sent)
         """
-        _refuse_unresolvable_namespace(namespace)
+        namespace_text = _refuse_unresolvable_namespace(namespace)
 
         payload = {
             "agentId": agent_id,
-            "namespace": namespace,
+            "namespace": namespace_text,
             "operations": operations,
             "urlPatterns": url_patterns or [],
         }
