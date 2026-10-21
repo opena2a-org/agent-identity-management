@@ -445,8 +445,8 @@ else:
 
 **How to collect feedback**: feedback is a user's rating, so it is submitted
 with a user's access token, not with the agent's credentials. The SDK has no
-feedback method; call the REST route from the application that signs your users
-in:
+method that records a rating; call the REST route from the application that
+signs your users in:
 
 ```python
 import requests
@@ -465,6 +465,18 @@ def submit_user_feedback(aim_url: str, user_token: str, agent_id: str, rating: i
 # "Was this helpful? 👍 👎"
 # If 👍: submit_user_feedback(aim_url, user_token, agent.agent_id, 5, "Very helpful!")
 # If 👎: submit_user_feedback(aim_url, user_token, agent.agent_id, 1, "Incorrect information")
+```
+
+**How to read feedback**: `get_user_feedback()` returns the counts this factor
+is calculated from (`total`, `positiveCount`, `negativeCount`), the
+`neutralCount` and the average rating (`None` when the agent has no ratings).
+It calls `GET /api/v1/agents/{id}/feedback`, which returns no rating's comment
+and not the user who left it.
+
+```python
+summary = agent.get_user_feedback()
+print(f"{summary['positiveCount']} positive, {summary['negativeCount']} negative "
+      f"of {summary['total']} ratings")
 ```
 
 ---

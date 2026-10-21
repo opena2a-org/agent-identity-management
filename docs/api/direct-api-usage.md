@@ -670,6 +670,7 @@ func main() {
 | `/api/v1/agents/{id}/log-capability/{audit_id}` | POST | Log capability result |
 | `/api/v1/agents/{id}/trust-score` | GET | Get current trust score |
 | `/api/v1/agents/{id}/audit-logs` | GET | Get the agent's audit log |
+| `/api/v1/agents/{id}/feedback` | GET | Get the counts and average of the agent's user ratings |
 | `/api/v1/auth/refresh` | POST | Exchange a refresh token for a new access token |
 
 For complete API documentation, see the [API Reference](../guides/API_REFERENCE.md).

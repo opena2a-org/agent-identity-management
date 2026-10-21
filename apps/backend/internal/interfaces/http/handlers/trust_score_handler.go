@@ -386,6 +386,74 @@ func (h *TrustScoreHandler) SubmitUserFeedback(c fiber.Ctx) error {
 	})
 }
 
+// GetUserFeedback returns a summary of the ratings users have given an agent:
+// how many there are, how many are positive (4-5), neutral (3) and negative
+// (1-2), and their average. The user feedback factor is calculated from the
+// total and the positive and negative counts. It returns no rating's comment
+// and not the user who left it.
+//
+// The server registers the route bound to its agent (bindAgentRoutes): a
+// request made with an agent's own credential may name only that agent's ID.
+// @Summary Get an agent's user feedback summary
+// @Description Counts and average of the 1-5 ratings users have given an agent, without the ratings' comments or the users who left them. averageRating is null when the agent has no ratings. A request made with an agent's own credential may name only that agent's ID.
+// @Tags agents
+// @Produce json
+// @Param id path string true "Agent ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} ErrorResponse "Invalid agent ID"
+// @Failure 403 {object} ErrorResponse "Access denied, or another agent's ID named with an agent's own credential"
+// @Failure 404 {object} ErrorResponse "Agent not found"
+// @Router /agents/{id}/feedback [get]
+func (h *TrustScoreHandler) GetUserFeedback(c fiber.Ctx) error {
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	agentID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid agent ID",
+		})
+	}
+
+	// Verify agent belongs to the caller's organization before reading its feedback
+	agent, err := h.getAgentService().GetAgent(c.Context(), agentID)
+	if err != nil || agent == nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Agent not found",
+		})
+	}
+	if agent.OrganizationID != orgID {
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Access denied",
+		})
+	}
+
+	stats, err := h.getTrustCalculator().GetUserFeedbackStats(c.Context(), agentID)
+	if err != nil || stats == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to read user feedback",
+		})
+	}
+
+	// A rating is 1 to 5, so with no ratings there is no average to report:
+	// the 0 the stats query returns then is not a rating.
+	var averageRating interface{}
+	if stats.Total > 0 {
+		averageRating = stats.AverageRating
+	}
+
+	return c.JSON(fiber.Map{
+		"agentId":       agentID,
+		"agentName":     agent.Name,
+		"total":         stats.Total,
+		"positiveCount": stats.PositiveCount,
+		"neutralCount":  stats.NeutralCount,
+		"negativeCount": stats.NegativeCount,
+		"averageRating": averageRating,
+	})
+}
+
 // SubmitIsolationAttestation records an agent's self-reported runtime isolation
 // posture. This is the collection (write) side of the execution isolation trust
 // factor (factor 9): without it the factor has nothing to read and stays at the

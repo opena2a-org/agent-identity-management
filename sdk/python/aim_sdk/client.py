@@ -3743,6 +3743,55 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"Failed to get audit logs: {e}")
 
+    def get_user_feedback(
+        self,
+        agent_id: Optional[str] = None
+    ) -> Dict:
+        """
+        Get a summary of the 1-5 ratings users have given an agent. The trust
+        score's user feedback factor is calculated from its total,
+        positiveCount and negativeCount.
+
+        Calls GET /api/v1/agents/{id}/feedback. The answer carries no rating's
+        comment and not the user who left it. A client that signs its requests
+        reads its own agent's summary only: the server answers another agent's
+        ID with 403.
+
+        Args:
+            agent_id: Agent ID to query (defaults to current agent)
+
+        Returns:
+            Dict containing:
+            - agentId: str
+            - agentName: str
+            - total: int - number of ratings
+            - positiveCount: int - ratings of 4 or 5
+            - neutralCount: int - ratings of 3
+            - negativeCount: int - ratings of 1 or 2
+            - averageRating: float - the mean rating, or None when the agent
+              has no ratings
+
+        Example:
+            summary = client.get_user_feedback()
+            print(f"{summary['total']} ratings, average {summary['averageRating']}")
+
+        Raises:
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If request fails
+        """
+        target_agent_id = agent_id or self.agent_id
+
+        try:
+            return self._make_request(
+                method="GET",
+                endpoint=f"/api/v1/agents/{target_agent_id}/feedback"
+            )
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to get user feedback: {e}")
+
     def update_agent(
         self,
         agent_id: Optional[str] = None,

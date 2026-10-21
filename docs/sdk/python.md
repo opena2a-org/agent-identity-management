@@ -279,6 +279,29 @@ The method calls `GET /api/v1/agents/{id}/audit-logs`. A client that signs its
 requests may name only its own agent's ID: another agent's ID is answered with
 403, which the SDK raises as `AuthenticationError`.
 
+#### Get User Feedback
+
+Get a summary of the 1-5 ratings users have given the agent: how many there
+are, how many are positive (4 or 5), neutral (3) and negative (1 or 2), and
+their average, which is `None` when the agent has no ratings. The trust
+score's user feedback factor is calculated from `total`, `positiveCount` and
+`negativeCount`. The summary carries no rating's comment and not the user who
+left it.
+
+```python
+summary = agent.get_user_feedback()
+print(f"{summary['total']} ratings: {summary['positiveCount']} positive, "
+      f"{summary['neutralCount']} neutral, {summary['negativeCount']} negative")
+if summary["averageRating"] is not None:
+    print(f"Average rating: {summary['averageRating']:.1f}")
+```
+
+The method calls `GET /api/v1/agents/{id}/feedback`. A client that signs its
+requests may name only its own agent's ID: another agent's ID is answered with
+403, which the SDK raises as `AuthenticationError`. A rating is recorded by a
+signed-in user, not by the agent; Factor 8 in the
+[Trust Scoring Guide](./trust-scoring.md) shows the route that records one.
+
 #### Organization Audit Logs and Compliance Reports
 
 The SDK has no method for these: the server routes that serve them need an

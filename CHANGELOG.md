@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — `GET /api/v1/agents/:id/feedback` returns the counts and the average of an agent's user ratings (#666)
+
+- The route answers the number of ratings users have given the agent (`total`), how many are positive (4 or 5),
+  neutral (3) and negative (1 or 2) (`positiveCount`, `neutralCount`, `negativeCount`), and their average
+  (`averageRating`), which is `null` when the agent has no ratings. The user feedback trust factor is calculated from
+  `total`, `positiveCount` and `negativeCount`. The answer carries no rating's comment and not the user who left it.
+- The server registers the route bound to its agent: a request made with an agent's own credential (a request it
+  signs with its Ed25519 key, its OAuth service token or its API key) may name only that agent's ID. Another agent's
+  ID, or a value that is not an ID, is answered `403` with `reasonCode` `agent_path_mismatch` before the named agent
+  or any feedback is read.
+- A user's session reads any agent of the user's organization. An agent of another organization is answered `403`, an
+  ID that names no agent `404` and a value that is not an ID `400`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_user_feedback_read_test.go` and
+  `apps/backend/internal/application/trust_calculator_user_feedback_stats_test.go`.
+  `TestAgentParameterRoutesUnderAgentGroupsAreDispositioned` requires the route to be registered through
+  `bindAgentRoutes`.
+
 ### Fixed — `node scripts/lint-public-surface.mjs` exits 0 on the tracked tree (#838)
 
 - On the commit this builds on, the lint exited 1 with one `local-home-path` finding at

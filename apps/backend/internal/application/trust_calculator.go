@@ -922,6 +922,25 @@ func (c *TrustCalculator) RecordUserFeedback(ctx context.Context, agentID, orgID
 	return feedback, nil
 }
 
+// GetUserFeedbackStats returns the counts and the average of the ratings users
+// have given an agent, read with the query the user feedback factor (factor 8)
+// reads its counts with. It reads no rating's comment or the user who left it.
+func (c *TrustCalculator) GetUserFeedbackStats(ctx context.Context, agentID uuid.UUID) (*domain.UserFeedbackStats, error) {
+	if c.userFeedbackRepo == nil {
+		return nil, fmt.Errorf("user feedback repository not configured")
+	}
+
+	stats, err := c.userFeedbackRepo.GetStats(agentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read user feedback: %w", err)
+	}
+	if stats == nil {
+		return nil, fmt.Errorf("failed to read user feedback: no stats returned")
+	}
+
+	return stats, nil
+}
+
 // RecordIsolationAttestation persists an agent's self-reported runtime isolation
 // posture. This is the collection side of the execution isolation factor (factor
 // 9): without it the factor has nothing to read and stays at the 0.3 baseline.

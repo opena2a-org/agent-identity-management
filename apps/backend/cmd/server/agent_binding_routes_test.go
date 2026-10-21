@@ -559,6 +559,7 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 		"POST /api/v1/a2a/agents/:id/trust-score/compute",
 		"PUT /api/v1/a2a/cards/:id",
 		"POST /api/v1/a2a/cards/:id/attestation",
+		"GET /api/v1/agents/:id/feedback",
 	} {
 		var isBound bool
 		for _, route := range census.routes {

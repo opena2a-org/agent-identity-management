@@ -373,6 +373,7 @@ def test_the_check_accepts_the_names_the_sdk_has():
         "client.get_trust_score()",
         "client.get_trust_score_history(limit=5)",
         "client.get_audit_logs(limit=20, offset=40)",
+        "client.get_user_feedback()",
         "print(client.agent_id, client.public_key)",
         "handler = AIMCallbackHandler(agent=client)",
         "crew = AIMCrewWrapper(crew=None, aim_agent=client)",

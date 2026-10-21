@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `get_user_feedback()` reads the summary of an agent's user ratings (#666)
+
+- `AIMClient.get_user_feedback(agent_id=None)` reads `GET /api/v1/agents/{id}/feedback` and returns the server's
+  answer: `agentId`, `agentName`, `total`, `positiveCount` (ratings of 4 or 5), `neutralCount` (3), `negativeCount`
+  (1 or 2) and `averageRating`, which is `None` when the agent has no ratings. The answer carries no rating's comment
+  and not the user who left it.
+- A client that signs its requests reads its own agent's summary: the server answers another agent's ID with 403,
+  raised as `AuthenticationError`. The platform adds the route in the same change.
+- The SDK has no method that records a rating: a signed-in user records one with
+  `POST /api/v1/trust-score/agents/{id}/feedback`, as `docs/sdk/trust-scoring.md` shows.
+- `docs/sdk/python.md` and `docs/sdk/trust-scoring.md` show `get_user_feedback()`. `trust-scoring.md` said the SDK had
+  no feedback method.
+- Tests: `tests/test_user_feedback_reads.py`.
+
 ### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
 
 - `get_namespace`, `delete_namespace`, `store_credential` and `rotate_credential` put `namespace_id` into the request
