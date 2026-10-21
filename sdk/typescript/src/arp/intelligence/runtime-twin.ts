@@ -100,6 +100,15 @@ const EVENT_TYPE_INDEX: Record<string, number> = {
   MEMORY_READ: 3, MEMORY_WRITE: 4, EXTERNAL_CALL: 5,
 };
 
+/**
+ * Returns `vector` divided by its L2 norm when that norm is above 1.0, and a
+ * copy of `vector` otherwise.
+ */
+function clipToUnitL2Norm(vector: number[]): number[] {
+  const norm = Math.sqrt(vector.reduce((s, g) => s + g * g, 0));
+  return norm <= 1.0 ? [...vector] : vector.map(g => g / norm);
+}
+
 export class RuntimeTwin {
   private agentId: string;
   private sessionId: string;
@@ -459,8 +468,9 @@ export class RuntimeTwin {
 
   /**
    * Submit accumulated gradient to Registry fleet endpoint.
-   * Normalizes by event count before submission (the fleet module
-   * handles clipping and differential privacy noise).
+   * Normalizes by event count, then addPrivacyNoise clips the gradient,
+   * adds the differential privacy noise and clips the noised vector
+   * before submission.
    */
   private async flushGradient(): Promise<void> {
     if (this.gradientEventCount === 0) return;
@@ -491,7 +501,8 @@ export class RuntimeTwin {
     // Submit gradient with differential privacy inline.
     // This reimplements the fleet.ts logic locally to avoid cross-package
     // import issues. The privacy guarantees are identical:
-    // gradient clipping (L2 norm <= 1.0) + Gaussian noise (epsilon=1.0, delta=1e-5)
+    // gradient clipping (L2 norm <= 1.0) + Gaussian noise (epsilon=1.0, delta=1e-5),
+    // and the noised vector is clipped to L2 norm <= 1.0 before it is posted.
     try {
       const noisyGradient = this.addPrivacyNoise(normalized);
       await fetch('https://api.oa2a.org/api/v1/telemetry/behavioral-gradient', {
@@ -514,25 +525,32 @@ export class RuntimeTwin {
   }
 
   /**
-   * Apply differential privacy: clip to L2 norm 1.0, add Gaussian noise.
+   * Apply differential privacy: clip to L2 norm 1.0, add Gaussian noise, then
+   * clip the noised vector to L2 norm 1.0.
    * Matches the privacy guarantees inlined in @nanomind/runtime-core
    * (epsilon=1.0, delta=1e-5). The statistical twin's @nanomind/runtime
    * package was retired in the Q5 split (audit Section 9 item 1).
    */
   private addPrivacyNoise(gradient: number[]): number[] {
     // Clip to max L2 norm = 1.0
-    const norm = Math.sqrt(gradient.reduce((s, g) => s + g * g, 0));
-    const clipped = norm <= 1.0 ? [...gradient] : gradient.map(g => g / norm);
+    const clipped = clipToUnitL2Norm(gradient);
 
     // Gaussian noise: sigma = sensitivity * sqrt(2*ln(1.25/delta)) / epsilon
     const sigma = 1.0 * Math.sqrt(2 * Math.log(1.25 / 1e-5)) / 1.0;
-    return clipped.map(g => {
-      // Box-Muller transform
-      const u1 = Math.random();
+    const noised = clipped.map(g => {
+      // Box-Muller transform. u1 is in (0, 1], so its logarithm is finite.
+      const u1 = 1 - Math.random();
       const u2 = Math.random();
       const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       return g + sigma * z;
     });
+
+    // The noise takes the norm well above 1.0, and #835 reports that the
+    // behavioral-gradient endpoint refuses a gradient whose L2 norm exceeds
+    // 1.0 by more than 1e-9, so the noised vector is clipped again. This is
+    // post-processing of the noised vector, so the (epsilon, delta) guarantee
+    // is unchanged.
+    return clipToUnitL2Norm(noised);
   }
 
   /**
