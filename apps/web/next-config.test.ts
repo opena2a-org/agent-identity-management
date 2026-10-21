@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import loadCustomRoutes from "next/dist/lib/load-custom-routes";
 import { normalizeConfig } from "next/dist/server/config-shared";
+import { buildCustomRoute } from "next/dist/server/lib/router-utils/filesystem";
 import { PHASE_PRODUCTION_SERVER } from "next/dist/shared/lib/constants";
 import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
 import { compileNonPath, matchHas } from "next/dist/shared/lib/router/utils/prepare-destination";
 import nextConfig from "./next.config.js";
 import { headerContentSecurityPolicy } from "./lib/content-security-policy";
+import { UNDECODABLE_PATH_DESTINATION } from "./lib/undecodable-path";
 
 // The backend serves the Prometheus exposition on its own listener, loopback
 // by default. A dashboard rewrite to the backend's /metrics would publish it
@@ -46,6 +48,112 @@ describe("dashboard rewrites", () => {
   });
 });
 
+// Route of every page under app/, as Next.js serves it: route groups drop out, dynamic
+// segments keep their brackets ("/dashboard/agents/[id]").
+function pageRoutes(dir = "app", segments: string[] = [], out: string[] = []): string[] {
+  for (const entry of readdirSync(join(__dirname, dir))) {
+    const rel = join(dir, entry);
+    if (statSync(join(__dirname, rel)).isDirectory()) {
+      pageRoutes(rel, /^\(.*\)$/.test(entry) ? segments : [...segments, entry], out);
+    } else if (entry === "page.tsx") {
+      out.push(`/${segments.join("/")}`);
+    }
+  }
+  return out;
+}
+
+// A route's path with every dynamic segment set to value.
+function withSegments(route: string, value: string): string {
+  return route
+    .split("/")
+    .map((s) => (/^\[.*\]$/.test(s) ? value : s))
+    .join("/");
+}
+
+// The page route that serves a path, if any: a dynamic segment matches one segment, a
+// catch-all one or more, an optional catch-all any number.
+function servedBy(path: string, routes: string[]): string | undefined {
+  const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return routes.find((route) => {
+    const pattern = route
+      .split("/")
+      .filter(Boolean)
+      .map((s) =>
+        /^\[\[\.\.\..+\]\]$/.test(s)
+          ? "(?:/[^/]+)*"
+          : /^\[\.\.\..+\]$/.test(s)
+            ? "(?:/[^/]+)+"
+            : /^\[.+\]$/.test(s)
+              ? "/[^/]+"
+              : `/${literal(s)}`,
+      )
+      .join("");
+    return new RegExp(`^${pattern || "/"}$`).test(path);
+  });
+}
+
+// The rewrites of next.config.ts, built with the server's own route code the way the
+// server builds them.
+async function builtRewrites() {
+  const resolved = await normalizeConfig(PHASE_PRODUCTION_SERVER, nextConfig);
+  const { rewrites } = await loadCustomRoutes(resolved);
+  return {
+    beforeFiles: rewrites.beforeFiles.map((rule) => buildCustomRoute("before_files_rewrite", rule)),
+    afterFiles: rewrites.afterFiles.map((rule) => buildCustomRoute("rewrite", rule)),
+  };
+}
+
+// Where the first rule whose source matches sends a path, and the parameters the server
+// adds to the rewritten request's query; null when no rule matches.
+function rewrittenBy(rules: Awaited<ReturnType<typeof builtRewrites>>["afterFiles"], path: string) {
+  for (const rule of rules) {
+    const params = rule.match(path);
+    if (params) return { destination: rule.destination, params };
+  }
+  return null;
+}
+
+// Next.js decodes a page's dynamic segments while it resolves the route. A path whose
+// dynamic segment does not decode is rewritten before that (lib/undecodable-path.ts).
+describe("dashboard paths with an escape that does not decode", () => {
+  it("are rewritten, wherever a page has a dynamic segment, to a path no page serves", async () => {
+    const { beforeFiles, afterFiles } = await builtRewrites();
+    const routes = pageRoutes();
+    const dynamic = routes.filter((route) => route.includes("["));
+    // Control: the walk finds both detail pages.
+    expect(dynamic).toEqual(expect.arrayContaining(["/dashboard/agents/[id]", "/dashboard/mcp/[id]"]));
+
+    for (const route of dynamic) {
+      expect(route.startsWith("/dashboard/"), route).toBe(true);
+      for (const value of ["%E0%A4%A", "%", "%ff"]) {
+        const path = withSegments(route, value);
+        expect(rewrittenBy(beforeFiles, path), path).toEqual({ destination: UNDECODABLE_PATH_DESTINATION, params: {} });
+      }
+    }
+
+    expect(servedBy(UNDECODABLE_PATH_DESTINATION, routes)).toBeUndefined();
+    // Control: servedBy finds the page that serves a dynamic path.
+    expect(servedBy("/dashboard/agents/x", routes)).toBe("/dashboard/agents/[id]");
+    expect(existsSync(join(__dirname, "public", UNDECODABLE_PATH_DESTINATION))).toBe(false);
+    expect(rewrittenBy(afterFiles, UNDECODABLE_PATH_DESTINATION)).toBeNull();
+  });
+
+  it("leave a page path that decodes, and a path relayed to the backend, as they are", async () => {
+    const { beforeFiles, afterFiles } = await builtRewrites();
+    for (const route of pageRoutes()) {
+      for (const value of ["00000000-0000-4000-8000-000000000001", "%C3%A9"]) {
+        const path = withSegments(route, value);
+        expect(rewrittenBy(beforeFiles, path), path).toBeNull();
+      }
+    }
+    for (const path of ["/api/v1/agents/%E0%A4%A", "/health/%ff"]) {
+      expect(rewrittenBy(beforeFiles, path), path).toBeNull();
+      // Control: the rewrite to the backend takes the path.
+      expect(rewrittenBy(afterFiles, path), path).not.toBeNull();
+    }
+  });
+});
+
 // The headers the server sends for a page, worked out with the server's own route
 // code the way it applies header rules: every rule whose source and `has` match, in
 // order, with the path and `has` captures substituted into the value, and a later
@@ -73,20 +181,8 @@ async function servedHeaders(pathname: string, host: string): Promise<Record<str
 }
 
 // Every page under app/, with a placeholder for each dynamic segment.
-function pagePaths(dir = "app", out: string[] = []): string[] {
-  for (const entry of readdirSync(join(__dirname, dir))) {
-    const rel = join(dir, entry);
-    if (statSync(join(__dirname, rel)).isDirectory()) pagePaths(rel, out);
-    else if (entry === "page.tsx") {
-      const segments = dir
-        .split("/")
-        .slice(1)
-        .filter((s) => !/^\(.*\)$/.test(s))
-        .map((s) => (/^\[.*\]$/.test(s) ? "x" : s));
-      out.push(`/${segments.join("/")}`);
-    }
-  }
-  return out;
+function pagePaths(): string[] {
+  return pageRoutes().map((route) => withSegments(route, "x"));
 }
 
 function connectSources(policy: string): string[] {

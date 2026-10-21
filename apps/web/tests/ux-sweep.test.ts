@@ -103,6 +103,38 @@ describe("ux-sweep fixtures", () => {
     expect(body(empty, "/api/v1/supply-chain/analytics").attestationTrend).toEqual([]);
     expect(body(empty, "/api/v1/agents/00000000-0000-4000-8000-000000000001/trust-score/history").history).toEqual([]);
   });
+
+  it("answers the platform onboarding page's metrics as the server does with no organization to measure", () => {
+    // An unmatched request is answered {}, and the onboarding panel reads recent.medianSeconds.
+    const timing = {
+      organizations: 0,
+      organizationsWithAgent: 0,
+      conversionRate: 0,
+      medianSeconds: null,
+      p75Seconds: null,
+      p90Seconds: null,
+      fastestSeconds: null,
+      buckets: [
+        { label: "under 1 minute", upperSeconds: 60, count: 0 },
+        { label: "1 to 5 minutes", upperSeconds: 300, count: 0 },
+        { label: "5 to 60 minutes", upperSeconds: 3600, count: 0 },
+        { label: "1 to 24 hours", upperSeconds: 86400, count: 0 },
+        { label: "1 to 7 days", upperSeconds: 604800, count: 0 },
+        { label: "over 7 days", upperSeconds: null, count: 0 },
+      ],
+      excludedNegative: 0,
+    };
+    const events = ["onboarding_viewed", "tab_selected", "token_minted", "token_exchanged", "first_agent_registered", "onboarding_completed", "onboarding_skipped"];
+    for (const mocks of [empty, populated]) {
+      expect(body(mocks, "/api/v1/platform-admin/onboarding-metrics")).toEqual({
+        generatedAt: expect.any(String),
+        windowDays: 30,
+        allTime: timing,
+        recent: timing,
+        events: events.map((event) => ({ event, organizations: 0, total: 0 })),
+      });
+    }
+  });
 });
 
 function variant(overrides: Record<string, unknown>) {

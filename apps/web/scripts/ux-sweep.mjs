@@ -200,6 +200,21 @@ const MCP_SERVER = {
 const TRUST_FACTORS = { verificationStatus: 1, uptime: 0.9, successRate: 0.9, securityAlerts: 1, compliance: 0.8, age: 0.5, driftDetection: 1, userFeedback: 0.5, executionIsolation: 0.7 };
 const TRUST_WEIGHTS = { verificationStatus: 0.2, uptime: 0.1, successRate: 0.15, securityAlerts: 0.15, compliance: 0.1, age: 0.05, driftDetection: 0.1, userFeedback: 0.05, executionIsolation: 0.1 };
 const COUNTS = { allCount: 0, acknowledgedCount: 0, unacknowledgedCount: 0, criticalCount: 0, highCount: 0, mediumCount: 0, lowAndInfoCount: 0 };
+// The onboarding baseline the platform onboarding page reads, as the server computes it with
+// no organization to measure (ComputeTimeToFirstAgent in apps/backend/internal/domain/onboarding_event.go):
+// every bucket empty, no time measured, and each onboarding event at zero.
+const NO_TIME_TO_FIRST_AGENT = {
+  organizations: 0,
+  organizationsWithAgent: 0,
+  conversionRate: 0,
+  medianSeconds: null,
+  p75Seconds: null,
+  p90Seconds: null,
+  fastestSeconds: null,
+  buckets: [["under 1 minute", 60], ["1 to 5 minutes", 300], ["5 to 60 minutes", 3600], ["1 to 24 hours", 86400], ["1 to 7 days", 604800], ["over 7 days", null]].map(([label, upperSeconds]) => ({ label, upperSeconds, count: 0 })),
+  excludedNegative: 0,
+};
+const ONBOARDING_EVENTS = ["onboarding_viewed", "tab_selected", "token_minted", "token_exchanged", "first_agent_registered", "onboarding_completed", "onboarding_skipped"];
 
 /** Route mock: [method, path regex, body]. First match wins; an unmatched request gets `{}` and is recorded. */
 const MOCKS = [
@@ -244,6 +259,7 @@ const MOCKS = [
   ["GET", /^\/api\/v1\/admin\/registration-requests/, { requests: [], total: 0 }],
   ["GET", /^\/api\/v1\/admin\/verifications\/pending/, { verifications: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 }, statusCounts: { pending: 0, approved: 0, denied: 0, expired: 0 } }],
   ["GET", /^\/api\/v1\/admin\/dashboard\/stats$/, { totalUsers: 1, activeUsers: 1, pendingUsers: 0 }],
+  ["GET", /^\/api\/v1\/platform-admin\/onboarding-metrics$/, { generatedAt: NOW, windowDays: 30, allTime: NO_TIME_TO_FIRST_AGENT, recent: NO_TIME_TO_FIRST_AGENT, events: ONBOARDING_EVENTS.map((event) => ({ event, organizations: 0, total: 0 })) }],
   ["GET", /^\/api\/v1\/api-keys/, { apiKeys: [] }],
   ["GET", /^\/api\/v1\/webhooks$/, { webhooks: [] }],
   ["GET", /^\/api\/v1\/tags/, []],

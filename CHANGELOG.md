@@ -11,6 +11,29 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a dashboard path whose percent-escape does not decode is answered with the not-found page, and the readability sweep answers the onboarding metrics (#683)
+
+- `GET /dashboard/agents/%E0%A4%A`, `/dashboard/agents/%`, `/dashboard/agents/%ff` and `/dashboard/mcp/%E0%A4%A` were
+  answered `500 Internal Server Error` as `text/plain`, with no `Content-Security-Policy` header. Next.js 16.3.6 throws
+  a `DecodeError` when it decodes the `[id]` of such a path while it resolves the route, and looks for a Pages Router
+  `/_error` page to answer it with, which the dashboard's build does not have. `next.config.ts` now returns a rule from
+  `rewrites()` as `beforeFiles` (`apps/web/lib/undecodable-path.ts`) that sends a path under `/dashboard/` holding a
+  `%` not followed by two hex digits, or escapes that are not the UTF-8 encoding of a character, to a path no page
+  serves. Built with `next build` and served by the standalone server, those four paths, `/dashboard/mcp/%` and
+  `/dashboard/mcp/%ff` are answered `404` with the not-found page and the `Content-Security-Policy` header, as
+  `/dashboard/no-such-page` is, while `/dashboard/agents/abc` and `/dashboard/agents/%C3%A9` are answered `200` and
+  `/api/v1/agents/%E0%A4%A` is relayed to the backend.
+- The readability sweep (`apps/web/scripts/ux-sweep.mjs`) answers `GET /api/v1/platform-admin/onboarding-metrics` with
+  the baseline the server computes when it has no organization to measure. The sweep answered that request with `{}`,
+  the onboarding panel on `/dashboard/platform/onboarding` threw reading `medianSeconds`, and the sweep of that route
+  recorded two console errors in each of its four variants and failed its gate. It now records none there and passes,
+  with the empty and with the populated fixture.
+- Tests: `apps/web/lib/undecodable-path.test.ts` checks the rule's pattern against `decodeURIComponent` on 123,008
+  strings, every escape of one and two bytes among them. `apps/web/next-config.test.ts` builds the rewrites with the
+  server's route code and checks that a page path whose dynamic segment does not decode is rewritten to a path no page
+  serves, and that a page path that decodes is not. `apps/web/tests/ux-sweep.test.ts` checks the sweep's answer field by
+  field against the server's answer with no organization to measure.
+
 ### Fixed — `GET /api/v1/agents/{id}/activity` lists an audit record whose address or user agent is NULL (#606)
 
 - `audit_logs.ip_address` and `audit_logs.user_agent` are nullable columns, and the audit log repository read them
