@@ -828,6 +828,7 @@ type Services struct {
 	Remediation       *application.RemediationService       // For remediation tracking (agentpwn + HMA)
 	Secrets           *application.SecretsService           // For identity-native secrets management
 	FGA               *application.FGAEngine                // Fine-Grained Authorization engine (5-step decision flow)
+	PAM               *application.PAMService               // Privileged access management: tiers, approvals, break-glass declarations, certification campaigns
 	ATCIssuance       *application.ATCIssuanceService       // Issues Registry-signed ATCs carrying AIM's behavioral score
 	SigningKeys       *crypto.SigningKeyRing                // One server signing key per purpose; public keys served at /.well-known/jwks.json
 	// Sends the stored requests asking the Registry to revoke a revoked agent's credentials; nil without REGISTRY_ATC_TOKEN
@@ -1342,6 +1343,11 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		fgaEngine.SetRegistryASCURL(v)
 	}
 
+	// Privileged access management: the tier registry, approval requests,
+	// break-glass declarations and certification campaigns, each record kept
+	// for one organization. It needs no configuration.
+	pamService := application.NewPAMService(db, telemetry.Logger("aim-pam"))
+
 	return &Services{
 		Auth:              authService,
 		Admin:             adminService,
@@ -1377,6 +1383,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 		Remediation:       application.NewRemediationService(repos.Remediation), // For remediation tracking
 		Secrets:           secretsService,                                       // For identity-native secrets management
 		FGA:               fgaEngine,                                            // Fine-Grained Authorization engine
+		PAM:               pamService,                                           // Privileged access management records of each organization
 		ATCIssuance:       atcIssuanceService,                                   // Registry-delegated ATC issuance
 		SigningKeys:       signingKeys,                                          // Per-purpose server signing keys
 
@@ -1438,6 +1445,7 @@ type Handlers struct {
 	Secrets            *handlers.SecretsHandler            // For identity-native secrets management
 	Authorize          *handlers.AuthorizeHandler          // POST /agents/:id/authorize -- FGA decision endpoint
 	ATCIssuance        *handlers.ATCIssuanceHandler        // POST /agents/:id/atc -- Registry-delegated ATC issuance
+	PAM                *handlers.PAMHandler                // /pam -- privileged access management of the organization
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -1535,6 +1543,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			jwtService, // a revoked session cannot create or update an alert channel
 		),
+		PAM: handlers.NewPAMHandler(services.PAM, services.Audit),
 		Verification: handlers.NewVerificationHandler(
 			services.Agent,
 			services.Audit,
@@ -2266,6 +2275,31 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	alertChannels.Put("/:id", middleware.MemberMiddleware(), h.AlertChannel.UpdateAlertChannel)
 	alertChannels.Delete("/:id", middleware.MemberMiddleware(), h.AlertChannel.DeleteAlertChannel)
 	alertChannels.Post("/:id/test", middleware.MemberMiddleware(), h.AlertChannel.TestAlertChannel)
+
+	// Privileged access management: the capability tier registry, approval
+	// requests for SUPER_PRIVILEGED capabilities, break-glass declarations and
+	// certification campaigns of the caller's organization. The role each
+	// route needs is in registerPAMRoutes.
+	registerPAMRoutes(v1, pamRouteDeps{
+		Authenticate:                middleware.AuthMiddleware(jwtService),
+		Limit:                       middleware.RateLimitMiddleware(),
+		RequireMember:               middleware.MemberMiddleware(),
+		RequireManager:              middleware.ManagerMiddleware(),
+		RequireAdmin:                middleware.AdminMiddleware(),
+		ListTiers:                   h.PAM.ListTiers,
+		RequestApproval:             h.PAM.RequestApproval,
+		ListApprovals:               h.PAM.ListApprovals,
+		GetApproval:                 h.PAM.GetApproval,
+		DecideApproval:              h.PAM.DecideApproval,
+		DeclareEmergency:            h.PAM.DeclareEmergency,
+		ListEmergencies:             h.PAM.ListEmergencies,
+		ExtendEmergency:             h.PAM.ExtendEmergency,
+		RevokeEmergency:             h.PAM.RevokeEmergency,
+		CreateCampaign:              h.PAM.CreateCampaign,
+		ListCampaigns:               h.PAM.ListCampaigns,
+		RecordCertificationDecision: h.PAM.RecordCertificationDecision,
+		ListCertificationDecisions:  h.PAM.ListCertificationDecisions,
+	})
 
 	// Verification routes (authentication required) - Agent action verification
 	verifications := v1.Group("/verifications")
