@@ -89,12 +89,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ### Fixed — the MCP attestation challenge and attest routes answer an unauthenticated request in AuthMiddleware
 
-- `GET /api/v1/mcp-servers/:id/challenge` and `POST /api/v1/mcp-servers/:id/attest` run `AuthMiddleware` after the
-  agent signature check, as the `/agents`, `/detection` and `/a2a` groups do. A request without credentials, or with
-  `X-Agent-ID` and no `X-Timestamp`, is answered 401 `{"error":"No authentication token provided"}`, and a bearer
-  value that is not a token 401 `{"error":"Invalid or expired token"}`. Before, these requests reached the handler,
-  which answered 401 only because no organization was set; a signed-in user's session got the same 401, and now
-  reaches the handler with its organization.
+- `GET /api/v1/mcp-servers/:id/challenge` and `POST /api/v1/mcp-servers/:id/attest` answer a request that the agent
+  signature check did not authenticate in `AuthMiddleware`. A request without credentials, or with `X-Agent-ID` and
+  no `X-Timestamp`, is answered 401 `{"error":"No authentication token provided"}`, and a bearer value that is not a
+  token 401 `{"error":"Invalid or expired token"}`. Before, these requests reached the handler, which answered 401
+  only because no organization was set; a signed-in user's session got the same 401, and now reaches the handler with
+  its organization. A request that the agent signature check authenticated, signed with Ed25519, ML-DSA or both keys,
+  reaches the handler without passing through `AuthMiddleware`.
 - Tests: `apps/backend/cmd/server/mcp_attestation_routes_auth_test.go`.
 
 ### Added — the card attestation conformance vector exercises the alg, issuer, purpose and expiry checks
