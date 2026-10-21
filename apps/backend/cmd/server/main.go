@@ -71,6 +71,12 @@ func main() {
 		os.Exit(runMigrateCommand())
 	}
 
+	// `aim-server check-agent-keys` lists the agents whose stored private key does
+	// not open and exits; see check_agent_keys_command.go.
+	if len(os.Args) > 1 && os.Args[1] == checkAgentKeysCommandName {
+		os.Exit(runCheckAgentKeysCommand())
+	}
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -846,7 +852,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// Server signing keys: one per purpose (card attestation, ATC issuer), so
 	// a signature made for one purpose never verifies for another. Each key is either
 	// provisioned in AIM_SIGNING_KEY_<PURPOSE> or derived from KEYVAULT_MASTER_KEY.
-	signingKeys, err := crypto.LoadSigningKeyRing(keyVault, cfg.SigningKeys.Value)
+	signingKeys, err := loadServerSigningKeys(keyVault, cfg.SigningKeys.Value)
 	if err != nil {
 		log.Fatalf("Failed to load server signing keys: %v", err)
 	}
@@ -1704,6 +1710,20 @@ func emailStartupLine(emailCfg config.EmailConfig) string {
 // signingKeyStartupLines are the lines the server logs for its signing keys:
 // each key's source, its retired keys, and, in production, each key that is
 // derived from KEYVAULT_MASTER_KEY rather than provisioned.
+// loadServerSigningKeys loads the server's signing keys (crypto.LoadSigningKeyRing) and
+// refuses a ring that holds a key the card attestation conformance vector publishes
+// (crypto.SigningKeyRing.RefuseConformanceVectorKeys).
+func loadServerSigningKeys(keyVault *crypto.KeyVault, getenv func(string) string) (*crypto.SigningKeyRing, error) {
+	signingKeys, err := crypto.LoadSigningKeyRing(keyVault, getenv)
+	if err != nil {
+		return nil, err
+	}
+	if err := signingKeys.RefuseConformanceVectorKeys(); err != nil {
+		return nil, err
+	}
+	return signingKeys, nil
+}
+
 func signingKeyStartupLines(signingKeys *crypto.SigningKeyRing, environment string) []string {
 	var lines []string
 	for _, key := range signingKeys.Keys() {

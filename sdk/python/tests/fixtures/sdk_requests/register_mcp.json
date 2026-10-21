@@ -1,0 +1,11 @@
+{
+  "method": "PUT",
+  "path": "/api/v1/agents/{id}/mcp-servers",
+  "requestType": "AddMCPServersRequest",
+  "body": {
+    "mcpServerIds": ["filesystem-mcp-server"],
+    "detectedMethod": "manual",
+    "confidence": 87.5,
+    "metadata": {"source": "request-contract-fixture"}
+  }
+}

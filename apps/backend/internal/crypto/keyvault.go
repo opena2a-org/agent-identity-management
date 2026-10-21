@@ -653,8 +653,9 @@ func (kv *KeyVault) DecryptPrivateKey(agentID uuid.UUID, encryptedPrivateKey str
 // MigrateLegacyPrivateKey re-encrypts a v1 private key (AES-256-GCM with no
 // additional data) to format v3 bound to agentID. A value that is already v2
 // or v3 for agentID is returned unchanged with migrated=false. Only the
-// one-time startup migration calls this; request paths use DecryptPrivateKey,
-// which never reads v1.
+// one-time startup migration, which stores what it returns, and
+// `aim-server check-agent-keys`, which stores nothing, call this; request
+// paths use DecryptPrivateKey, which never reads v1.
 func (kv *KeyVault) MigrateLegacyPrivateKey(agentID uuid.UUID, encryptedPrivateKey string) (string, bool, error) {
 	if _, err := kv.open(agentPrivateKeyPurpose, agentID, encryptedPrivateKey); err == nil {
 		return encryptedPrivateKey, false, nil

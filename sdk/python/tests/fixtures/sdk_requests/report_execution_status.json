@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "path": "/api/v1/sdk-api/verifications/{id}/execution-status",
+  "requestType": "UpdateExecutionStatusRequest",
+  "body": {
+    "executed": true,
+    "executedAt": "2026-10-21T12:00:00.250000+00:00",
+    "executionError": "the tool raised ValueError"
+  }
+}

@@ -94,7 +94,7 @@ Each step either continues or ends with the result named.
 
 The cases for the `alg` check, the `issuer` check and the `purpose` filter each carry a signature that is valid over their own payload with the key their `keyId` names, so only that check decides their result. A case that carries `now` is also compared with that time as in step 7; the other cases cover steps 1 to 6.
 
-The seeds are public test data. Never configure either one as a signing key.
+The seeds are public test data. Never configure either one as a signing key. The server refuses to start when `AIM_SIGNING_KEY_CARD_ATTESTATION` or `AIM_SIGNING_KEY_ATC_ISSUER` holds either seed, or when `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` or `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED` lists the public key of either seed, and its error names the variable.
 
 ```bash
 node verify-card-attestation.mjs --vector card-attestation-v2-vector.json
