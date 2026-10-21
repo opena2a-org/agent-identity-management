@@ -32,6 +32,26 @@ function withAnotherSignature(accessToken: string): string {
   return `${accessToken.slice(0, cut)}${first}${accessToken.slice(cut + 1)}`;
 }
 
+// The API limits requests to /api/v1/auth/* per client address, before the route runs, and
+// answers 429 with a Retry-After in seconds once the minute's limit is spent. Every worker of a
+// run reaches the API from the same machine, so the dashboard pages of the other specs spend
+// that limit too. A request of this spec to that path that is refused 429 is sent again when
+// the Retry-After has passed; a 429 spends no refresh token, as the route never ran.
+const RATE_LIMITED = 429;
+const MAX_RATE_LIMIT_WAITS = 2;
+
+type Answer = { status(): number; headers(): Record<string, string> };
+
+async function pastTheRateLimit<R extends Answer>(send: () => Promise<R>): Promise<R> {
+  let answer = await send();
+  for (let waits = 0; waits < MAX_RATE_LIMIT_WAITS && answer.status() === RATE_LIMITED; waits++) {
+    const seconds = Math.max(Number(answer.headers()['retry-after']) || 0, 1);
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1_000 + 250));
+    answer = await send();
+  }
+  return answer;
+}
+
 const storedPair = (tab: Page): Promise<Pair> =>
   tab.evaluate(() => ({
     accessToken: window.localStorage.getItem('auth_token'),
@@ -50,8 +70,9 @@ for (const { name, webLocks } of CASES) {
     request,
     ownSession,
   }) => {
-    // The first visit to a page of a development server compiles it.
-    test.setTimeout(120_000);
+    // The first visit to a page of a development server compiles it, and a request refused 429
+    // waits out the minute.
+    test.setTimeout(240_000);
 
     const refusedAccessToken = withAnotherSignature(ownSession.accessToken);
     const context = await browser.newContext({
@@ -99,11 +120,12 @@ for (const { name, webLocks } of CASES) {
         if (response.status() === 200) carriedOn.add(tab);
       });
       // The answer to a refresh is kept back until both tabs have been refused and the later one
-      // has had time to ask for its turn, so the two refreshes overlap.
+      // has had time to ask for its turn, so the two refreshes overlap. The tab sends the refresh
+      // once; a resend past a 429 is made here and is not a request of the tab.
       await context.route(`**${REFRESH_PATH}`, async (route) => {
         await expect.poll(() => refused.size, { timeout: 60_000 }).toBe(2);
         await new Promise((resolve) => setTimeout(resolve, 1_000));
-        await route.continue();
+        await route.fulfill({ response: await pastTheRateLimit(() => route.fetch()) });
       });
 
       await Promise.all(tabs.map((tab) => tab.goto(DASHBOARD_PAGE)));
@@ -111,7 +133,7 @@ for (const { name, webLocks } of CASES) {
         expect(await tab.evaluate(() => typeof navigator.locks)).toBe(webLocks ? 'object' : 'undefined');
       }
       // The stored access token is refused, so a 200 is an answer to the one a refresh returned.
-      await expect.poll(() => carriedOn.size, { timeout: 60_000 }).toBe(2);
+      await expect.poll(() => carriedOn.size, { timeout: 150_000 }).toBe(2);
       await tabs[0].waitForTimeout(2 * SIGN_OUT_DELAY_MS);
 
       expect(
@@ -133,9 +155,11 @@ for (const { name, webLocks } of CASES) {
         ).toEqual({ accessToken: true, refreshToken: true });
       }
       // The sign-in was not ended: the API still answers the access token the tabs hold.
-      const me = await request.get('/api/v1/auth/me', {
-        headers: { Authorization: `Bearer ${answer.accessToken}` },
-      });
+      const me = await pastTheRateLimit(() =>
+        request.get('/api/v1/auth/me', {
+          headers: { Authorization: `Bearer ${answer.accessToken}` },
+        }),
+      );
       expect(me.status()).toBe(200);
     } finally {
       // A refresh still kept back when the test ends is let go without an error.
