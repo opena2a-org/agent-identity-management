@@ -15,6 +15,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 type WebhookHandler struct {
@@ -187,7 +188,7 @@ func (h *WebhookHandler) CreateWebhook(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// A revoked session cannot have the organization's events delivered to an address it chooses.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), "webhook_create") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), middleware.CredentialRouteWebhookCreate) {
 		return nil
 	}
 
@@ -365,7 +366,7 @@ func (h *WebhookHandler) UpdateWebhook(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// A revoked session cannot point a webhook's deliveries at a new address.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), "webhook_update") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), middleware.CredentialRouteWebhookUpdate) {
 		return nil
 	}
 
@@ -438,7 +439,7 @@ func (h *WebhookHandler) RotateWebhookSecret(c fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
 	// A revoked session cannot obtain a secret that signs the organization's events.
-	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), "webhook_rotate_secret") {
+	if !refuseIfFamilyRevoked(c, h.jwtService, h.getAuditService(), middleware.CredentialRouteWebhookRotateSecret) {
 		return nil
 	}
 

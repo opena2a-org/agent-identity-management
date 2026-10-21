@@ -11,6 +11,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 type SDKTokenRecoveryHandler struct {
@@ -66,7 +67,7 @@ func (h *SDKTokenRecoveryHandler) RecoverRevokedToken(c fiber.Ctx) error {
 	// access token, and neither can an access token minted from an
 	// SDK-download token: a recovery starts a new family, and that needs a
 	// sign-in.
-	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, "sdk_recover") {
+	if !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, middleware.CredentialRouteSDKRecover) {
 		return nil
 	}
 

@@ -1722,6 +1722,15 @@ func signingKeyStartupLines(signingKeys *crypto.SigningKeyRing, environment stri
 // matches them. main calls it, and so does the strict-limiter route census in
 // strict_rate_limit_routes_test.go, so the census runs the table that ships.
 func mountAPIRoutes(app *fiber.App, h *Handlers, services *Services, jwtService *auth.JWTService, sdkTokenRepo domain.SDKTokenRepository, db *sql.DB) {
+	// The session middleware mounted below records in this audit log, as
+	// credential_mint_refused, a request it refuses at a credential route
+	// (middleware.CredentialRoutes) because the access token's session was
+	// revoked. Attached here, not in main, so the route census in
+	// credential_route_refusal_census_test.go runs the wiring that ships.
+	if services.Audit != nil {
+		jwtService.SetAuditLogger(services.Audit)
+	}
+
 	// ⭐ SDK API routes.
 	//
 	// The paths themselves live in sdk_api_routes.go: one table, mounted here
