@@ -457,6 +457,16 @@ if _UNSHIMMED_MARKERS:
 # inherits, so the working directory is the temporary home too, and no test
 # gives a Python child a directory of the checkout as its cwd
 # (tests/test_isolated_home.py checks both).
+#
+# aim_sdk.oauth copies the functions it imports from aim_sdk.credentials,
+# load_sdk_credentials and save_sdk_credentials among them, into its own
+# namespace when it is first imported, and cli.login() is one place where that
+# first import runs. A test that had patched those two names on
+# aim_sdk.credentials at that moment left its stand-ins in aim_sdk.oauth after
+# its patches were undone, and an OAuthTokenManager in a later test loaded no
+# stored credentials (#828). This fixture imports aim_sdk.oauth before it
+# patches anything, ahead of the function-scoped fixtures a test requests and of
+# the test itself (tests/test_patched_credentials_do_not_outlive_the_test.py).
 
 @pytest.fixture(autouse=True)
 def isolated_home(monkeypatch, tmp_path_factory):
@@ -466,6 +476,7 @@ def isolated_home(monkeypatch, tmp_path_factory):
     monkeypatch.chdir(home)
 
     from aim_sdk import credentials, grant_client
+    from aim_sdk import oauth  # noqa: F401
 
     aim_dir = home / ".aim"
     monkeypatch.setattr(credentials, "AIM_DIR", aim_dir)

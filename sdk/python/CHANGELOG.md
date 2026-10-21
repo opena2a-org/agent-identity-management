@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — the quick-start refresh test passes after `tests/test_perform_action_authorization_claims.py` in the same pytest session (#828)
+
+- `aim_sdk.oauth` copies the functions it imports from `aim_sdk.credentials`, `load_sdk_credentials` and
+  `save_sdk_credentials` among them, into its own namespace when it is first imported, and `cli.login()` is one place
+  where that first import runs. `tests/test_perform_action_authorization_claims.py` patches those two names to
+  stand-ins around `cli.login()`; run where nothing had imported `aim_sdk.oauth` before it, it left the stand-ins in
+  `aim_sdk.oauth` after its patches were undone. `pytest -p no:cacheprovider` on that file and then
+  `tests/test_readme_quick_start_runs_as_written.py` reported 2 failed, 41 passed: in both cases of
+  `test_first_refresh_after_login_prints_the_rotation_line_only_when_the_server_rotates`, the `OAuthTokenManager`
+  loaded no stored credentials and `get_access_token()` returned `None`. Run before that test the same way,
+  `tests/test_cli_device_login.py`, `tests/test_cli_login_server_unavailable.py`,
+  `tests/test_cli_login_cleartext_url.py` and `tests/test_cli_login_url_validation.py` each failed the same two cases.
+- The autouse `isolated_home` fixture in `tests/conftest.py` now imports `aim_sdk.oauth` before it patches anything,
+  ahead of the function-scoped fixtures a test requests and of the test itself. The two files in that order report
+  43 passed, and each of the four files above followed by the refresh test passes.
+- Test: `tests/test_patched_credentials_do_not_outlive_the_test.py` runs the claims file and then the refresh test
+  with pytest in a new interpreter, started in an empty temporary home, and requires both refresh cases to pass. With
+  the previous `tests/conftest.py` it fails, and its pytest run reports 2 failed, 7 passed.
+
 ### Added — `get_audit_logs()` reads an agent's audit log (#666)
 
 - `AIMClient.get_audit_logs(agent_id=None, limit=None, offset=None)` reads `GET /api/v1/agents/{id}/audit-logs` and
