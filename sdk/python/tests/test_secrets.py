@@ -457,6 +457,67 @@ class TestNamespaceCRUD:
 
 
 # ---------------------------------------------------------------------------
+# Tests: create_namespace refuses the namespaces resolve() refuses to sign
+# ---------------------------------------------------------------------------
+
+UNRESOLVABLE_NAMESPACES = [
+    pytest.param(
+        "team\nprod",
+        "Cannot create namespace: namespace contains a line feed. resolve() refuses to sign a namespace "
+        "that contains a line feed, a carriage return or '|'.",
+        id="LF",
+    ),
+    pytest.param(
+        "team\rprod",
+        "Cannot create namespace: namespace contains a carriage return. resolve() refuses to sign a namespace "
+        "that contains a line feed, a carriage return or '|'.",
+        id="CR",
+    ),
+    pytest.param(
+        "team|prod",
+        "Cannot create namespace: namespace contains '|'. resolve() refuses to sign a namespace "
+        "that contains a line feed, a carriage return or '|'.",
+        id="pipe",
+    ),
+    pytest.param(
+        "DSSEv1 46 application/vnd.opena2a.action-request.v1+json 2 {}",
+        "Cannot create namespace: namespace begins with 'DSSEv1 ', the first bytes of a DSSE statement "
+        "an agent key signs. resolve() refuses to sign a namespace that begins with 'DSSEv1 '.",
+        id="dsse-prefix",
+    ),
+]
+
+
+class TestCreateNamespaceRefusesWhatResolveRefuses:
+    """A namespace created under a name resolve() refuses to sign could not be resolved."""
+
+    @pytest.mark.parametrize("namespace, refusal", UNRESOLVABLE_NAMESPACES)
+    def test_refuses_before_sending(self, namespace, refusal):
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.create_namespace("agent-1", namespace, operations=["read"])
+
+        assert str(excinfo.value) == refusal
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize("namespace", [pytest.param("team-prod", id="plain"), *NAMESPACES_NOT_DSSE_PREFIXED])
+    def test_sends_a_namespace_resolve_signs_once(self, namespace):
+        """Control: only those three characters, and "DSSEv1 " at the start, are refused."""
+        client, _ = make_test_client()
+
+        with patch.object(client, "_make_request", return_value={"id": "ns-123"}) as mock_req:
+            client.secrets.create_namespace("agent-1", namespace, operations=["read"])
+
+        mock_req.assert_called_once_with(
+            "POST",
+            "/api/v1/secrets/namespaces",
+            data={"agentId": "agent-1", "namespace": namespace, "operations": ["read"], "urlPatterns": []},
+        )
+
+
+# ---------------------------------------------------------------------------
 # Tests: Credential Store/Rotate
 # ---------------------------------------------------------------------------
 

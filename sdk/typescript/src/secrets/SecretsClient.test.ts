@@ -18,7 +18,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { SecretsClient, edwardsToMontgomeryPrivate } from './SecretsClient';
 import type { SecretsClientHost } from './SecretsClient';
-import { SecretsError } from '../exceptions';
+import { ConfigurationError, SecretsError } from '../exceptions';
 
 const SECRETS_HANDLER = join(
   __dirname, '..', '..', '..', '..',
@@ -445,6 +445,48 @@ describe('SecretsClient', () => {
       });
       expect(result).toEqual({ id: 'ns-123', status: 'active' });
     });
+
+    // resolve refuses to sign these namespaces, so createNamespace refuses
+    // them before anything is sent.
+    const separatorsRefusal =
+      'the namespace contains a line feed, a carriage return or a vertical bar (|), which resolve refuses to sign; ' +
+      'the request was not sent\nFix: Pass a namespace that contains no line feed, carriage return or vertical bar (|).';
+    const dssePrefixRefusal =
+      'the namespace begins with "DSSEv1 ", which resolve refuses to sign; the request was not sent\n' +
+      'Fix: Pass a namespace that does not begin with "DSSEv1 ".';
+
+    for (const [named, namespace, message] of [
+      ['a line feed', 'team\nprod', separatorsRefusal],
+      ['a carriage return', 'team\rprod', separatorsRefusal],
+      ['a vertical bar', 'team|prod', separatorsRefusal],
+      ['the DSSE prefix', 'DSSEv1 46 application/vnd.opena2a.action-request.v1+json 2 {}', dssePrefixRefusal],
+    ] as const) {
+      it(`should refuse a namespace holding ${named} before sending it`, async () => {
+        const creating = client.createNamespace('agent-1', namespace, ['read']);
+
+        await expect(creating).rejects.toBeInstanceOf(ConfigurationError);
+        await expect(creating).rejects.toHaveProperty('message', message);
+        expect(host.request).not.toHaveBeenCalled();
+      });
+    }
+
+    // None of these holds a line feed, a carriage return or "|", or begins
+    // with the seven characters "DSSEv1 ".
+    for (const namespace of ['team-prod', 'DSSEv1', 'dssev1 creds', ' DSSEv1 creds', 'creds DSSEv1 x']) {
+      it(`should send the namespace ${JSON.stringify(namespace)} once`, async () => {
+        host.request.mockResolvedValue({ id: 'ns-123' });
+
+        await client.createNamespace('agent-1', namespace, ['read']);
+
+        expect(host.request).toHaveBeenCalledTimes(1);
+        expect(host.request).toHaveBeenCalledWith('POST', '/api/v1/secrets/namespaces', {
+          agentId: 'agent-1',
+          namespace,
+          operations: ['read'],
+          urlPatterns: [],
+        });
+      });
+    }
 
     it('should list namespaces', async () => {
       host.request.mockResolvedValue({

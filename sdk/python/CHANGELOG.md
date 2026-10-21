@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `client.secrets.create_namespace()` refuses a namespace that `resolve()` refuses to sign (#830)
+
+- `create_namespace(agent_id, namespace, operations, url_patterns)` now raises `SecretsError` before anything is sent
+  when the namespace contains a line feed, a carriage return or `|`, or begins with the seven characters `DSSEv1 `:
+  the namespaces `resolve()` refuses to sign.
+- The message names what the namespace holds, as in `Cannot create namespace: namespace contains '|'. resolve()
+  refuses to sign a namespace that contains a line feed, a carriage return or '|'.`, or for the prefix `Cannot create
+  namespace: namespace begins with 'DSSEv1 ', the first bytes of a DSSE statement an agent key signs. resolve()
+  refuses to sign a namespace that begins with 'DSSEv1 '.`
+- Before this change, `create_namespace()` sent each of `team|prod`, `team`, a line feed and `prod`, `team`, a
+  carriage return and `prod`, and `DSSEv1 46 application/vnd.opena2a.action-request.v1+json 2 {}`. A namespace that
+  holds `DSSEv1` without the space, in lower case, or after its first character is sent as before.
+- Tests: `tests/test_secrets.py`, `TestCreateNamespaceRefusesWhatResolveRefuses`: one refusal for each of the four,
+  and five namespaces that are sent once.
+
 ### Fixed — the quick-start refresh test passes after `tests/test_perform_action_authorization_claims.py` in the same pytest session (#828)
 
 - `aim_sdk.oauth` copies the functions it imports from `aim_sdk.credentials`, `load_sdk_credentials` and

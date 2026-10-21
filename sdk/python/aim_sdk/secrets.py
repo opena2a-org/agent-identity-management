@@ -76,6 +76,22 @@ def _refuse_dsse_prefix(namespace: Any) -> None:
         )
 
 
+def _refuse_unresolvable_namespace(namespace: Any) -> None:
+    """Raise SecretsError if resolve() refuses to sign the namespace, so none is created under it."""
+    text = str(namespace)  # the text resolve() signs
+    for character, name in _UNSIGNABLE_CHARACTERS:
+        if character in text:
+            raise SecretsError(
+                f"Cannot create namespace: namespace contains {name}. resolve() refuses to sign a namespace "
+                "that contains a line feed, a carriage return or '|'."
+            )
+    if text.startswith(_DSSE_PREFIX):
+        raise SecretsError(
+            "Cannot create namespace: namespace begins with 'DSSEv1 ', the first bytes of a DSSE statement "
+            "an agent key signs. resolve() refuses to sign a namespace that begins with 'DSSEv1 '."
+        )
+
+
 class SecretsClient:
     """
     Identity-native secrets client.
@@ -241,7 +257,14 @@ class SecretsClient:
         operations: List[str],
         url_patterns: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Create a secret namespace for an agent."""
+        """Create a secret namespace for an agent.
+
+        Raises:
+            SecretsError: If namespace contains a line feed, a carriage return or "|", or
+                begins with "DSSEv1 ", which resolve() refuses to sign (nothing is sent)
+        """
+        _refuse_unresolvable_namespace(namespace)
+
         payload = {
             "agentId": agent_id,
             "namespace": namespace,
