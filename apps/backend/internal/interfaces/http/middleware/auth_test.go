@@ -281,6 +281,44 @@ func TestAuthMiddleware_SkipsIfEd25519Authenticated(t *testing.T) {
 	assert.Equal(t, fiber.StatusOK, resp.StatusCode)
 }
 
+// PQCAgentMiddleware and AgentRequestV2Middleware set authenticated_via to "mldsa" or
+// "hybrid" for a request signed with ML-DSA or with both keys. AuthMiddleware passes on
+// those as it does on "ed25519", and still asks for a token for any other value.
+func TestAuthMiddleware_SkipsIfAgentSignedWithAnyAlgorithm(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
+	jwtService := auth.NewJWTService()
+
+	cases := []struct {
+		authenticatedVia string
+		status           int
+	}{
+		{"ed25519", fiber.StatusOK},
+		{"mldsa", fiber.StatusOK},
+		{"hybrid", fiber.StatusOK},
+		{"ML-DSA-65", fiber.StatusUnauthorized},
+		{"", fiber.StatusUnauthorized},
+	}
+	for _, tc := range cases {
+		t.Run("authenticated_via="+tc.authenticatedVia, func(t *testing.T) {
+			app := fiber.New()
+			app.Use(func(c fiber.Ctx) error {
+				c.Locals("authenticated_via", tc.authenticatedVia)
+				return c.Next()
+			})
+			app.Use(AuthMiddleware(jwtService))
+			app.Get("/protected", func(c fiber.Ctx) error {
+				return c.JSON(fiber.Map{"message": "success"})
+			})
+
+			resp, err := app.Test(httptest.NewRequest("GET", "/protected", nil))
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, tc.status, resp.StatusCode)
+		})
+	}
+}
+
 func TestAuthMiddleware_SkipsIfAPIKeyAuthenticated(t *testing.T) {
 	t.Setenv("JWT_SECRET", "test-secret-key-for-testing-purposes-32chars")
 	jwtService := auth.NewJWTService()

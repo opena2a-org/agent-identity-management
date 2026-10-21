@@ -1751,7 +1751,7 @@ func mountAPIRoutes(app *fiber.App, h *Handlers, services *Services, jwtService 
 		BareMiddleware: middleware.RateLimitMiddleware(),
 		GroupMiddleware: []fiber.Handler{
 			middleware.PQCAgentMiddleware(services.Agent),           // Validates agent signatures (Ed25519, ML-DSA, or hybrid), passes through JWT
-			middleware.AuthMiddleware(jwtService),                   // Fallback to JWT if Ed25519 not present
+			middleware.AuthMiddleware(jwtService),                   // Fallback to JWT if no agent signature authenticated the request
 			middleware.AgentActivityTouchMiddleware(services.Agent), // Touches agents.last_active on agent-authed responses (#167)
 			middleware.RateLimitMiddleware(),
 		},

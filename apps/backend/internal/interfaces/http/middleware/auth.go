@@ -13,9 +13,11 @@ import (
 // SECURITY: Debug logging removed to prevent information leakage
 func AuthMiddleware(jwtService *auth.JWTService) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		// Check if already authenticated by Ed25519 middleware
-		authenticatedVia := c.Locals("authenticated_via")
-		if authenticatedVia == "ed25519" {
+		// Check if already authenticated by an agent signature: PQCAgentMiddleware and
+		// AgentRequestV2Middleware set "ed25519", "mldsa" or "hybrid" after the signature
+		// verifies, by the algorithm the agent signed with.
+		switch c.Locals("authenticated_via") {
+		case "ed25519", "mldsa", "hybrid":
 			// Already authenticated - skip JWT validation
 			return c.Next()
 		}
