@@ -260,3 +260,14 @@ func TestSDKToken_SetFamilyCreatedAt(t *testing.T) {
 		assert.True(t, born.Equal(token.FamilyCreatedAt()))
 	})
 }
+
+func TestSDKToken_RevokedForNeedsTheRevocationAndItsReason(t *testing.T) {
+	now := time.Now()
+	reason, other := "password_changed", "user_revoked"
+
+	assert.True(t, (&SDKToken{RevokedAt: &now, RevokeReason: &reason}).RevokedFor(reason))
+	assert.False(t, (&SDKToken{}).RevokedFor(reason), "a token that is not revoked")
+	assert.False(t, (&SDKToken{RevokedAt: &now}).RevokedFor(reason), "a token revoked without a reason")
+	assert.False(t, (&SDKToken{RevokedAt: &now, RevokeReason: &other}).RevokedFor(reason), "a token revoked for another reason")
+	assert.False(t, (&SDKToken{RevokeReason: &reason}).RevokedFor(reason), "a reason without a revocation time")
+}

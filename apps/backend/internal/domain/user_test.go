@@ -169,3 +169,16 @@ func TestUserWithNilOptionalFields(t *testing.T) {
 	assert.Nil(t, user.LastLoginAt)
 	assert.Nil(t, user.DeletedAt)
 }
+
+func TestUser_CanHoldSessionOnlyWhenActiveOrPendingAndNotDeleted(t *testing.T) {
+	deletedAt := time.Now()
+	var noUser *User
+
+	assert.True(t, (&User{Status: UserStatusActive}).CanHoldSession())
+	assert.True(t, (&User{Status: UserStatusPending}).CanHoldSession(), "sign-in admits a pending user")
+	assert.False(t, (&User{Status: UserStatusSuspended}).CanHoldSession())
+	assert.False(t, (&User{Status: UserStatusDeactivated}).CanHoldSession())
+	assert.False(t, (&User{Status: "archived"}).CanHoldSession(), "an unrecognised status fails closed")
+	assert.False(t, (&User{Status: UserStatusActive, DeletedAt: &deletedAt}).CanHoldSession(), "a soft-deleted user")
+	assert.False(t, noUser.CanHoldSession(), "no user")
+}

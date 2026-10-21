@@ -101,3 +101,26 @@ func TestBuildManifest_SkipsInactive(t *testing.T) {
 		t.Fatalf("inactive capability must be excluded: entries=%d tools=%d", len(entries), tools)
 	}
 }
+
+// A names-only manifest holds each non-empty name once, as a tool without a schema hash,
+// sorted by name, and its hash does not depend on the order the names came in.
+func TestBuildManifestFromNames_DeduplicatesAndSkipsEmptyNames(t *testing.T) {
+	entries, hash := BuildManifestFromNames([]string{"write_file", "", "read_file", "write_file"})
+	if len(entries) != 2 {
+		t.Fatalf("want 2 entries, got %d: %+v", len(entries), entries)
+	}
+	for i, name := range []string{"read_file", "write_file"} {
+		if e := entries[i]; e.Type != MCPCapabilityTypeTool || e.Name != name || e.SchemaHash != "" {
+			t.Errorf("entry %d = %+v, want the tool %q with no schema hash", i, e, name)
+		}
+	}
+
+	_, reordered := BuildManifestFromNames([]string{"read_file", "write_file"})
+	if hash != reordered {
+		t.Errorf("the hash depends on the order of the names: %s != %s", hash, reordered)
+	}
+	_, fewer := BuildManifestFromNames([]string{"read_file"})
+	if hash == fewer {
+		t.Error("removing a name left the hash unchanged")
+	}
+}

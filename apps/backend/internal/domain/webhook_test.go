@@ -227,3 +227,12 @@ func TestWebhookWithLastTriggered(t *testing.T) {
 	assert.NotNil(t, webhook.LastTriggered)
 	assert.Equal(t, "success", webhook.LastDeliveryStatus)
 }
+
+func TestIsKnownWebhookEvent_AcceptsOnlyTheListedEvents(t *testing.T) {
+	for _, event := range AllWebhookEvents() {
+		assert.True(t, IsKnownWebhookEvent(event), "event %q", event)
+	}
+	for _, event := range []WebhookEvent{"", "agent.revoked", "AGENT.CREATED", "agent.created "} {
+		assert.False(t, IsKnownWebhookEvent(event), "event %q", event)
+	}
+}

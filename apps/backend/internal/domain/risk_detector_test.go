@@ -336,3 +336,14 @@ func TestRiskLevelDescription(t *testing.T) {
 		})
 	}
 }
+
+func TestDetectRiskLevelWithoutOverride_IsDetectionWithAnEmptyOverride(t *testing.T) {
+	for _, capability := range []string{"system:exec", "user:delete", "payment:read", "db:write", "unknown", ""} {
+		if got, want := DetectRiskLevelWithoutOverride(capability), DetectRiskLevel(capability, ""); got != want {
+			t.Errorf("DetectRiskLevelWithoutOverride(%q) = %q, want %q", capability, got, want)
+		}
+	}
+	if got := DetectRiskLevelWithoutOverride("system:exec"); got != RiskLevelCritical {
+		t.Errorf("DetectRiskLevelWithoutOverride(%q) = %q, want %q", "system:exec", got, RiskLevelCritical)
+	}
+}

@@ -184,9 +184,9 @@ func TestA2AGuideAttestationIsAnExplicitCall(t *testing.T) {
 	section := guideSubsection(t, guide, "### Attesting an MCP Server")
 
 	mainSrc := aim03ReadRepoFile(t, "apps/backend/cmd/server/main.go")
-	srcContains(t, mainSrc, `mcpServersAgentAuth.Get("/:id/challenge", h.MCPAttestation.GetAttestationChallenge)`,
+	srcContains(t, mainSrc, `mcpServersAgentAuth.Get("/:id/challenge", middleware.AuthMiddleware(jwtService), h.MCPAttestation.GetAttestationChallenge)`,
 		"the server issues the attestation challenge")
-	srcContains(t, mainSrc, `mcpServersAgentAuth.Post("/:id/attest", h.MCPAttestation.AttestMCP)`,
+	srcContains(t, mainSrc, `mcpServersAgentAuth.Post("/:id/attest", middleware.AuthMiddleware(jwtService), h.MCPAttestation.AttestMCP)`,
 		"the server takes an agent's signed attestation")
 	srcContains(t, mainSrc, `mcpServers.Post("/:id/manual-attest", middleware.MemberMiddleware(), h.MCPAttestation.ManualAttestMCP)`,
 		"a member attests without an agent key")

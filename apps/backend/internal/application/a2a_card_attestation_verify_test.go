@@ -300,11 +300,12 @@ func TestRotatingTheMasterKeyMovesEveryDerivedKey(t *testing.T) {
 type cardAttestationVector struct {
 	Format string `json:"format"`
 	Inputs struct {
-		Seed      string `json:"seed"`
-		Card      string `json:"card"`
-		AgentID   string `json:"agentId"`
-		IssuedAt  string `json:"issuedAt"`
-		ExpiresAt string `json:"expiresAt"`
+		Seed          string `json:"seed"`
+		ATCIssuerSeed string `json:"atcIssuerSeed"`
+		Card          string `json:"card"`
+		AgentID       string `json:"agentId"`
+		IssuedAt      string `json:"issuedAt"`
+		ExpiresAt     string `json:"expiresAt"`
 	} `json:"inputs"`
 	JWKS         json.RawMessage `json:"jwks"`
 	Intermediate struct {
@@ -317,6 +318,7 @@ type cardAttestationVector struct {
 		Name        string                `json:"name"`
 		AgentID     string                `json:"agentId"`
 		Attestation thirdPartyAttestation `json:"attestation"`
+		Now         string                `json:"now"`
 		Result      string                `json:"result"`
 	} `json:"cases"`
 }
@@ -337,11 +339,12 @@ func TestCardAttestationConformanceVectorIsWhatTheServerSigns(t *testing.T) {
 
 	ring := newRingWithCardAttestationEnv(t, randomBytes(t, 32), map[string]string{
 		"AIM_SIGNING_KEY_CARD_ATTESTATION": vector.Inputs.Seed,
+		"AIM_SIGNING_KEY_ATC_ISSUER":       vector.Inputs.ATCIssuerSeed,
 	})
-	var published, expected thirdPartyJWKSet
+	var published, expected map[string]any
 	require.NoError(t, json.Unmarshal(jwksJSON(t, ring), &published))
 	require.NoError(t, json.Unmarshal(vector.JWKS, &expected))
-	assert.Equal(t, expected.Keys[0], published.Keys[0], "the vector's JWK is the card-attestation key the server publishes for the seed")
+	assert.Equal(t, expected, published, "the vector's JWK Set is the one the server publishes for the two seeds, member for member")
 
 	hash := sha256.Sum256([]byte(vector.Inputs.Card))
 	assert.Equal(t, vector.Intermediate.CardHash, hex.EncodeToString(hash[:]))
@@ -378,7 +381,61 @@ func TestCardAttestationConformanceVectorCases(t *testing.T) {
 	require.NoError(t, json.Unmarshal(vector.JWKS, &jwks))
 	for _, c := range vector.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			assert.Equal(t, c.Result, verifyAsThirdParty(c.AgentID, c.Attestation, jwks))
+			result := verifyAsThirdParty(c.AgentID, c.Attestation, jwks)
+			// Step 7: a case that carries now is compared with that time; an attestation is
+			// expired from its expiresAt on.
+			if result == "verified" && c.Now != "" {
+				now, err := time.Parse(time.RFC3339, c.Now)
+				require.NoError(t, err)
+				expiresAt, err := time.Parse(time.RFC3339, c.Attestation.ExpiresAt)
+				require.NoError(t, err)
+				if !expiresAt.After(now) {
+					result = "expired"
+				}
+			}
+			assert.Equal(t, c.Result, result)
+		})
+	}
+}
+
+// Each of these cases carries a signature that verifies over the payload built from its
+// own members, with the key its keyId names in the vector's JWK Set, so the one check its
+// name gives decides its result: a verifier that skips that check returns verified.
+func TestCardAttestationConformanceVectorCheckCasesCarryAValidSignature(t *testing.T) {
+	vector := loadCardAttestationVector(t)
+	var jwks thirdPartyJWKSet
+	require.NoError(t, json.Unmarshal(vector.JWKS, &jwks))
+
+	for name, check := range map[string]string{
+		"a key published for another purpose does not verify a card attestation, though its signature is valid": "purpose",
+		"an algorithm other than EdDSA is an unsupported format, though the signature is valid":                 "alg",
+		"an issuer other than aim-server is malformed, though the signature over it is valid":                   "issuer",
+	} {
+		t.Run(check, func(t *testing.T) {
+			found := false
+			for _, c := range vector.Cases {
+				if c.Name != name {
+					continue
+				}
+				found = true
+				var publicKey ed25519.PublicKey
+				for _, k := range jwks.Keys {
+					if k.Kid == c.Attestation.KeyID {
+						x, err := base64.RawURLEncoding.DecodeString(k.X)
+						require.NoError(t, err)
+						publicKey = x
+					}
+				}
+				require.NotNil(t, publicKey, "the key the case names is in the vector's JWK Set")
+				a := c.Attestation
+				payload := `{"cardHash":"` + a.CardHash + `","agentId":"` + c.AgentID + `","issuer":"` + a.Issuer +
+					`","issuedAt":"` + a.IssuedAt + `","expiresAt":"` + a.ExpiresAt + `"}`
+				digest := sha256.Sum256([]byte(CardAttestationFormatV2 + "\n" + payload))
+				signature, err := base64.StdEncoding.DecodeString(a.Signature)
+				require.NoError(t, err)
+				assert.True(t, ed25519.Verify(publicKey, digest[:], signature), "the case's signature is valid")
+			}
+			require.True(t, found, "the vector has the case %q", name)
 		})
 	}
 }
