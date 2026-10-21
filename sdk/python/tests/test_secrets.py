@@ -11,7 +11,9 @@ Covers:
 """
 
 import base64
+import enum
 import hashlib
+import json
 import os
 from unittest.mock import patch
 from urllib.parse import parse_qsl, urlsplit
@@ -385,6 +387,162 @@ class TestResolveRefusesAnotherFormatsStart:
         signed_message = f"{namespace}|read|{payload['nonce']}".encode("utf-8")
         mock_sign.assert_called_once_with(signed_message)
         signing_key.verify_key.verify(signed_message, base64.b64decode(payload["signature"]))
+
+
+# ---------------------------------------------------------------------------
+# Tests: Resolve checks, signs and sends the text a field holds
+# ---------------------------------------------------------------------------
+
+class RendersOtherText(str):
+    """A str whose str() and format() give other text than it holds.
+
+    A member of an enum that mixes in str renders as "<Class>.<member>" through
+    both on Python 3.11 to 3.14.
+    """
+
+    def __str__(self):
+        return "Other.TEXT"
+
+
+class FormatsHeldText(str):
+    """A str whose str() gives other text than it holds, while format() gives the held text.
+
+    A member of an enum that mixes in str renders this way on Python 3.9 and 3.10.
+    """
+
+    def __str__(self):
+        return "Other.TEXT"
+
+    def __format__(self, format_spec):
+        return str.__format__(str.__str__(self), format_spec)
+
+
+class Namespace(str, enum.Enum):
+    CREDS = "creds"
+    PIPED = "a|b"
+    LINE_FEED = "a\nb"
+    DSSE = "DSSEv1 x"
+
+
+class Operation(str, enum.Enum):
+    READ = "read"
+    PIPED = "a|b"
+
+
+# Each holds the text "creds" (namespace) or "read" (operation).
+FIELDS_HOLDING_OTHER_TEXT_THAN_THEY_RENDER = [
+    pytest.param(RendersOtherText("creds"), "read", id="namespace-renders-other-text"),
+    pytest.param(FormatsHeldText("creds"), "read", id="namespace-formats-held-text"),
+    pytest.param(Namespace.CREDS, "read", id="namespace-enum-member"),
+    pytest.param("creds", RendersOtherText("read"), id="operation-renders-other-text"),
+    pytest.param("creds", FormatsHeldText("read"), id="operation-formats-held-text"),
+    pytest.param("creds", Operation.READ, id="operation-enum-member"),
+]
+
+STR_SUBCLASSES = [
+    pytest.param(RendersOtherText, id="renders-other-text"),
+    pytest.param(FormatsHeldText, id="formats-held-text"),
+]
+
+DSSE_REFUSAL = (
+    "Cannot resolve secret: namespace begins with 'DSSEv1 ', the first bytes of a DSSE "
+    "statement an agent key signs. A namespace cannot begin with 'DSSEv1 '."
+)
+
+
+class TestResolveSignsAndSendsTheTextAFieldHolds:
+    """resolve() checks, signs and sends one text per field: the text the request body carries."""
+
+    @pytest.mark.parametrize("namespace, operation", FIELDS_HOLDING_OTHER_TEXT_THAN_THEY_RENDER)
+    def test_signs_and_sends_the_text_a_str_subclass_holds(self, namespace, operation):
+        client, signing_key = make_test_client()
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request", return_value=resolvable_response(signing_key)) as mock_req:
+            result = client.secrets.resolve(namespace, operation)
+
+        assert result["credential"] == b"cred"
+        mock_req.assert_called_once()
+        payload = mock_req.call_args[1]["data"]
+        # The body as the server reads it; it rebuilds namespace|operation|nonce from it.
+        body = json.loads(json.dumps(payload, sort_keys=True))
+        assert (body["namespace"], body["operation"]) == ("creds", "read")
+        signed_message = f"creds|read|{body['nonce']}".encode("utf-8")
+        mock_sign.assert_called_once_with(signed_message)
+        signing_key.verify_key.verify(signed_message, base64.b64decode(body["signature"]))
+
+    @pytest.mark.parametrize("subclass", STR_SUBCLASSES)
+    @pytest.mark.parametrize("field", ["namespace", "operation"])
+    @pytest.mark.parametrize("value, named", UNSIGNABLE_VALUES)
+    def test_refuses_a_character_the_held_text_carries(self, value, named, field, subclass):
+        """str() of each value gives "Other.TEXT", which holds no refused character."""
+        client, _ = make_test_client()
+        fields = {"namespace": "my-ns", "operation": "read", field: subclass(value)}
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.resolve(fields["namespace"], fields["operation"])
+
+        assert f"{field} contains {named}" in str(excinfo.value)
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize("subclass", STR_SUBCLASSES)
+    def test_refuses_a_namespace_whose_held_text_begins_with_the_dsse_prefix(self, subclass):
+        client, _ = make_test_client()
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.resolve(subclass("DSSEv1 x"), "read")
+
+        assert str(excinfo.value) == DSSE_REFUSAL
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "namespace, operation, refusal",
+        [
+            pytest.param(Namespace.PIPED, "read", "namespace contains '|'", id="namespace-pipe"),
+            pytest.param(Namespace.LINE_FEED, "read", "namespace contains a line feed", id="namespace-line-feed"),
+            pytest.param(Namespace.DSSE, "read", DSSE_REFUSAL, id="namespace-dsse-prefix"),
+            pytest.param("creds", Operation.PIPED, "operation contains '|'", id="operation-pipe"),
+        ],
+    )
+    def test_refuses_an_enum_member_by_its_value(self, namespace, operation, refusal):
+        client, _ = make_test_client()
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.resolve(namespace, operation)
+
+        assert refusal in str(excinfo.value)
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
+
+    @pytest.mark.parametrize("field", ["namespace", "operation"])
+    @pytest.mark.parametrize(
+        "value, type_name",
+        [
+            pytest.param(None, "NoneType", id="None"),
+            pytest.param(5, "int", id="int"),
+            pytest.param(b"creds", "bytes", id="bytes"),
+        ],
+    )
+    def test_refuses_a_field_that_is_not_a_str(self, value, type_name, field):
+        client, _ = make_test_client()
+        fields = {"namespace": "my-ns", "operation": "read", field: value}
+
+        with patch.object(client.signing_key, "sign", wraps=client.signing_key.sign) as mock_sign, \
+                patch.object(client, "_make_request") as mock_req:
+            with pytest.raises(SecretsError) as excinfo:
+                client.secrets.resolve(fields["namespace"], fields["operation"])
+
+        assert str(excinfo.value) == f"Cannot resolve secret: {field} must be a str, not {type_name}."
+        mock_sign.assert_not_called()
+        mock_req.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
