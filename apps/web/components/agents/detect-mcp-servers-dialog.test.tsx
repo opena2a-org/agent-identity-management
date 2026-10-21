@@ -106,7 +106,7 @@ describe("DetectMCPServersDialog listener", () => {
   it("keeps waiting when a read fails, and shows nothing from the failure", async () => {
     vi.mocked(api.getAgent)
       .mockResolvedValueOnce({ talksTo: [] } as never)
-      .mockRejectedValueOnce(new Error("config file not found at /Users/someone"))
+      .mockRejectedValueOnce(new Error("config file not found at /etc/mcp/servers.json"))
       .mockResolvedValue({ talksTo: ["filesystem"] } as never);
     const { onDetected } = renderDialog();
 
@@ -114,6 +114,7 @@ describe("DetectMCPServersDialog listener", () => {
     await nextPoll();
     expect(screen.getByRole("status").textContent).toBe(WAITING);
     expect(screen.getByRole("dialog").textContent).not.toContain("config file not found");
+    expect(screen.getByRole("dialog").textContent).not.toContain("/etc/mcp/servers.json");
 
     // The next read still runs after a failed one.
     await nextPoll();
