@@ -126,6 +126,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 - The `internal/domain` function average that the CI coverage step computes rose from 90.6% to 98.9% over 126
   functions (`go test -race -covermode=atomic ./internal/domain/...`, averaged as the step does; its minimum is 90%).
 
+### Changed — the direct API guide and the API quickstart register an agent with camelCase body keys
+
+- The `POST /api/v1/agents` examples in `docs/api/direct-api-usage.md` send `displayName`, `agentType` and `publicKey`
+  in place of `display_name`, `agent_type` and `public_key`, and its request body and Go request type send
+  `repositoryUrl` and `documentationUrl` in place of `repository_url` and `documentation_url`. The examples in
+  `docs/tutorials/api-quickstart.md` send `displayName` and `agentType`. These are the member names of the create
+  request, and the spelling `docs/API.md` uses.
+- The API quickstart's `POST /api/v1/mcp-servers` example sends the server's address as `url`, the member the route's
+  request binds, in place of `server_url`, and leaves out `display_name`, which that request has no member for.
+- A test reads the body keys of the three pages' agent registration examples against the member names of the create
+  request, and the curl bodies the guide posts to the agent route and the quickstart posts to the agent and MCP server
+  routes against the member names of each route's request type.
+
 ### Added: conformance vectors for `agent-request-v2` statements
 
 - `docs/specs/agent-request-v2-vectors.json` holds 33 requests signed as `agent-request-v2` statements, each with the

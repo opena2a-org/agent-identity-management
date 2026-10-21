@@ -122,14 +122,14 @@ Authorization: Bearer YOUR_API_KEY
 ```json
 {
   "name": "my-go-agent",
-  "display_name": "My Go Agent",
-  "agent_type": "ai_agent",
-  "public_key": "YOUR_BASE64_PUBLIC_KEY",
+  "displayName": "My Go Agent",
+  "agentType": "ai_agent",
+  "publicKey": "YOUR_BASE64_PUBLIC_KEY",
   "description": "My agent written in Go",
   "version": "1.0.0",
   "capabilities": ["read_database", "send_email"],
-  "repository_url": "https://github.com/yourorg/your-agent",
-  "documentation_url": "https://docs.yourorg.com/agent"
+  "repositoryUrl": "https://github.com/yourorg/your-agent",
+  "documentationUrl": "https://docs.yourorg.com/agent"
 }
 ```
 
@@ -147,14 +147,14 @@ import (
 
 type RegisterAgentRequest struct {
     Name             string   `json:"name"`
-    DisplayName      string   `json:"display_name"`
-    AgentType        string   `json:"agent_type"`
-    PublicKey        string   `json:"public_key"`
+    DisplayName      string   `json:"displayName"`
+    AgentType        string   `json:"agentType"`
+    PublicKey        string   `json:"publicKey"`
     Description      string   `json:"description"`
     Version          string   `json:"version"`
     Capabilities     []string `json:"capabilities"`
-    RepositoryURL    string   `json:"repository_url,omitempty"`
-    DocumentationURL string   `json:"documentation_url,omitempty"`
+    RepositoryURL    string   `json:"repositoryUrl,omitempty"`
+    DocumentationURL string   `json:"documentationUrl,omitempty"`
 }
 
 type RegisterAgentResponse struct {
@@ -231,9 +231,9 @@ const axios = require('axios');
 async function registerAgent(apiKey, publicKey) {
     const response = await axios.post('http://localhost:8080/api/v1/agents', {
         name: 'my-node-agent',
-        display_name: 'My Node Agent',
-        agent_type: 'ai_agent',
-        public_key: publicKey,
+        displayName: 'My Node Agent',
+        agentType: 'ai_agent',
+        publicKey: publicKey,
         description: 'My agent written in Node.js',
         version: '1.0.0',
         capabilities: ['read_database', 'send_email']
@@ -269,9 +269,9 @@ curl -X POST http://localhost:8080/api/v1/agents \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
     "name": "my-curl-agent",
-    "display_name": "My cURL Agent",
-    "agent_type": "ai_agent",
-    "public_key": "YOUR_BASE64_PUBLIC_KEY",
+    "displayName": "My cURL Agent",
+    "agentType": "ai_agent",
+    "publicKey": "YOUR_BASE64_PUBLIC_KEY",
     "description": "My agent registered via cURL",
     "version": "1.0.0",
     "capabilities": ["read_database", "send_email"]
@@ -571,9 +571,9 @@ func NewAIMAgent(apiKey, baseURL string) (*AIMAgent, error) {
 func (a *AIMAgent) Register(name string, capabilities []string) error {
     reqBody := map[string]interface{}{
         "name":         name,
-        "display_name": name,
-        "agent_type":   "ai_agent",
-        "public_key":   a.PublicKey,
+        "displayName":  name,
+        "agentType":    "ai_agent",
+        "publicKey":    a.PublicKey,
         "capabilities": capabilities,
         "version":      "1.0.0",
     }
