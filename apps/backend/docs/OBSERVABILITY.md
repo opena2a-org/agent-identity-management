@@ -81,16 +81,20 @@ These names match Slide 14 of the May 22 Observability Summit talk and the AIM S
 
 ### Traces
 
-`FGAEngine.Authorize` produces one parent span and up to five child spans:
+`FGAEngine.Authorize` produces one parent span and up to five child spans, on `POST /api/v1/agents/:id/authorize` and on
+`POST /api/v1/sdk-api/verifications`, whose step 1 is the route's own capability check (`AgentService.VerifyCapability`):
 
 ```
-fga.authorize  (agent.id, agent.capability, fga.outcome, fga.latency_ms, fga.steps_triggered, [fga.denied_by])
-├── fga.capability_check  (fga.step, fga.allowed)
+fga.authorize  (agent.id, agent.capability, fga.policy, fga.outcome, fga.latency_ms, fga.steps_triggered, [fga.denied_by])
+├── fga.capability_check  (fga.step, fga.allowed, [fga.denied_reason])
 ├── fga.attribute_check   (fga.step, fga.allowed, [fga.denied_reason])
 ├── fga.context_check     (fga.step, fga.allowed, [fga.denied_reason])
 ├── fga.chain_check       (fga.step, fga.allowed, [fga.denied_reason])
 └── fga.intent_check_async (fga.step, fga.dispatched, [fga.async_dropped, fga.async_drop_reason])
 ```
+
+`fga.policy` is `stored` when the agent has an `fga_policies` row for the capability and `default` when the default
+policy decided (no restriction, risk level detected from the capability), under which steps 2 to 4 allow.
 
 `fga.intent_check_async` marks the dispatch of the Step 5 check for HIGH and MEDIUM risk; the check itself runs
 detached in a worker under its own `fga.intent_check_async.worker` span and never changes the decision.

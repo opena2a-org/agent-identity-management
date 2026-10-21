@@ -47,9 +47,11 @@ func NewAuthorizeHandlerWithInterface(fga FGAAuthorizer, agentRepo domain.AgentR
 	return &AuthorizeHandler{fga: fga, agentRepo: agentRepo}
 }
 
-// authorizeRequestBody mirrors application.FGARequest minus AgentID. The
-// agent ID is taken from the URL path so the route parameter is the single
-// source of truth and cannot be spoofed by a request body that disagrees.
+// authorizeRequestBody mirrors application.FGARequest minus AgentID, RiskLevel
+// and CapabilityCheck: the agent ID is taken from the URL path so the route
+// parameter is the single source of truth and cannot be spoofed by a request
+// body that disagrees, the risk level of an agent with no stored policy is
+// detected from the capability, and step 1 is the engine's own grant check.
 type authorizeRequestBody struct {
 	AgentID    *uuid.UUID `json:"agentId,omitempty"`
 	Capability string     `json:"capability"`

@@ -31,9 +31,9 @@ type VerificationHandler struct {
 	verificationEventService *application.VerificationEventService
 	orgRepo                  domain.OrganizationRepository
 
-	// Observability shim: emits an fga.authorize span shape mirroring the
-	// /api/v1/agents/{id}/authorize path. SDK route's actual enforcement
-	// still flows through AgentService.VerifyCapability. Optional; nil-safe.
+	// fgaEngine decides each verification with the five FGA steps, with
+	// AgentService.VerifyCapability as step 1 (see decideAndRecord). Without
+	// one, step 1 alone decides.
 	fgaEngine *application.FGAEngine
 
 	// Interface fields for testability (used when set)
@@ -306,6 +306,70 @@ type verificationInput struct {
 	metadata map[string]interface{}
 }
 
+// fgaRequestForVerification is the engine's request for an authenticated
+// verification, with check as its step 1 and riskLevel setting the default
+// policy's tier. The request's context may name what the call touches under
+// the members POST /api/v1/agents/:id/authorize takes in its body:
+// `attributes`, a list of field names, `action` and `dataClass`. The policy's
+// attribute check reads them, and the tool call and attestation records keep
+// them. A context without them names no attribute and no action, which no
+// policy's attribute check denies.
+func fgaRequestForVerification(agentID uuid.UUID, in verificationInput, riskLevel string, check application.CapabilityCheck) *application.FGARequest {
+	req := &application.FGARequest{
+		AgentID:         agentID,
+		Capability:      in.capability,
+		Resource:        in.resource,
+		RiskLevel:       riskLevel,
+		CapabilityCheck: check,
+	}
+	if v, ok := in.context["attributes"]; ok {
+		req.Attributes = stringsFromContext(v)
+	}
+	if v, ok := in.context["action"].(string); ok {
+		req.Action = v
+	}
+	if v, ok := in.context["dataClass"].(string); ok {
+		req.DataClass = v
+	}
+	return req
+}
+
+// stringsFromContext reads a list of strings from a decoded JSON context
+// member; members of the list that are not strings are left out.
+func stringsFromContext(v interface{}) []string {
+	switch list := v.(type) {
+	case []string:
+		return list
+	case []interface{}:
+		out := make([]string, 0, len(list))
+		for _, item := range list {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// fgaDecisionMetadata is what the audit entry and the verification event
+// record of the engine's decision: its outcome, the steps that ran and, for
+// a denial, the step and the reason. Nil when no engine decided.
+func fgaDecisionMetadata(result *application.FGAResult) map[string]interface{} {
+	if result == nil {
+		return nil
+	}
+	m := map[string]interface{}{
+		"fgaOutcome":        result.Outcome,
+		"fgaStepsTriggered": result.StepsTriggered,
+	}
+	if result.DeniedBy != "" {
+		m["fgaDeniedBy"] = result.DeniedBy
+		m["fgaDeniedReason"] = result.DeniedReason
+	}
+	return m
+}
+
 // statusRefusalAuditEntry is the audit entry for a verification request refused
 // because the agent's status does not permit it to act, answered with httpStatus.
 // Called only after the signature verified. It names the refusal and what was
@@ -358,35 +422,43 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 	// Trust score is already stored as 0-1 in database (e.g., 0.88 = 88%)
 	trustScore := agent.TrustScore
 
-	// ============================================================================
-	// ✅ CRITICAL: Use AgentService.VerifyCapability for PROPER capability-based access control
-	// This enforces the security policies configured in the dashboard
-	// The old determineVerificationStatus() only checked trust scores, not capabilities!
-	// ============================================================================
-	allowed, denialReason, auditIDFromVerify, err := h.getAgentService().VerifyCapability(
-		c.Context(),
-		agentID,
-		in.capability,
-		in.resource,
-		in.context,
-		c.IP(), // Capture source IP for security tracking
+	// The decision is FGAEngine.Authorize's five steps, with
+	// AgentService.VerifyCapability as step 1. VerifyCapability checks the
+	// capabilities granted to the agent, the organization's enforcement mode
+	// and its security policies, and writes the violation record and the alert
+	// a violation calls for. The engine then runs the attribute, context and
+	// chain checks of the agent's FGA policy for the capability, or of the
+	// default policy when it has none, and dispatches the intent check for
+	// HIGH and MEDIUM risk. Without an engine, step 1 alone decides.
+	auditIDFromVerify := uuid.New()
+	var (
+		allowed      bool
+		denialReason string
+		err          error
 	)
-
-	// Emit the fga.authorize observability surface so SDK-route verifications
-	// show up in Tempo with the same nine SemConv attributes as the
-	// /api/v1/agents/{id}/authorize path. Decision is already made above; this
-	// is span emission only, no side effects.
-	if h.fgaEngine != nil {
-		h.fgaEngine.EmitSDKVerificationSpan(
-			c.Context(),
+	verifyCapability := func(ctx context.Context) (bool, string, error) {
+		allowed, denialReason, auditIDFromVerify, err = h.getAgentService().VerifyCapability(
+			ctx,
 			agentID,
-			agent.ID,
-			agent.KeyAlgorithm,
-			trustScore,
 			in.capability,
-			allowed,
-			denialReason,
+			in.resource,
+			in.context,
+			c.IP(), // Capture source IP for security tracking
 		)
+		return allowed, denialReason, err
+	}
+	var fgaResult *application.FGAResult
+	if h.fgaEngine != nil {
+		var fgaErr error
+		fgaResult, fgaErr = h.fgaEngine.Authorize(c.Context(), fgaRequestForVerification(agentID, in, detectedRiskLevel, verifyCapability))
+		if fgaErr != nil && err == nil {
+			// The policy could not be read, so step 1 never ran: a verification
+			// error, denied below like a failed VerifyCapability.
+			allowed = false
+			err = fgaErr
+		}
+	} else {
+		_, _, _ = verifyCapability(c.Context())
 	}
 
 	// Check if this is a JIT (Just-In-Time) access request that needs admin approval
@@ -403,6 +475,16 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 		if orgErr == nil && org != nil {
 			isMonitoringMode = org.EnforcementMode == domain.EnforcementModeMonitoring
 		}
+	}
+
+	// A denial by the policy's attribute, context or chain check is enforced as
+	// the organization's mode enforces every other denial on this route: in
+	// strict mode the call is denied with the check's reason; in monitoring
+	// mode it runs, and the audit entry and the verification event record the
+	// denial under fgaDeniedBy and fgaDeniedReason.
+	if fgaResult != nil && err == nil && !fgaResult.Allowed && fgaResult.DeniedBy != "capability_check" && !isMonitoringMode {
+		allowed = false
+		denialReason = fgaResult.DeniedReason
 	}
 
 	// SECURITY: Debug logging removed to prevent information leakage
@@ -486,6 +568,9 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 		auditEntry.Metadata["denialReason"] = denialReason
 	}
 	for k, v := range in.metadata {
+		auditEntry.Metadata[k] = v
+	}
+	for k, v := range fgaDecisionMetadata(fgaResult) {
 		auditEntry.Metadata[k] = v
 	}
 
@@ -624,6 +709,9 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 		eventMetadata["denialReason"] = denialReason
 	}
 	for k, v := range in.metadata {
+		eventMetadata[k] = v
+	}
+	for k, v := range fgaDecisionMetadata(fgaResult) {
 		eventMetadata[k] = v
 	}
 

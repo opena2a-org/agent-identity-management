@@ -54,7 +54,7 @@ def get_customer(customer_id):
 get_customer(42)
 ```
 
-`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log. The server's 5-step Fine-Grained Authorization engine does not decide these calls; it runs on `POST /api/v1/agents/:id/authorize`, which the SDK does not call.
+`@perform_action` signs every invocation, has the server check it against the capabilities granted to the agent and the organization's security policies, and records the outcome in the audit log. That check is step 1 of the server's 5-step Fine-Grained Authorization engine, which then runs the attribute, context and chain checks of the agent's FGA policy for the capability, or of the default policy when it has none, and hands HIGH and MEDIUM risk calls to the intent check; see [`docs/server-features.md`](https://github.com/opena2a-org/agent-identity-management/blob/main/docs/server-features.md#5-step-fine-grained-authorization).
 
 A new organization starts in monitoring mode: AIM grants a capability the moment the agent registers it and records the call, so on those defaults the `db:write` call below runs. The refusal below needs strict mode, one setting an administrator turns on per organization: in the dashboard, Security, then Policies, then set Global Enforcement Mode to Strict (the API is `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`). Check it before the call: the Global Enforcement Mode badge reads STRICT, and `GET /api/v1/admin/enforcement-settings` with an administrator's token returns `"enforcementMode": "strict"`.
 
