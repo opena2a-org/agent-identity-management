@@ -82,10 +82,13 @@ func transitionRecorderWiring(t *testing.T, withTests bool) []string {
 }
 
 // The reference's statements that this server answers no record refusal, each
-// with the file that carries it.
+// with the file that carries it. A verification, a reactivation and a delete
+// write an audit log entry (agent_act_audit_log_entry_test.go in the handlers
+// package measures it), and their statements say so, as the statement for an
+// addition of MCP servers does.
 var recordRefusalNotAnswered = []struct{ file, statement string }{
-	{"docs/API.md", "This version of the server writes no audit record for a verification or a reactivation, so neither route answers this `503`."},
-	{"docs/API.md", "This version of the server writes no audit record for a delete, so this route does not answer this `503`."},
+	{"docs/API.md", "This version of the server writes no audit record for a verification or a reactivation, only an audit log entry, so neither route answers this `503`."},
+	{"docs/API.md", "This version of the server writes no audit record for a delete, only an audit log entry, so this route does not answer this `503`."},
 	{"apps/web/lib/api-documentation.ts", "This version of the server writes no audit record for an approval, so it does not answer this 503."},
 	{"apps/web/lib/api-documentation.ts", "This version of the server writes no audit record for an addition, only an audit log entry, so it does not answer this 503."},
 }

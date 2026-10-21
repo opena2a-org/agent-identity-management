@@ -458,7 +458,7 @@ Mark an agent in your organization as verified. A manager or administrator signs
 
 `changed` reports whether the request changed the agent's status.
 
-On a server that writes an audit record for each verification and each reactivation (`POST /api/v1/agents/{id}/reactivate`), the change is made only together with that record: when the record cannot be written, the agent's status is unchanged and the route answers `503` with `Retry-After: 300` (seconds) and `{"error": "...", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. Retry after that time. This version of the server writes no audit record for a verification or a reactivation, so neither route answers this `503`.
+On a server that writes an audit record for each verification and each reactivation (`POST /api/v1/agents/{id}/reactivate`), the change is made only together with that record: when the record cannot be written, the agent's status is unchanged and the route answers `503` with `Retry-After: 300` (seconds) and `{"error": "...", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. Retry after that time. This version of the server writes no audit record for a verification or a reactivation, only an audit log entry, so neither route answers this `503`.
 
 ---
 
@@ -505,7 +505,7 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 **Response:** 204 No Content.
 
-On a server that writes an audit record for each delete, a delete is made only together with that record: when the record cannot be written, nothing is deleted and the route answers `503` with `Retry-After: 300` (seconds) and `{"error": "...", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. Retry after that time. This version of the server writes no audit record for a delete, so this route does not answer this `503`.
+On a server that writes an audit record for each delete, a delete is made only together with that record: when the record cannot be written, nothing is deleted and the route answers `503` with `Retry-After: 300` (seconds) and `{"error": "...", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. Retry after that time. This version of the server writes no audit record for a delete, only an audit log entry, so this route does not answer this `503`.
 
 ---
 
