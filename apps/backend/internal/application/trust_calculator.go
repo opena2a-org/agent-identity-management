@@ -534,8 +534,9 @@ func alertOccurrences(alert *domain.Alert) int {
 // Scores the organization's latest AIM compliance snapshot score
 // (framework AIM, queried for the agent's organization).
 // Snapshot score is 0-100, normalized to 0.0-1.0.
-// With no snapshot data the factor is EXCLUDED from the composite (AIP §6.1);
-// the returned 0.5 is a display placeholder only, never a contribution.
+// With no snapshot data the factor is listed in ExcludedFactors (AIP §6.1):
+// Calculate leaves it out of the weighted mean, and the returned 0.5 counts
+// in the 9-factor sum that caps the composite.
 func (c *TrustCalculator) calculateCompliance(agent *domain.Agent) (float64, string) {
 	if c.snapshotRepo == nil {
 		return 0.5, exclReasonNotWired
@@ -581,8 +582,9 @@ func (c *TrustCalculator) calculateAge(agent *domain.Agent) float64 {
 // alerts is a measurement, not missing data.
 // Each drift alert reduces the score proportionally by severity.
 // With no alert repository (or a failed agent-alert query) the factor is
-// EXCLUDED from the composite (AIP §6.1); the returned 0.5 is a display
-// placeholder only.
+// listed in ExcludedFactors (AIP §6.1): Calculate leaves it out of the
+// weighted mean, and the returned 0.5 counts in the 9-factor sum that caps
+// the composite.
 func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) (float64, string) {
 	if c.alertRepo == nil {
 		return 0.5, exclReasonNotWired
@@ -666,9 +668,9 @@ func (c *TrustCalculator) calculateDriftDetection(agent *domain.Agent) (float64,
 // Measures explicit feedback from users, scored by sentiment-bucket counts.
 //
 // With no feedback repository wired, a failed query, or zero feedback rows,
-// the factor is EXCLUDED from the composite (AIP §6.1), so agents are neither
-// penalized nor rewarded without real data; the returned 0.5 is a display
-// placeholder only.
+// the factor is listed in ExcludedFactors (AIP §6.1): Calculate leaves it out
+// of the weighted mean, and the returned 0.5 counts in the 9-factor sum that
+// caps the composite.
 //
 // Scoring formula (sentiment buckets from domain.FeedbackSentiment, rating 1-5):
 //

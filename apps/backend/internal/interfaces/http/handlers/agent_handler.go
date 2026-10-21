@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"time"
 
@@ -1218,7 +1219,7 @@ func (h *AgentHandler) GetCredentials(c fiber.Ctx) error {
 	})
 }
 
-// getAIMBaseURL extracts the base URL from the request
+// getAIMBaseURL extracts the base URL from the request: its scheme, host and port.
 func getAIMBaseURL(c fiber.Ctx) string {
 	// Get protocol (http or https)
 	protocol := "http"
@@ -1226,8 +1227,19 @@ func getAIMBaseURL(c fiber.Ctx) string {
 		protocol = "https"
 	}
 
-	// Get host
+	// Get host, with the port the request named: c.Hostname() leaves the port out, and a
+	// package downloaded from 127.0.0.1:18080 named http://127.0.0.1 (#792). The scheme's
+	// own port (80 for http, 443 for https) and a port that is not a number from 1 to
+	// 65535 are left out, as c.Hostname() leaves them out, so a plain-http request to a
+	// public host on port 80 names https://host below.
 	host := c.Hostname()
+	if name, port, err := net.SplitHostPort(c.Host()); err == nil {
+		n, err := strconv.ParseUint(port, 10, 16)
+		schemePort := (protocol == "http" && n == 80) || (protocol == "https" && n == 443)
+		if err == nil && n > 0 && !schemePort {
+			host = net.JoinHostPort(name, strconv.FormatUint(n, 10))
+		}
+	}
 
 	// normalizeAIMURL forces https for any public host so embedded agent
 	// credentials can never point the SDK at an http:// endpoint that 301s and

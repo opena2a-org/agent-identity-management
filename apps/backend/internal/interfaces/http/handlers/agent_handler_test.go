@@ -1037,8 +1037,8 @@ func TestGetAIMBaseURL_HTTP(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	// c.Hostname() returns hostname without port
-	assert.Equal(t, "http://localhost", result)
+	// The port the request named stays in the URL (#792).
+	assert.Equal(t, "http://localhost:8080", result)
 }
 
 func TestGetAIMBaseURL_HTTPS_Protocol(t *testing.T) {
@@ -1061,7 +1061,7 @@ func TestGetAIMBaseURL_HTTPS_Protocol(t *testing.T) {
 }
 
 func TestGetAIMBaseURL_DifferentHosts(t *testing.T) {
-	// Note: c.Hostname() returns hostname without port
+	// A port other than the scheme's own stays in the URL (#792).
 	tests := []struct {
 		name           string
 		host           string
@@ -1069,12 +1069,19 @@ func TestGetAIMBaseURL_DifferentHosts(t *testing.T) {
 		expected       string
 	}{
 		{"localhost", "localhost", "", "http://localhost"},
-		{"localhost with port", "localhost:3000", "", "http://localhost"}, // port stripped by Hostname()
+		{"localhost with port", "localhost:3000", "", "http://localhost:3000"},
+		{"localhost with the http port", "localhost:80", "", "http://localhost"},
 		// Public hosts are coerced to https by normalizeAIMURL even when the
 		// request arrives over http (TLS-terminating ingress doesn't forward the
 		// scheme), so the embedded URL never 301s and strips the refresh POST body.
 		{"domain", "api.aim.example.com", "", "https://api.aim.example.com"},
 		{"domain https", "api.aim.example.com", "https", "https://api.aim.example.com"},
+		{"domain with port", "api.aim.example.com:8443", "", "https://api.aim.example.com:8443"},
+		// The scheme's own port is left out before the coercion, so a request to
+		// host:80 names https://host and not https://host:80.
+		{"domain with the http port", "api.aim.example.com:80", "", "https://api.aim.example.com"},
+		{"domain https with the https port", "api.aim.example.com:443", "https", "https://api.aim.example.com"},
+		{"domain with the https port over http", "api.aim.example.com:443", "", "https://api.aim.example.com:443"},
 	}
 
 	for _, tt := range tests {
