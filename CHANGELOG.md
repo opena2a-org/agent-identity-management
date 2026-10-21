@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `node scripts/lint-token-literals.mjs` exits 0 on the tracked tree (#829)
+
+- On the commit this builds on, the lint exited 1 with six `credential-assignment` findings, each a test value in a
+  credential-named field that the rule counts as generated: one in
+  `apps/backend/cmd/bootstrap/aim_backend_script_test.go`, four in
+  `apps/backend/internal/application/webhook_test_delivery_record_test.go` and one in
+  `apps/backend/internal/interfaces/http/middleware/auth_session_age_test.go`.
+- The webhooks in the webhook test carry the secret `not-a-real-secret`, the session age test signs its tokens with
+  `test-only-jwt-secret-not-a-real-value` (37 characters; `NewJWTService` needs at least 32), and the case in which
+  the server refuses the seeded admin's password sets the server's password to the seeded one with `not-` in front.
+  `scripts/token-literal-allowlist.txt` is unchanged.
+- Tests: the lint reports 0 findings, and the test of `scripts/test-lint-token-literals.mjs` that runs it on this
+  repository's tracked tree, which failed on the commit this builds on, passes. The twelve tests in the three changed
+  test files pass under `go test -race`.
+
 ### Fixed — the API reference says that a verification, a reactivation and an agent delete write an audit log entry (#826)
 
 - `docs/API.md` said that this version of the server writes no audit record for a verification, a reactivation or a

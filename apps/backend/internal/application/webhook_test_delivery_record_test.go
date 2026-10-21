@@ -83,7 +83,7 @@ func TestWebhookTestDelivery_SendsTheHeadersOfAnEventDelivery(t *testing.T) {
 		OrganizationID: uuid.New(),
 		URL:            endpoint.URL + "/hook",
 		Events:         []domain.WebhookEvent{domain.WebhookEventAgentCreated},
-		Secret:         "FAKE-webhook-signing-secret",
+		Secret:         "not-a-real-secret",
 	}
 
 	_, _, _, err := svc.attemptDelivery(webhook, domain.WebhookEventAgentCreated, []byte(`{"event":"agent.created"}`), 5*time.Second)
@@ -124,7 +124,7 @@ func TestWebhookTestDelivery_RecordCarriesOrganizationStatusAndBoundedBody(t *te
 				ID:             uuid.New(),
 				OrganizationID: uuid.New(),
 				URL:            endpoint.URL + "/hook",
-				Secret:         "FAKE-webhook-signing-secret",
+				Secret:         "not-a-real-secret",
 			}
 
 			// The columns of WebhookRepository.RecordDelivery, in order.
@@ -167,7 +167,7 @@ func TestWebhookTestDelivery_LogsARecordItCouldNotStore(t *testing.T) {
 		ID:             uuid.New(),
 		OrganizationID: uuid.New(),
 		URL:            endpoint.URL + "/hook",
-		Secret:         "FAKE-webhook-signing-secret",
+		Secret:         "not-a-real-secret",
 	}
 	const storageDetail = "FAKE-storage-detail violates foreign key constraint"
 	mock.ExpectExec("INSERT INTO webhook_deliveries").WillReturnError(errors.New(storageDetail))
@@ -214,7 +214,7 @@ func TestWebhookTestDelivery_WithoutAnAnswerIsRecordedAsFailed(t *testing.T) {
 				ID:             uuid.New(),
 				OrganizationID: uuid.New(),
 				URL:            tc.url,
-				Secret:         "FAKE-webhook-signing-secret",
+				Secret:         "not-a-real-secret",
 			}
 
 			// The columns of WebhookRepository.RecordDelivery, in order.
