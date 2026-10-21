@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — secrets resolve refuses a namespace or operation that holds a vertical bar, a carriage return or a line feed (#832)
+
+- `POST /api/v1/secrets/resolve` verifies the agent's signature over `namespace|operation|nonce`, the fields joined
+  with `|`, so one signed text stood for more than one set of field values: `git|hub|read|<nonce>` reads as namespace
+  `git|hub` with operation `read`, and as namespace `git` with operation `hub|read`. Run against the handler before
+  this change, a correctly signed request whose namespace or operation held `|`, a carriage return or a line feed
+  (each of the three, in each field) passed the signature check and reached the nonce check.
+- Such a request is now refused with `403` and
+  `{"error":"namespace and operation must not contain a vertical bar (|), a carriage return or a line feed"}` before
+  its signature is checked, so its nonce is not spent and no credential is read. The secrets audit entry records the
+  refusal and names the field. The TypeScript and Python SDKs already refuse these three characters in either field
+  before they sign.
+- Tests: `TestResolve_FieldHoldingASeparatorIsRefusedBeforeTheNonceIsSpent` and
+  `TestResolve_OneSignedTextIsNotAnsweredAsTwoSetsOfFields` in
+  `apps/backend/internal/application/secrets_resolve_field_separator_test.go`, and
+  `TestSecretsHandler_Resolve_FieldHoldingASeparatorIs403` in
+  `apps/backend/internal/interfaces/http/handlers/secrets_resolve_handler_test.go`.
+
 ### Fixed — `POST /api/v1/secrets/namespaces` refuses a namespace name that the Python and TypeScript SDKs refuse to resolve (#830)
 
 - A resolve request signs `namespace|operation|nonce`. `client.secrets.resolve()` in the Python SDK and

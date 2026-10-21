@@ -46,7 +46,17 @@ var (
 	ErrResolveNonceMalformed     = errors.New("nonce must be <RFC 3339 time>:<random part>")
 	ErrResolveNonceOutsideWindow = errors.New("nonce time is outside the accepted window")
 	ErrResolveNonceAlreadyUsed   = errors.New("nonce already used")
+	// ErrResolveFieldSeparator refuses a namespace or an operation that holds
+	// a character of resolveFieldSeparators.
+	ErrResolveFieldSeparator = errors.New("namespace or operation contains a vertical bar, a carriage return or a line feed")
 )
+
+// resolveFieldSeparators are the characters a resolve namespace or operation
+// cannot hold. The signed text joins namespace, operation and nonce with '|',
+// so a field holding '|' signs text that also reads as other field values.
+// The carriage return and the line feed are refused too: the TypeScript and
+// Python SDKs refuse all three in either field before they sign.
+const resolveFieldSeparators = "|\r\n"
 
 // ErrResolveATCRevocationUnknown means the revocation state of the ATC in the
 // request body could not be read. Nothing was resolved; the request can be
@@ -134,7 +144,19 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 		})
 	}()
 
-	// Step 1: Verify Ed25519 signature over namespace|operation|nonce
+	// Step 1: Verify Ed25519 signature over namespace|operation|nonce. Its
+	// fields are read one way only: a namespace or operation holding '|', a
+	// carriage return or a line feed is refused before anything else.
+	for _, field := range [...]struct{ name, value string }{
+		{"namespace", req.Namespace},
+		{"operation", req.Operation},
+	} {
+		if strings.ContainsAny(field.value, resolveFieldSeparators) {
+			denyReason = field.name + " contains a vertical bar, a carriage return or a line feed"
+			return nil, fmt.Errorf("%w: the %s does", ErrResolveFieldSeparator, field.name)
+		}
+	}
+
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil || agent == nil {
 		denyReason = "agent not found"

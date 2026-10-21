@@ -597,6 +597,8 @@ func resolveRefusalLine(err error) string {
 		return "nonce time is outside the accepted window; sign the request again with a fresh nonce"
 	case errors.Is(err, application.ErrResolveNonceAlreadyUsed):
 		return "nonce has already been used; sign the request again with a fresh nonce"
+	case errors.Is(err, application.ErrResolveFieldSeparator):
+		return "namespace and operation must not contain a vertical bar (|), a carriage return or a line feed"
 	}
 	return "Secret resolution refused"
 }

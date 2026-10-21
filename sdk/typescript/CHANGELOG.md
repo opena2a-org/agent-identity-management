@@ -7,6 +7,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
+
+- `getNamespace`, `deleteNamespace`, `storeCredential` and `rotateCredential` put the namespace ID into the request
+  path as passed. Measured before this change against a server on 127.0.0.1, with `AIMClient`'s request as the host:
+  `deleteNamespace('../../agents/<id>')` sent `DELETE /api/v1/agents/<id>`, `getNamespace('../../agents/<id>')` sent
+  `GET /api/v1/agents/<id>`, `storeCredential` and `rotateCredential` with the ID `../x` sent
+  `POST /api/v1/secrets/x/credentials` and `POST /api/v1/secrets/x/rotate`, `getNamespace('a/b')` sent
+  `GET /api/v1/secrets/namespaces/a/b`, and a `?` or `#` in the ID ended the path there.
+- The four methods now reject with `ConfigurationError` and make no request when the ID is not a UUID written as the
+  server answers a namespace's `id`: 32 hexadecimal digits, of either letter case, in groups of 8, 4, 4, 4 and 12
+  joined by hyphens. They percent-encode the ID into the path. The message begins
+  `the namespace ID is not a UUID; the request was not sent` and ends with a `Fix:` line.
+- Tests: `src/secrets/SecretsClient.namespace-id.test.ts`. The namespace and credential storage tests in
+  `src/secrets/SecretsClient.test.ts` pass a UUID.
+
 ### Security
 
 - **Breaking change for code that sets `requireSignedRequests` or `maxTimestampAge`.** `A2ASecuritySettings`

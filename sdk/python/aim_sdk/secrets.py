@@ -23,11 +23,12 @@ Usage:
 import base64
 import hashlib
 import os
+import re
 import time
 import warnings
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
-from uuid import uuid4
+from typing import Any, Dict, List, Optional, Union
+from urllib.parse import quote, urlencode
+from uuid import UUID, uuid4
 
 from nacl.signing import SigningKey
 from nacl.bindings import crypto_sign_ed25519_pk_to_curve25519
@@ -105,6 +106,29 @@ def _refuse_unresolvable_namespace(namespace: Any) -> None:
             "Cannot create namespace: namespace begins with 'DSSEv1 ', the first bytes of a DSSE statement "
             "an agent key signs. resolve() refuses to sign a namespace that begins with 'DSSEv1 '."
         )
+
+
+# A namespace ID is the UUID the server answers as a namespace's "id", and the
+# namespace routes read it from the request path. Any other value is refused
+# before a request is made: with "/", "..", "?" or "#" in it, the request would
+# go to another path. The ID is also percent-encoded into the path.
+_UUID_TEXT = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _namespace_id_segment(namespace_id: Any) -> str:
+    """Return namespace_id as one path segment; raise SecretsError when it is not a UUID."""
+    if isinstance(namespace_id, UUID):
+        namespace_id = str(namespace_id)
+    match = _UUID_TEXT.fullmatch(namespace_id) if isinstance(namespace_id, str) else None
+    if match is None:
+        raise SecretsError(
+            "namespace_id is not a UUID; the request was not sent. Pass the id the server "
+            "answered for the namespace, a UUID such as the id of an entry list_namespaces() "
+            "returns."
+        )
+    return quote(match.group(0), safe="")
 
 
 class SecretsClient:
@@ -301,13 +325,25 @@ class SecretsClient:
         result = self._client._make_request("GET", f"/api/v1/secrets/namespaces?{query_string}")
         return result.get("namespaces") or []
 
-    def get_namespace(self, namespace_id: str) -> Dict[str, Any]:
-        """Get details of a specific namespace."""
-        return self._client._make_request("GET", f"/api/v1/secrets/namespaces/{namespace_id}")
+    def get_namespace(self, namespace_id: Union[str, UUID]) -> Dict[str, Any]:
+        """Get details of a specific namespace.
 
-    def delete_namespace(self, namespace_id: str) -> Dict[str, Any]:
-        """Delete a namespace and its credentials."""
-        return self._client._make_request("DELETE", f"/api/v1/secrets/namespaces/{namespace_id}")
+        Raises:
+            SecretsError: namespace_id is not a UUID; nothing is sent.
+        """
+        return self._client._make_request(
+            "GET", f"/api/v1/secrets/namespaces/{_namespace_id_segment(namespace_id)}"
+        )
+
+    def delete_namespace(self, namespace_id: Union[str, UUID]) -> Dict[str, Any]:
+        """Delete a namespace and its credentials.
+
+        Raises:
+            SecretsError: namespace_id is not a UUID; nothing is sent.
+        """
+        return self._client._make_request(
+            "DELETE", f"/api/v1/secrets/namespaces/{_namespace_id_segment(namespace_id)}"
+        )
 
     # -------------------------------------------------------------------------
     # Credential storage (JWT/API key auth)
@@ -315,7 +351,7 @@ class SecretsClient:
 
     def store_credential(
         self,
-        namespace_id: str,
+        namespace_id: Union[str, UUID],
         encrypted_blob: bytes,
         encryption_alg: str = "X25519-ChaCha20-Poly1305",
         ephemeral_public_key: Optional[bytes] = None,
@@ -324,6 +360,9 @@ class SecretsClient:
 
         ephemeral_public_key is deprecated and is not sent: the store route reads
         encryptedBlob and encryptionAlg only.
+
+        Raises:
+            SecretsError: namespace_id is not a UUID; nothing is sent.
         """
         if ephemeral_public_key is not None:
             warnings.warn(
@@ -337,12 +376,14 @@ class SecretsClient:
             "encryptionAlg": encryption_alg,
         }
         return self._client._make_request(
-            "POST", f"/api/v1/secrets/namespaces/{namespace_id}/credentials", data=payload
+            "POST",
+            f"/api/v1/secrets/namespaces/{_namespace_id_segment(namespace_id)}/credentials",
+            data=payload,
         )
 
     def rotate_credential(
         self,
-        namespace_id: str,
+        namespace_id: Union[str, UUID],
         encrypted_blob: bytes,
         encryption_alg: str = "X25519-ChaCha20-Poly1305",
         ephemeral_public_key: Optional[bytes] = None,
@@ -351,6 +392,9 @@ class SecretsClient:
 
         ephemeral_public_key is deprecated and is not sent: the rotate route reads
         encryptedBlob and encryptionAlg only.
+
+        Raises:
+            SecretsError: namespace_id is not a UUID; nothing is sent.
         """
         if ephemeral_public_key is not None:
             warnings.warn(
@@ -364,7 +408,9 @@ class SecretsClient:
             "encryptionAlg": encryption_alg,
         }
         return self._client._make_request(
-            "POST", f"/api/v1/secrets/namespaces/{namespace_id}/rotate", data=payload
+            "POST",
+            f"/api/v1/secrets/namespaces/{_namespace_id_segment(namespace_id)}/rotate",
+            data=payload,
         )
 
     # -------------------------------------------------------------------------
