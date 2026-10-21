@@ -654,6 +654,9 @@ func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
 			offset = parsedOffset
 		}
 	}
+	if offset < 0 {
+		offset = 0 // read a negative offset as the first page
+	}
 
 	capSvc := h.getCapabilityService()
 	violations, total, err := capSvc.GetViolationsByAgent(
