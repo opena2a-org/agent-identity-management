@@ -80,6 +80,7 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 
 	log := &domain.AuditLog{}
 	metadataJSON := make([]byte, 0)
+	var ipAddress, userAgent sql.NullString
 
 	err := r.db.QueryRow(query, id).Scan(
 		&log.ID,
@@ -89,8 +90,8 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 		&log.Action,
 		&log.ResourceType,
 		&log.ResourceID,
-		&log.IPAddress,
-		&log.UserAgent,
+		&ipAddress,
+		&userAgent,
 		&metadataJSON,
 		&log.Timestamp,
 	)
@@ -101,6 +102,8 @@ func (r *AuditLogRepository) GetByID(id uuid.UUID) (*domain.AuditLog, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.IPAddress = ipAddress.String
+	log.UserAgent = userAgent.String
 
 	if len(metadataJSON) > 0 {
 		if err := json.Unmarshal(metadataJSON, &log.Metadata); err != nil {
@@ -238,12 +241,16 @@ func (r *AuditLogRepository) Search(query string, limit, offset int) ([]*domain.
 	return r.scanLogs(rows)
 }
 
+// ip_address and user_agent are nullable columns: GetByID, scanLogs and
+// scanLogsWithNames scan them into sql.NullString and return an empty
+// IPAddress or UserAgent for a NULL.
 func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error) {
 	logs := make([]*domain.AuditLog, 0)
 
 	for rows.Next() {
 		log := &domain.AuditLog{}
 		metadataJSON := make([]byte, 0)
+		var ipAddress, userAgent sql.NullString
 
 		err := rows.Scan(
 			&log.ID,
@@ -253,14 +260,16 @@ func (r *AuditLogRepository) scanLogs(rows *sql.Rows) ([]*domain.AuditLog, error
 			&log.Action,
 			&log.ResourceType,
 			&log.ResourceID,
-			&log.IPAddress,
-			&log.UserAgent,
+			&ipAddress,
+			&userAgent,
 			&metadataJSON,
 			&log.Timestamp,
 		)
 		if err != nil {
 			return nil, err
 		}
+		log.IPAddress = ipAddress.String
+		log.UserAgent = userAgent.String
 
 		if len(metadataJSON) > 0 {
 			if err := json.Unmarshal(metadataJSON, &log.Metadata); err != nil {
@@ -281,6 +290,7 @@ func (r *AuditLogRepository) scanLogsWithNames(rows *sql.Rows) ([]*domain.AuditL
 	for rows.Next() {
 		log := &domain.AuditLog{}
 		metadataJSON := make([]byte, 0)
+		var ipAddress, userAgent sql.NullString
 
 		err := rows.Scan(
 			&log.ID,
@@ -290,8 +300,8 @@ func (r *AuditLogRepository) scanLogsWithNames(rows *sql.Rows) ([]*domain.AuditL
 			&log.Action,
 			&log.ResourceType,
 			&log.ResourceID,
-			&log.IPAddress,
-			&log.UserAgent,
+			&ipAddress,
+			&userAgent,
 			&metadataJSON,
 			&log.Timestamp,
 			&log.AgentName,
@@ -300,6 +310,8 @@ func (r *AuditLogRepository) scanLogsWithNames(rows *sql.Rows) ([]*domain.AuditL
 		if err != nil {
 			return nil, err
 		}
+		log.IPAddress = ipAddress.String
+		log.UserAgent = userAgent.String
 
 		if len(metadataJSON) > 0 {
 			if err := json.Unmarshal(metadataJSON, &log.Metadata); err != nil {

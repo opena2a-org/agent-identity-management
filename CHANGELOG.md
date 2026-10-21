@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — `GET /api/v1/agents/{id}/activity` lists an audit record whose address or user agent is NULL (#606)
+
+- `audit_logs.ip_address` and `audit_logs.user_agent` are nullable columns, and the audit log repository read them
+  into plain strings. Measured with the route's handler, the audit service and the audit repository over a sqlmock
+  connection, the route answered `500` `{"error":"Failed to fetch agent activity"}` to an admin and to a viewer when
+  one of the agent's rows held NULL in `ip_address`, in `user_agent`, or in both.
+- `GetByID`, `GetByOrganization`, `GetByUser`, `GetByAgent`, `GetByResource`, `Search`, `GetRecentActionsByAgent` and
+  `GetAgentActionsByIPAddress` now read both columns through `sql.NullString` and return a NULL as an empty string.
+  The route answers `200`, and a record whose column is NULL carries no `ipAddress` or `userAgent` member, as a
+  record whose column is empty carries none.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_activity_null_request_detail_test.go` calls the route's
+  handler for each of the three NULL cases, and for a row holding empty strings, as an admin and as a viewer.
+  `apps/backend/internal/infrastructure/repository/audit_log_null_request_detail_test.go` gives each of the eight
+  reads a row with NULL in one or both columns. On the commit this builds on, the six NULL requests were answered
+  `500`, the two empty-string requests `200`, and the eight reads returned an error ending in `converting NULL to
+  string is unsupported` in each of the 22 cases.
+
 ### Fixed — the MCP attestation challenge and attest routes answer an unauthenticated request in AuthMiddleware
 
 - `GET /api/v1/mcp-servers/:id/challenge` and `POST /api/v1/mcp-servers/:id/attest` run `AuthMiddleware` after the
