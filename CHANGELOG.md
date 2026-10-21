@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the API reference says that a verification, a reactivation and an agent delete write an audit log entry (#826)
+
+- `docs/API.md` said that this version of the server writes no audit record for a verification, a reactivation or a
+  delete, and did not say that each of them writes an audit log entry, as the dashboard's API reference says for an
+  addition of MCP servers. Measured with each route's handler over the audit service and the audit log repository on
+  a sqlmock connection, with an agent service whose change succeeds, `POST /api/v1/agents/{id}/verify`,
+  `POST /api/v1/agents/{id}/reactivate` and `DELETE /api/v1/agents/{id}` each write one `audit_logs` row for the
+  agent. The reference now says that the server writes no audit record for them, only an audit log entry. The
+  sentence of the dashboard's API reference for an approval of a capability request is unchanged.
+- The entry for #740, and the earlier entries of this section that introduced the refusals of a verification, a
+  reactivation and a delete, say the same.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_act_audit_log_entry_test.go` measures the `audit_logs`
+  row of each of the three routes, and that a delete the agent service refuses writes none.
+  `apps/backend/cmd/server/record_refusal_reference_test.go` now checks `docs/API.md` for the two new sentences; on
+  the reference before this change it failed on both.
+
 ### Added — routes under `/api/v1/pam` for the capability tier registry, approvals of SUPER_PRIVILEGED capabilities, break-glass declarations and certification campaigns of an organization (#657)
 
 - On the base commit no non-test Go file called `NewPAMService`, and a request to `/api/v1/pam/tiers` or any of the
@@ -205,7 +221,8 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
   `503` with `recordUnavailable` when the record cannot be written. The services make those changes together with an
   audit record only when a transition recorder is set on them, and no non-test Go file under `apps/backend` builds
   one with `transition.NewRecorder` or sets one with `SetTransitionRecorder`: this server makes the four changes
-  without an audit record and does not answer that `503`.
+  without an audit record, writes only an audit log entry for a verification, a reactivation and a delete, and does
+  not answer that `503`.
 - The reference now states each refusal for a server that writes an audit record for the change, and says that this
   version of the server writes none and does not answer the refusal, as it said for an addition of MCP servers. The
   comments of `respondAgentStatusActError` and `ApproveCapabilityRequest`, and the three earlier entries of this
@@ -3679,9 +3696,10 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
   with `recordUnavailable` and `Retry-After`, and the agent page says nothing changed and when to try again.
 - Both let the agent act again, an expansion. When the agent service has a transition recorder, each is made only
   together with its audit record; when the record path cannot be used the service refuses the act whole and the
-  agent's status is unchanged. The server does not set a transition recorder, so a reactivation or a verification is
-  made without an audit record and this refusal does not occur. `POST /api/v1/agents/:id/reactivate` and
-  `POST /api/v1/agents/:id/verify` now answer that refusal as the agent delete does: `503`, `Retry-After: 300` and
+  agent's status is unchanged. The server does not set a transition recorder, so a reactivation or a verification
+  writes no audit record, only its audit log entry, and this refusal does not occur.
+  `POST /api/v1/agents/:id/reactivate` and `POST /api/v1/agents/:id/verify` now answer that refusal as the agent
+  delete does: `503`, `Retry-After: 300` and
   `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in the
   server log. A suspension narrows what the agent can do and is never refused by the record path. Any other failure
   of the three routes still answers as before.
@@ -3722,7 +3740,8 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
 
 - When the agent service has a transition recorder, an agent's deletion is made only together with its audit record;
   when the record cannot be written the service refuses the delete whole and nothing is removed. The server does not
-  set a transition recorder, so a delete is made without an audit record and this refusal does not occur.
+  set a transition recorder, so a delete writes no audit record, only its audit log entry, and this refusal does not
+  occur.
   `DELETE /api/v1/agents/:id` now answers that refusal with `503`, `Retry-After: 300` (the seconds a failed record
   write keeps the server's record path unavailable) and
   `{"error": "<fixed line>", "reasonCode": "recordUnavailable", "code": "recordUnavailable"}`. The cause stays in the
