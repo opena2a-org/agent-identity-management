@@ -14,6 +14,8 @@ yarn add @opena2a/aim-sdk
 pnpm add @opena2a/aim-sdk
 ```
 
+Requires Node.js 20.19 or a later 20.x release, or Node.js 22.12 or later.
+
 ## Quick Start
 
 ```typescript

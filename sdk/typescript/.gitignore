@@ -5,6 +5,8 @@ node_modules/
 dist/
 # tests/entry-point-class-identity.test.ts builds here and removes it; an interrupted run leaves one behind
 .identity-build-*/
+# tests/engines-node-require-esm.test.ts does the same
+.engines-build-*/
 
 # IDE
 .idea/
