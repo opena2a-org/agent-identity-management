@@ -37,6 +37,13 @@ type sessionRoute struct {
 	liveStatus int
 	mint       string // the call that hands out or changes what the route guards
 	handler    func(f *mintFixture, calls *[]string) fiber.Handler
+	setup      func(t *testing.T) // what the route reads besides its stubs, when it reads anything
+}
+
+// withSDKSourceTree serves the SDK from the repository's sdk/ tree: the per-agent Python
+// package carries the version in sdk/python/VERSION, and the route sends none without one.
+func withSDKSourceTree(t *testing.T) {
+	t.Setenv("SDK_BASE_DIR", sdkSourceTree(t))
 }
 
 func sessionRoutes() []sessionRoute {
@@ -51,7 +58,7 @@ func sessionRoutes() []sessionRoute {
 		{label: "agent_credentials", method: "GET", route: "/agents/:id/credentials", liveStatus: fiber.StatusOK,
 			mint: "GetAgentCredentials", handler: handlerOf(agentHandlerFor, (*AgentHandler).GetCredentials)},
 		{label: "agent_sdk_download", method: "GET", route: "/agents/:id/sdk", liveStatus: fiber.StatusOK,
-			mint: "GetAgentCredentials", handler: handlerOf(agentHandlerFor, (*AgentHandler).DownloadSDK)},
+			mint: "GetAgentCredentials", handler: handlerOf(agentHandlerFor, (*AgentHandler).DownloadSDK), setup: withSDKSourceTree},
 		{label: "agent_keys_update", method: "PUT", route: "/agents/:id/keys", body: `{"publicKey":"FAKE-PUBLIC-KEY"}`, liveStatus: fiber.StatusOK,
 			mint: "UpdateAgentPublicKey", handler: handlerOf(agentHandlerFor, (*AgentHandler).UpdateAgentKeys)},
 		{label: "secret_rotate", method: "POST", route: "/secrets/namespaces/:id/rotate", body: blobBody, liveStatus: fiber.StatusOK,
@@ -75,6 +82,9 @@ func handlerOf[H any](build func(*mintFixture, *[]string) H, method func(H, fibe
 
 func sendSessionRoute(t *testing.T, f *mintFixture, family string, cell sessionRoute, calls *[]string) (int, string) {
 	t.Helper()
+	if cell.setup != nil {
+		cell.setup(t)
+	}
 	app := fiber.New()
 	app.Add([]string{cell.method}, cell.route, f.acting(family, cell.handler(f, calls)))
 	return doRequest(t, app, cell.method, strings.Replace(cell.route, ":id", uuid.NewString(), 1), cell.body)

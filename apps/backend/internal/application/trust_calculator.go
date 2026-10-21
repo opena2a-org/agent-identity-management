@@ -169,10 +169,12 @@ func (c *TrustCalculator) Calculate(agent *domain.Agent) (*domain.TrustScore, er
 		"execution_isolation": 0.10, // Factor 9 (new)
 	}
 
-	// AIP-SPEC §6.1 composition rule: factors with no data are excluded from
+	// AIP-SPEC §6.1 composition rule: factors with no data are left out of
 	// the weighted sum and their weights redistributed proportionally across
 	// the factors that do have data. A factor whose repository is un-wired or
-	// whose query failed must not contribute a fabricated neutral value.
+	// whose query failed is left out the same way. An excluded factor's
+	// placeholder value enters only the neutral-imputed sum that caps the
+	// composite below.
 	contributions := []struct {
 		key   string
 		value float64
@@ -259,8 +261,9 @@ func (c *TrustCalculator) CalculateFactors(agent *domain.Agent) (*domain.TrustSc
 // calculateFactorsDetailed computes the 9 factors plus the exclusion set: the
 // factors whose data source is un-wired, failed, or empty. An excluded factor
 // carries a neutral placeholder value in the returned struct (display
-// continuity for stored breakdowns) but MUST NOT contribute to the composite —
-// Calculate redistributes its weight per AIP-SPEC §6.1.
+// continuity for stored breakdowns). Calculate leaves it out of the weighted
+// mean, redistributing its weight per AIP-SPEC §6.1, and counts the
+// placeholder only in the neutral-imputed sum that caps the composite.
 func (c *TrustCalculator) calculateFactorsDetailed(agent *domain.Agent) (*domain.TrustScoreFactors, map[string]string, error) {
 	factors := &domain.TrustScoreFactors{}
 	excluded := make(map[string]string)

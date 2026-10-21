@@ -209,6 +209,25 @@ describe('the quick-start takes its host ports and container-name prefix from th
     expect(doc.services.redis.ports?.[0]).toMatch(/^127\.0\.0\.1:/);
   });
 
+  it('the backend and frontend ports are bound to 127.0.0.1 too, and the Docker section says how to publish them', () => {
+    for (const ports of [{}, { AIM_BACKEND_PORT: '18080', AIM_FRONTEND_PORT: '13000' }] as Array<Record<string, string>>) {
+      const doc = load(interpolate(readFileSync(COMPOSE_FILE, 'utf-8'), { ...SECRETS, ...ports })) as {
+        services: Record<string, Service>;
+      };
+      expect(doc.services.backend.ports).toEqual([`127.0.0.1:${ports.AIM_BACKEND_PORT ?? '8080'}:8080`]);
+      expect(doc.services.frontend.ports).toEqual([`127.0.0.1:${ports.AIM_FRONTEND_PORT ?? '3000'}:3000`]);
+    }
+
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const dockerSection = guide.slice(guide.indexOf('### Docker\n'), guide.indexOf('### From source'));
+    expect(dockerSection).toContain(
+      'The quickstart publishes the API and the dashboard on `127.0.0.1` only, as it does PostgreSQL and Redis',
+    );
+    expect(dockerSection).toContain(
+      'change `127.0.0.1` to `0.0.0.0` in the `ports` entries of the `backend` and `frontend` services',
+    );
+  });
+
   it('scripts/quickstart.sh probes and prints the configured ports, never a fixed one', () => {
     const script = readFileSync(QUICKSTART, 'utf-8');
     for (const line of script.split('\n').filter((l) => l.includes('localhost:'))) {
@@ -497,6 +516,25 @@ describe('the dev stack takes its host ports and container-name prefix from the 
     // fallback it is.
     expect(https).toContain('`aim-frontend.example.com`');
     expect(https).toContain('`https://aim-backend.example.com`');
+  });
+
+  it('the HTTPS section of docs/DEPLOYMENT.md names the two ports docker-compose.yml publishes on every interface', () => {
+    const rendered = renderDev(DEV_SECRETS);
+    const everyInterface = Object.entries(rendered.published)
+      .filter(([, published]) => published.startsWith(':'))
+      .map(([servicePort]) => servicePort)
+      .sort();
+    expect(everyInterface).toEqual(['backend:8080', 'frontend:3000']);
+
+    const guide = readFileSync(DEPLOYMENT_GUIDE, 'utf-8');
+    const start = guide.indexOf("#### 4. Enable HTTPS (Let's Encrypt)\n");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = guide.indexOf('\n## ', start);
+    const https = guide.slice(start, end === -1 ? undefined : end);
+    expect(https).toContain('in front of the dashboard on port 3000 and the API on port 8080');
+    expect(https).toContain(
+      '`docker-compose.yml` publishes those two ports on every interface of the host, while every other port it publishes is bound to `127.0.0.1`',
+    );
   });
 
   it('each environment template names the public-origin variables its compose file reads', () => {

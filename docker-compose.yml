@@ -256,6 +256,10 @@ services:
       # service below reads it, so it is not kept in this container's environment.
       # Environment (defaults to development for docker-compose; set ENVIRONMENT=production for production)
       - ENVIRONMENT=${ENVIRONMENT:-development}
+    # SECURITY: Published on every interface of the host, as is the frontend's port: other
+    # machines that reach this host on this port reach the API. Every other port this file
+    # publishes is bound to 127.0.0.1. To keep the API on this host, write 127.0.0.1: before
+    # the host port, as docker-compose.quickstart.yml does.
     ports:
       - "${AIM_BACKEND_PORT:-8080}:8080"
     depends_on:
@@ -319,6 +323,9 @@ services:
       # needs (docs/DEPLOYMENT.md, Enable HTTPS).
       - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:${AIM_BACKEND_PORT:-8080}}
       - NODE_ENV=production
+    # SECURITY: Published on every interface of the host, as is the backend's port: other
+    # machines that reach this host on this port reach the dashboard. To keep it on this
+    # host, write 127.0.0.1: before the host port, as docker-compose.quickstart.yml does.
     ports:
       - "${AIM_FRONTEND_PORT:-3000}:3000"
     depends_on:

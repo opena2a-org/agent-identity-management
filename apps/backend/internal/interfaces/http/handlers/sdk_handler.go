@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -288,6 +289,41 @@ func isSDKDevelopmentPath(relPath string, isDir bool) bool {
 	return name == "conftest.py" || (strings.HasPrefix(name, "test_") && strings.HasSuffix(name, ".py"))
 }
 
+// sdkDir is the directory the SDK of sdkType is read from: SDK_BASE_DIR/<sdkType> when
+// SDK_BASE_DIR is set; otherwise ./sdk/<sdkType> (the server image copies the SDKs to ./sdk),
+// or ../../sdk/<sdkType> (a server run from apps/backend) when ./sdk/<sdkType> does not exist.
+func sdkDir(sdkType string) string {
+	sdkBaseDir := os.Getenv("SDK_BASE_DIR")
+	if sdkBaseDir == "" {
+		sdkBaseDir = filepath.Join(".", "sdk")
+		if _, err := os.Stat(filepath.Join(sdkBaseDir, sdkType)); os.IsNotExist(err) {
+			sdkBaseDir = filepath.Join("..", "..", "sdk")
+		}
+	}
+	return filepath.Join(sdkBaseDir, sdkType)
+}
+
+// sdkVersionPattern is the shape of a version readSDKVersion accepts: a digit, then up to 63
+// letters, digits, dots, plus signs and hyphens.
+var sdkVersionPattern = regexp.MustCompile(`^[0-9][0-9A-Za-z.+-]{0,63}$`)
+
+// readSDKVersion returns the version the VERSION file of the SDK of sdkType states. It returns
+// an error when the file cannot be read or its trimmed content does not match
+// sdkVersionPattern: the per-agent Python package writes the version into its Python source and
+// into the archive's file name without escaping it.
+func readSDKVersion(sdkType string) (string, error) {
+	versionPath := filepath.Clean(filepath.Join(sdkDir(sdkType), "VERSION"))
+	data, err := os.ReadFile(versionPath)
+	if err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(string(data))
+	if !sdkVersionPattern.MatchString(version) {
+		return "", fmt.Errorf("%s does not hold a version", versionPath)
+	}
+	return version, nil
+}
+
 // createSDKZip creates a zip file with SDK and embedded credentials
 // Returns: (zipData []byte, version string, error)
 func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([]byte, string, error) {
@@ -295,18 +331,7 @@ func (h *SDKHandler) createSDKZip(credentials SDKCredentials, sdkType string) ([
 	buf := new(bytes.Buffer)
 	zipWriter := zip.NewWriter(buf)
 
-	// Get SDK root directory based on type
-	// Use environment variable if set, otherwise use relative path from project root
-	sdkBaseDir := os.Getenv("SDK_BASE_DIR")
-	if sdkBaseDir == "" {
-		// Default: relative to binary location (./sdk from /root/ in container, ../../sdk in dev)
-		sdkBaseDir = filepath.Join(".", "sdk")
-		// Check if SDK exists at ./sdk (production/container), otherwise try ../../sdk (development)
-		if _, err := os.Stat(filepath.Join(sdkBaseDir, sdkType)); os.IsNotExist(err) {
-			sdkBaseDir = filepath.Join("..", "..", "sdk")
-		}
-	}
-	sdkRoot := filepath.Join(sdkBaseDir, sdkType)
+	sdkRoot := sdkDir(sdkType)
 
 	// Read VERSION file to get SDK version
 	version := "1.0.0" // Default version

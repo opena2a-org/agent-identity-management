@@ -127,9 +127,10 @@ func (h *TrustScoreHandler) CalculateTrustScore(c fiber.Ctx) error {
 		"factors":      score.Factors,
 		"calculatedAt": score.LastCalculated,
 	}
-	// Fresh calculations know which factors had no data and were excluded
-	// from the composite under AIP §6.1 (weights redistributed). Surface
-	// them so consumers never read the placeholder factor values as
+	// Fresh calculations know which factors had no data. AIP §6.1 leaves
+	// them out of the weighted mean (weights redistributed), and the cap on
+	// the composite counts them at their placeholder values. Surface them
+	// so consumers never read the placeholder factor values as
 	// measurements. Omitted entirely when every factor was measured.
 	if len(score.ExcludedFactors) > 0 {
 		resp["excludedFactors"] = score.ExcludedFactors
@@ -190,9 +191,9 @@ func (h *TrustScoreHandler) GetTrustScore(c fiber.Ctx) error {
 		"factors":      score.Factors,
 		"calculatedAt": score.LastCalculated,
 	}
-	// Present when one or more factors were excluded from the score, on a stored
-	// score as on one calculated here; a score stored before migration 103 reads
-	// back with no exclusions and omits it.
+	// Present when one or more factors had no data, on a stored score as on one
+	// calculated here; a score stored before migration 103 reads back with no
+	// exclusions and omits it.
 	if len(score.ExcludedFactors) > 0 {
 		resp["excludedFactors"] = score.ExcludedFactors
 	}
@@ -298,9 +299,10 @@ func (h *TrustScoreHandler) GetTrustScoreBreakdown(c fiber.Ctx) error {
 		"confidence":    score.Confidence,
 		"calculatedAt":  score.LastCalculated,
 	}
-	// Factors excluded from the composite under AIP §6.1: their entries in
-	// factors/contributions above are neutral placeholders, not measurements,
-	// and the published overall is min(renormalized, Σ contributions) — so
+	// Factors with no data, which AIP §6.1 leaves out of the weighted mean:
+	// their entries in factors/contributions above are neutral placeholders,
+	// not measurements, and the published overall is min(renormalized,
+	// Σ contributions) — so
 	// Σ contributions can exceed overall when exclusions are present. Only
 	// available on the calculated-on-the-fly path; stored scores omit it.
 	if len(score.ExcludedFactors) > 0 {

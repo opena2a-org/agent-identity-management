@@ -207,7 +207,8 @@ def test_the_archive_is_the_sdk_tree_the_server_image_copies():
     )
     handler = SDK_HANDLER.read_text(encoding="utf-8")
     assert 'sdkBaseDir = filepath.Join(".", "sdk")' in handler
-    assert "sdkRoot := filepath.Join(sdkBaseDir, sdkType)" in handler
+    assert "return filepath.Join(sdkBaseDir, sdkType)" in handler
+    assert "sdkRoot := sdkDir(sdkType)" in handler
 
 
 def test_the_api_registers_no_auth_login_route_at_its_root():

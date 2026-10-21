@@ -2359,6 +2359,8 @@ func TestAgentHandler_DetectAndMapMCPServers_AccessDenied(t *testing.T) {
 // ===========================
 
 func TestAgentHandler_DownloadSDK_Success(t *testing.T) {
+	// The package carries the version in the repository's sdk/python/VERSION.
+	t.Setenv("SDK_BASE_DIR", sdkSourceTree(t))
 	orgID := uuid.New()
 	userID := uuid.New()
 	agentID := uuid.New()

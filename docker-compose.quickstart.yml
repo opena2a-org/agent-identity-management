@@ -13,6 +13,7 @@
 #   AIM_POSTGRES_PORT=5432  AIM_REDIS_PORT=6379  AIM_BACKEND_PORT=8080  AIM_FRONTEND_PORT=3000
 #   AIM_PROJECT=aim   (prefix of the container names: aim-postgres, aim-redis,
 #                      aim-backend, aim-frontend)
+# Each host port is published on 127.0.0.1 only.
 # Compose names the volumes and the network after its project, which is
 # COMPOSE_PROJECT_NAME when set and otherwise this file's directory. Two stacks
 # run side by side on one host when each has its own project, AIM_PROJECT and ports.
@@ -79,8 +80,10 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@opena2a.org}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    # SECURITY: Bound to localhost only, as postgres and redis are. docs/DEPLOYMENT.md
+    # (Docker) says how to open the dashboard from another machine.
     ports:
-      - "${AIM_BACKEND_PORT:-8080}:8080"
+      - "127.0.0.1:${AIM_BACKEND_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,8 +108,10 @@ services:
       # read it each time they render a page.
       - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:${AIM_BACKEND_PORT:-8080}}
       - NODE_ENV=production
+    # SECURITY: Bound to localhost only, as postgres and redis are. docs/DEPLOYMENT.md
+    # (Docker) says how to open the dashboard from another machine.
     ports:
-      - "${AIM_FRONTEND_PORT:-3000}:3000"
+      - "127.0.0.1:${AIM_FRONTEND_PORT:-3000}:3000"
     depends_on:
       backend:
         condition: service_healthy

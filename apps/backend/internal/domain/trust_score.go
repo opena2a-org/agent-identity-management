@@ -44,14 +44,17 @@ type TrustScore struct {
 	Score   float64           `json:"score"` // 0-1
 	Factors TrustScoreFactors `json:"factors"`
 
-	// ExcludedFactors lists the factors excluded from the composite under the
-	// AIP-SPEC §6.1 composition rule (no data or un-wired source; their
-	// weights are redistributed proportionally across measured factors). The
-	// corresponding Factors fields carry neutral display placeholders, not
-	// measurements. Sorted. Persisted in trust_scores.excluded_factors
-	// (migration 103) so a stored capped or renormalized composite is
-	// reproducible from its row; rows predating the migration read back as
-	// empty (all factors treated as measured).
+	// ExcludedFactors lists the factors with no data (no data recorded, an
+	// un-wired source or a failed read). The AIP-SPEC §6.1 composition rule
+	// leaves them out of the weighted mean and redistributes their weights
+	// proportionally across the measured factors; Score is that mean capped
+	// at the sum over all nine factors in which each listed factor counts at
+	// its placeholder, so when the cap applies the listed factors count in
+	// Score at their placeholders. The corresponding Factors fields carry
+	// those neutral display placeholders, not measurements. Sorted. Persisted
+	// in trust_scores.excluded_factors (migration 103) so a stored capped or
+	// renormalized composite is reproducible from its row; rows predating the
+	// migration read back as empty (all factors treated as measured).
 	ExcludedFactors []string `json:"excludedFactors,omitempty"`
 
 	Confidence     float64   `json:"confidence"` // 0-1

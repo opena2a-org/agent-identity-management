@@ -815,8 +815,10 @@ Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
 **Response** (factor values are 0-1 scores, not weighted contributions; factors
-with no data are excluded from the composite per AIP §6.1, and their placeholder
-values here are not measurements):
+with no data are listed in `excludedFactors`, and their values here are
+placeholders, not measurements: per AIP §6.1 the weighted mean leaves them out,
+and the cap on `score` counts them at those values, as
+[Liveness Status](sdk/trust-scoring.md#liveness-status) describes):
 ```json
 {
   "agentId": "550e8400-e29b-41d4-a716-446655440000",
