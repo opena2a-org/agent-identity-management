@@ -57,11 +57,12 @@ func (h *DetectionHandler) ReportDetection(c fiber.Ctx) error {
 	}
 
 	// Check authentication method
-	authMethod := c.Locals("auth_method")
+	authMethod, _ := c.Locals("auth_method").(string)
 	var userID uuid.UUID
 
-	if authMethod == "api_key" || authMethod == "ed25519" {
-		// For API key or Ed25519 auth, use a nil UUID to indicate system/agent action
+	if authMethod == "api_key" || agentKeyAuthMethods[authMethod] {
+		// For API key auth, or a request the agent signed with its own key (Ed25519,
+		// ML-DSA or both), use a nil UUID to indicate system/agent action
 		userID = uuid.Nil
 	} else {
 		// For JWT auth, require user_id
@@ -187,11 +188,12 @@ func (h *DetectionHandler) ReportCapabilities(c fiber.Ctx) error {
 	}
 
 	// Check authentication method
-	authMethod := c.Locals("auth_method")
+	authMethod, _ := c.Locals("auth_method").(string)
 	var userID uuid.UUID
 
-	if authMethod == "api_key" || authMethod == "ed25519" {
-		// For API key or Ed25519 auth, use a nil UUID to indicate system/agent action
+	if authMethod == "api_key" || agentKeyAuthMethods[authMethod] {
+		// For API key auth, or a request the agent signed with its own key (Ed25519,
+		// ML-DSA or both), use a nil UUID to indicate system/agent action
 		userID = uuid.Nil
 	} else {
 		// For JWT auth, require user_id

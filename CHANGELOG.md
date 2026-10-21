@@ -20,6 +20,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `POST /api/v1/detection/agents/:id/report`, `GET /api/v1/agents/:id` and `POST /api/v1/a2a/agents/:id/sign`, the
   routes measured, including from an agent in hybrid mode, which the agent signature check refuses when it signs with
   Ed25519 alone.
+- The detection report handlers take a report the agent signed with ML-DSA or with both keys as they take one it
+  signed with Ed25519. They serve `POST /api/v1/detection/agents/:id/report`,
+  `POST /api/v1/detection/agents/:id/capabilities/report` and `POST /api/v1/sdk-api/agents/:id/detection/report`.
 - Tests: `apps/backend/cmd/server/agent_signed_route_groups_auth_test.go`,
   `TestAuthMiddleware_SkipsIfAgentSignedWithAnyAlgorithm` in `apps/backend/internal/interfaces/http/middleware/auth_test.go`.
 
