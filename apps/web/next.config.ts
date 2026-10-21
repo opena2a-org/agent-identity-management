@@ -2,6 +2,7 @@ import type { NextConfig } from 'next';
 import { dashboardRedirects } from './lib/redirects';
 import { dashboardHeaderRules } from './lib/content-security-policy';
 import { assertNoLocalApiOrigin } from './lib/local-api-origin';
+import { undecodablePathRewrites } from './lib/undecodable-path';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -53,6 +54,10 @@ const nextConfig: NextConfig = {
       || 'http://localhost:8080';
 
     return {
+      // beforeFiles: runs before Next.js resolves a route. A dashboard path with a
+      // percent-escape that does not decode goes to a path no page serves, so it is
+      // answered with the not-found page (lib/undecodable-path.ts).
+      beforeFiles: undecodablePathRewrites(),
       // afterFiles: runs after Next.js pages/static files, so the SPA still works
       afterFiles: [
         // Core API routes
