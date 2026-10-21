@@ -707,6 +707,22 @@ they stay in scope if one ever grows an observational side-channel.
   of the batch window sent the batch. A batch the budget refuses, or whose call throws, calls no handler, and a
   handler that throws or rejects does not stop the other handlers or events.
 
+### Fixed — ARP's runtime twin clips its noised fleet gradient to an L2 norm of 1.0 (#835)
+
+- With fleet gradients on (`intelligence.runtimeTwin.fleetEnabled`), the runtime twin divides the noised gradient by
+  its L2 norm when that norm is above 1.0, in float64, before it posts the gradient to
+  `https://api.oa2a.org/api/v1/telemetry/behavioral-gradient`. It clipped the gradient to an L2 norm of 1.0, added
+  Gaussian noise with a standard deviation of about 4.84 to each of the nine coordinates, and posted the noised
+  vector as it was. Measured on the code before this change, in one run of the new test, all 200 gradients posted by
+  200 flushes had an L2 norm above 1.0, from 5.97 to 23.58. #835 reports that the endpoint answers HTTP 400 to a
+  gradient whose L2 norm exceeds 1.0 by more than 1e-9; in the new test each posted gradient has an L2 norm of at
+  most 1.0 + 1e-9. Clipping after the noise is post-processing, so the (epsilon, delta) guarantee, epsilon 1.0 and
+  delta 1e-5, is unchanged.
+- The noise's Box-Muller transform takes the logarithm of `1 - Math.random()`, which is in (0, 1], in place of
+  `Math.random()`, which is in [0, 1). Measured on the code before this change with `Math.random()` returning 0, the
+  nine coordinates of the posted gradient were `null`; they are now finite. Test:
+  `src/arp/intelligence/runtime-twin.gradient-norm.test.ts`.
+
 ### Fixed — aim-arp telemetry CLI polish (#412)
 
 - `aim-arp telemetry` reports an unreadable OpenA2A home as unknown state (exit 1) instead of printing defaults. `status` used to show "OFF (not turned on)" with an opt-out marker hidden behind a permissions error, and `log` said nothing had been sent. The opt-out marker check now treats a marker it cannot stat as present, so consent that cannot be read counts as refused.
