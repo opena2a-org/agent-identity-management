@@ -370,7 +370,7 @@ export AIM_SIGNING_KEY_CARD_ATTESTATION="$(openssl rand -base64 32)"
 export AIM_SIGNING_KEY_ATC_ISSUER="$(openssl rand -base64 32)"
 ```
 
-At startup the backend logs one line per key with its purpose, key ID (`kid`, the hex SHA-256 of the public key) and source (`provisioned` or `derived`). It never logs key material. A malformed value stops startup with an error that names the variable. With `ENVIRONMENT=production`, a derived key also logs which variable to set.
+At startup the backend logs one line per key with its purpose, key ID (`kid`, the hex SHA-256 of the public key) and source (`provisioned` or `derived`). It never logs key material. A malformed value stops startup with an error that names the variable. So does either seed that the card attestation conformance vector publishes ([`specs/card-attestation-v2-vector.json`](specs/card-attestation-v2-vector.json)), set as a signing key, or its public key listed in a `_RETIRED` variable: anyone can sign with those seeds. With `ENVIRONMENT=production`, a derived key also logs which variable to set.
 
 Verify what is published:
 
@@ -692,6 +692,8 @@ With `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set, it first creates or up
 **Upgrading across the agent private key format change.** A release that stores agent private keys bound to their agent row converts the stored v1 keys once at startup, to the format it writes, and records completion in `schema_migrations` as `keyvault/agent-private-key-v2`; later starts skip the conversion. An instance of the earlier release that is still running keeps writing v1 keys, and a key written after completion is never converted and is refused on the request path until that agent's credentials are rotated. Stop every instance of the earlier release before the first instance of the new release starts.
 
 **Upgrading across the agent private key data key change.** A build that encrypts each agent private key under a data key of its own writes format v3, and still reads the keys stored in format v2: the startup sweep moves a v2 key under an older storage key id to format v3, and a v2 key under the current id stays as it is. A build from before that change refuses format v3, so a key it reads in v3 fails on the request path until that agent's credentials are rotated. Stop every instance of the earlier build before the first instance of the new one starts, and take a database backup first if you may roll back.
+
+**Finding the agents whose stored key does not open.** The startup conversion logs the rows it cannot read only as a count. `aim-server check-agent-keys` names them: it reads every stored agent private key, with the `POSTGRES_*` variables as `aim-server migrate` does and the `KEYVAULT_MASTER_KEY` variables the server runs with, writes nothing, and prints one line for each agent whose key does not open for its own row, `agent=<id> organization=<id> key=v1` or `key=unreadable`, then logs the counts. While the conversion is not recorded complete, the next server start converts the `v1` keys it reads. Once it is recorded complete, a `v1` key stays refused like an `unreadable` one: rotate that agent's credentials with `POST /api/v1/agents/<id>/rotate-credentials`. The command refuses to run without `KEYVAULT_MASTER_KEY`, because a master key generated for the run opens no stored key.
 
 ---
 

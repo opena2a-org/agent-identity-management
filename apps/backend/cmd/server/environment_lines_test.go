@@ -115,7 +115,7 @@ func signingKeyLinesForRow(cfg *config.Config) string {
 	if err != nil {
 		return "error: " + err.Error()
 	}
-	signingKeys, err := crypto.LoadSigningKeyRing(keyVault, cfg.SigningKeys.Value)
+	signingKeys, err := loadServerSigningKeys(keyVault, cfg.SigningKeys.Value)
 	if err != nil {
 		return "error: " + err.Error()
 	}

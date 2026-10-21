@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the server refuses to start with a signing key the card attestation conformance vector publishes (#617)
+
+`docs/specs/card-attestation-v2-vector.json` publishes two Ed25519 seeds so that anyone can reproduce its signatures, and so anyone can sign with them. The server now stops at startup when `AIM_SIGNING_KEY_CARD_ATTESTATION` or `AIM_SIGNING_KEY_ATC_ISSUER` holds either seed, or when `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` or `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED` lists the public key of either seed, with an error that names the variable and not its value. A seed of your own loads as before.
+
+### Added — `aim-server check-agent-keys` names the agents whose stored private key does not open (#617)
+
+The startup conversion of stored agent private keys logs the rows it cannot read only as a count. `aim-server check-agent-keys` reads every stored agent private key with the `POSTGRES_*` and `KEYVAULT_MASTER_KEY` variables, writes nothing, and prints one line for each agent whose key does not open for its own row, `agent=<id> organization=<id> key=v1` or `key=unreadable`, then logs the counts and whether the next server start converts the `v1` keys or the agent's credentials have to be rotated. It refuses to run on a master key generated for the run. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+### Added — shared request fixtures for three Python SDK calls (#617)
+
+The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` send are in `sdk/python/tests/fixtures/sdk_requests/`. A Python test checks that the SDK sends exactly each body, and a Go test decodes each into the request type its handler binds with unknown members refused, and posts the `register_mcp` and `report_execution_status` bodies to their handlers.
+
 ### Fixed — the `/sdk-api`, `/detection`, `/agents` and `/a2a` routes admit a request an agent signed with ML-DSA or with both keys (#825)
 
 - `AuthMiddleware` passes on a request the agent signature check authenticated with ML-DSA (`authenticated_via`

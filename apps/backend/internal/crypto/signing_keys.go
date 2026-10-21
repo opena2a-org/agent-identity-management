@@ -218,6 +218,37 @@ func LoadSigningKeyRing(kv *KeyVault, getenv func(string) string) (*SigningKeyRi
 	return ring, nil
 }
 
+// conformanceVectorKeyIDs are the key IDs of the two seeds that
+// docs/specs/card-attestation-v2-vector.json publishes so that anyone can reproduce its
+// signatures: inputs.seed (card-attestation) and inputs.atcIssuerSeed (atc-issuer).
+// Anyone can sign with a published seed, so a server that holds one of these keys accepts
+// signatures that anyone can make.
+var conformanceVectorKeyIDs = map[string]bool{
+	"56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c": true,
+	"24f6ed6acbfe1009c030d7ca567c33ca4830911498236b5561a6c82abec5de28": true,
+}
+
+// RefuseConformanceVectorKeys returns an error naming the variable that set a key the card
+// attestation conformance vector publishes: a seed provisioned in AIM_SIGNING_KEY_<PURPOSE>,
+// or a public key listed in AIM_SIGNING_KEY_<PURPOSE>_RETIRED, for either purpose. It
+// returns nil when the ring holds neither published key. The server refuses to start on
+// the error. LoadSigningKeyRing does not refuse these keys, so the vector's own tests can
+// build the ring the vector describes.
+func (r *SigningKeyRing) RefuseConformanceVectorKeys() error {
+	for _, purpose := range signingPurposes {
+		envVar := SigningKeyEnvVar(purpose)
+		if key := r.active[purpose]; key.Source == SigningKeySourceProvisioned && conformanceVectorKeyIDs[key.KeyID] {
+			return fmt.Errorf("%s holds a seed that the card attestation conformance vector publishes, and anyone can sign with it; set a seed of your own", envVar)
+		}
+		for _, publicKey := range r.retired[purpose] {
+			if conformanceVectorKeyIDs[SigningKeyID(publicKey)] {
+				return fmt.Errorf("%s lists the public key of a seed that the card attestation conformance vector publishes, and anyone can sign with that seed; remove it", envVar+retiredKeysEnvSuffix)
+			}
+		}
+	}
+	return nil
+}
+
 // decodePublicKey reads a public key written in base64 or base64url, padded or not.
 func decodePublicKey(value string) ([]byte, error) {
 	var lastErr error

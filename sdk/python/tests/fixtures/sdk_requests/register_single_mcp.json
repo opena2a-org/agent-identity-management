@@ -1,0 +1,13 @@
+{
+  "method": "POST",
+  "path": "/api/v1/sdk-api/agents/{id}/mcp-servers",
+  "requestType": "CreateMCPServerRequest",
+  "body": {
+    "name": "github",
+    "description": "GitHub API",
+    "url": "stdio://github",
+    "version": "1.2.0",
+    "capabilities": ["repo:read"],
+    "registeredByAgent": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
