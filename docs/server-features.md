@@ -4,7 +4,7 @@ What the AIM server adds over the SDKs' local checks: the authorization engine, 
 
 ## 5-step Fine-Grained Authorization
 
-`POST /api/v1/agents/:id/authorize` runs an agent's request for a capability through the checks below, in order, and stops at the first one that denies. When the agent has no FGA policy for that capability, it runs step 1 only.
+`POST /api/v1/agents/:id/authorize` and the SDK verification route `POST /api/v1/sdk-api/verifications` run an agent's request for a capability through the checks below, in order, and stop at the first one that denies. When the agent has no FGA policy for that capability, the request is decided under a default policy: no attribute, action or object restriction, no context rules, no chain rules, and the risk level detected from the capability (or the `riskLevel` an SDK verification names), so steps 2, 3 and 4 run and allow, and step 5 runs for HIGH and MEDIUM risk. The `fga.authorize` span says which applied in `fga.policy`: `stored` or `default`.
 
 | Step | Check | Latency budget |
 |---|---|---|
@@ -16,7 +16,7 @@ What the AIM server adds over the SDKs' local checks: the authorization engine, 
 
 Step 5 runs only when the policy's risk level is HIGH or MEDIUM; it is skipped for LOW. It hands the request to a NanoMind daemon (`FGA_DAEMON_URL`, default `http://127.0.0.1:47200`) without holding the decision, records the daemon's classification, and never denies. Neither compose file in this repository starts that daemon.
 
-The SDKs do not call this route. `@perform_action` (Python) and `performAction()` (Java) post each call to `/api/v1/sdk-api/verifications`, where the server decides with the capabilities granted to the agent, the minimum trust score of each capability's definition, the organization's enforcement mode and its security policies. That route records an `fga.authorize` span for its decision with one child, `fga.capability_check`. Routing SDK verifications through this engine is tracked for a fix.
+The SDKs do not call `POST /api/v1/agents/:id/authorize`. `@perform_action` (Python) and `performAction()` (Java) post each call to `/api/v1/sdk-api/verifications`, where step 1 is the server's capability check: the capabilities granted to the agent, the minimum trust score of each capability's definition, the organization's enforcement mode and its security policies. Steps 2 to 5 then run on the agent's FGA policy for the capability, or on the default policy. A call's `context` may name what it touches under the members the authorize route takes in its body: `attributes` (a list of field names), `action` and `dataClass`; the attribute check reads them, and the tool call and attestation records keep them. A denial by the attribute, context or chain check is enforced as the organization's mode enforces every other denial on that route: in strict mode the call is denied with the check's reason, and in monitoring mode it runs, with the denial recorded in the audit entry and the verification event under `fgaDeniedBy` and `fgaDeniedReason`. Both records carry the decision's `fgaOutcome` and `fgaStepsTriggered`. The route records an `fga.authorize` span for each decision with one child span per step that ran.
 
 ## Trust-gated capabilities
 

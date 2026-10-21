@@ -11,6 +11,34 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — `POST /api/v1/sdk-api/verifications` decides with the FGA engine's five steps, and an agent with no FGA policy is decided under a default policy (#656)
+
+- The SDK verification route (`POST /api/v1/sdk-api/verifications`, and `POST /api/v1/verifications`, which shares its
+  handler) decides with `FGAEngine.Authorize`. `AgentService.VerifyCapability` is step 1: the capabilities granted to
+  the agent, the organization's enforcement mode and its security policies, with the violation record and the alert it
+  writes. The engine then runs the attribute, context and chain checks of the agent's `fga_policies` row for the
+  capability and dispatches the intent check for HIGH and MEDIUM risk. Before this change the route decided with
+  `VerifyCapability` alone and emitted an `fga.authorize` span with one `fga.capability_check` child after the
+  decision, without reading the agent's FGA policy.
+- A call's `context` may name what it touches under `attributes` (a list of field names), `action` and `dataClass`,
+  the members `POST /api/v1/agents/:id/authorize` takes in its body; the attribute check reads them. A denial by the
+  attribute, context or chain check is enforced as the organization's mode enforces the route's other denials: in
+  strict mode the call is denied with the check's reason (HTTP 403, `status` `denied`); in monitoring mode it runs,
+  and the audit entry and the verification event record the denial under `fgaDeniedBy` and `fgaDeniedReason`. Both
+  records carry `fgaOutcome` and `fgaStepsTriggered` for every decision. A policy row that cannot be read denies the
+  call with `Verification error: failed to load FGA policy: ...` before step 1 runs.
+- On both routes, an agent with no `fga_policies` row for the capability is decided under a default policy: no
+  attribute, action or object restriction, no context rules and no chain rules, and the risk level detected from the
+  capability, or the `riskLevel` an SDK verification names, with `critical` and `high` as HIGH. Steps 2, 3 and 4 run
+  and allow, step 5 is dispatched for HIGH and MEDIUM and skipped for LOW, and the tool call and the attestation are
+  recorded, as under a stored policy. Before, such an agent got step 1 only and no record. The `fga.authorize` span
+  carries `fga.policy`, `stored` or `default`, and a step 1 denial sets `fga.denied_reason` and the error status on
+  its child span.
+- The READMEs, `docs/server-features.md`, `docs/DEPLOYMENT.md` and `apps/backend/docs/OBSERVABILITY.md` say so.
+- Tests: `apps/backend/internal/interfaces/http/handlers/verification_fga_engine_test.go`,
+  `apps/backend/internal/application/fga_engine_default_policy_test.go`,
+  `sdk/python/tests/test_perform_action_authorization_claims.py`.
+
 ### Fixed — `GET /api/v1/agents/:id/sdk` answers for the language in `?language=` and carries the Python SDK's version (#792)
 
 - The route reads the SDK language from `?language=`, the parameter the dashboard's agent download sends, and from

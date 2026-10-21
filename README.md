@@ -50,7 +50,7 @@ def get_customer(customer_id):
 get_customer(42)
 ```
 
-`@perform_action` signs each call, has the server check it against the agent's granted capabilities and the organization's security policies, and logs the outcome.
+`@perform_action` signs each call, has AIM's 5-step Fine-Grained Authorization engine check it, first against granted capabilities and security policies, and logs the outcome.
 
 The refusal below needs strict mode (dashboard: Security, then Policies, Global Enforcement Mode: Strict); in the default monitoring mode, `db:write` runs and deletes the record.
 

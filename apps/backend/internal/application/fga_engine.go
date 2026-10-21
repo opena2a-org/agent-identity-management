@@ -58,6 +58,8 @@ type asyncIntentJob struct {
 // Steps 1-4 must complete in < 10ms P99 (no external calls).
 // Step 5 (NanoMind intent check) runs async for HIGH and MEDIUM risk and is
 // skipped for LOW. It records the daemon's classification and never denies.
+// An agent with no stored policy for the capability is decided under
+// defaultPolicy, which restricts nothing, so the steps run for it too.
 type FGAEngine struct {
 	db             *sql.DB
 	agentSvc       *AgentService
@@ -113,6 +115,51 @@ type FGARequest struct {
 	Attributes []string  `json:"attributes,omitempty"` // fields being accessed
 	Action     string    `json:"action,omitempty"`     // read, write, delete, execute
 	DataClass  string    `json:"dataClass,omitempty"`  // general, pii, financial, credential
+	// RiskLevel is the request's risk level (low, medium, high or critical)
+	// when the caller assessed one. It sets the default policy's tier when the
+	// agent has no stored policy for the capability; a stored policy's
+	// risk_level is used over it. Empty means detect it from the capability.
+	RiskLevel string `json:"riskLevel,omitempty"`
+	// CapabilityCheck, when set, is Step 1 of the decision in place of
+	// AgentService.HasCapability. The SDK verification route sets it to
+	// AgentService.VerifyCapability, which applies the organization's
+	// enforcement mode and its security policies and writes the violation
+	// record a denial calls for. It never comes from a request body.
+	CapabilityCheck CapabilityCheck `json:"-"`
+}
+
+// CapabilityCheck is a Step 1 decision: whether the agent may use the
+// capability on the resource, and, when it may not, why.
+type CapabilityCheck func(ctx context.Context) (allowed bool, reason string, err error)
+
+// capabilityDeniedReason is the Step 1 denial reason when the check gives none.
+const capabilityDeniedReason = "Agent does not have the requested capability"
+
+// defaultPolicy is the policy an agent with no stored fga_policies row for the
+// capability is decided under: no attribute, object or action restriction, no
+// context rules and no chain rules, so steps 2, 3 and 4 run and allow, and the
+// risk level of the request, detected from the capability when the request
+// names none, so step 5 is dispatched for HIGH and MEDIUM and skipped for LOW,
+// as under a stored policy.
+func defaultPolicy(req *FGARequest) *FGAPolicy {
+	return &FGAPolicy{
+		AgentID:    req.AgentID,
+		Capability: req.Capability,
+		RiskLevel:  policyRiskLevel(domain.DetectRiskLevel(req.Capability, strings.ToLower(req.RiskLevel))),
+	}
+}
+
+// policyRiskLevel maps a detected risk level (low, medium, high, critical) to
+// the tiers a policy's risk_level names. critical and high are HIGH.
+func policyRiskLevel(detected string) string {
+	switch detected {
+	case domain.RiskLevelCritical, domain.RiskLevelHigh:
+		return "HIGH"
+	case domain.RiskLevelMedium:
+		return "MEDIUM"
+	default:
+		return "LOW"
+	}
 }
 
 // FGAResult represents the authorization decision.
@@ -550,42 +597,19 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		span.End()
 	}()
 
-	// Load FGA policy for this agent+capability
+	// Load the FGA policy for this agent and capability. An agent with none is
+	// decided under defaultPolicy, so every step runs for it.
 	policy, err := e.loadPolicy(ctx, req.AgentID, req.Capability)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to load FGA policy: %w", err)
 	}
-
-	// No policy = fall through to existing capability system (zero behavior change)
+	policySource := "stored"
 	if policy == nil {
-		// Step 1 only: basic capability check via existing AIM
-		result.StepsTriggered = append(result.StepsTriggered, "capability_check")
-		stepCtx, stepSpan := e.tracer.Start(ctx, "fga.capability_check",
-			trace.WithAttributes(
-				attribute.String("fga.step", "capability_check"),
-				attribute.String("agent.id", req.AgentID.String()),
-				attribute.String("agent.capability", req.Capability),
-			),
-		)
-		hasCapability, hcErr := e.agentSvc.HasCapability(stepCtx, req.AgentID, req.Capability, req.Resource)
-		stepSpan.SetAttributes(attribute.Bool("fga.allowed", hasCapability))
-		if hcErr != nil {
-			stepSpan.RecordError(hcErr)
-			stepSpan.End()
-			return nil, hcErr
-		}
-		stepSpan.End()
-		result.Allowed = hasCapability
-		result.Outcome = "ALLOW"
-		if !hasCapability {
-			result.Outcome = "DENY"
-			result.DeniedBy = "capability_check"
-			result.DeniedReason = "Agent does not have the requested capability"
-		}
-		result.LatencyMs = time.Since(start).Milliseconds()
-		return result, nil
+		policy = defaultPolicy(req)
+		policySource = "default"
 	}
+	span.SetAttributes(attribute.String("fga.policy", policySource))
 
 	// Step 1: Capability Check (< 1ms)
 	result.StepsTriggered = append(result.StepsTriggered, "capability_check")
@@ -596,18 +620,22 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 			attribute.String("agent.capability", req.Capability),
 		),
 	)
-	hasCapability, hcErr := e.agentSvc.HasCapability(stepCtx, req.AgentID, req.Capability, req.Resource)
+	hasCapability, reason, hcErr := e.checkCapability(stepCtx, req)
 	stepSpan.SetAttributes(attribute.Bool("fga.allowed", hasCapability))
 	if hcErr != nil {
 		stepSpan.RecordError(hcErr)
 		stepSpan.End()
 		return nil, hcErr
 	}
+	if !hasCapability {
+		stepSpan.SetAttributes(attribute.String("fga.denied_reason", reason))
+		stepSpan.SetStatus(codes.Error, reason)
+	}
 	stepSpan.End()
 	if !hasCapability {
 		result.Outcome = "DENY"
 		result.DeniedBy = "capability_check"
-		result.DeniedReason = "Agent does not have the requested capability"
+		result.DeniedReason = reason
 		result.LatencyMs = time.Since(start).Milliseconds()
 		e.recordAttestation(ctx, req, result)
 		return result, nil
@@ -752,12 +780,11 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 
 // emitDecisionTelemetry emits the per-decision metric + structured log line.
 // EmitSDKVerificationSpan emits an fga.authorize parent span (plus an
-// fga.capability_check child) that mirrors the shape produced by the
-// /api/v1/agents/{id}/authorize path, but from the SDK route at
-// /api/v1/sdk-api/verifications. The SDK route's enforcement still flows
-// through AgentService.VerifyCapability; this method exists only so the
-// observability surface is consistent across both routes, matching the
-// nine SemConv attributes locked in the OBSERVABILITY.md proposal.
+// fga.capability_check child) for a decision made outside the engine, in the
+// shape Authorize produces, with the nine SemConv attributes locked in the
+// OBSERVABILITY.md proposal. The SDK verification route at
+// /api/v1/sdk-api/verifications emitted its span with it until that route was
+// routed through Authorize (#656); no handler calls it since.
 //
 // No DB writes, no engine state changes, no NanoMind dispatch. Span
 // emission only. Safe to call from any handler that has already made the
@@ -889,6 +916,28 @@ func (e *FGAEngine) emitDecisionTelemetry(ctx context.Context, req *FGARequest, 
 		slog.String("fga.denied_reason", result.DeniedReason),
 		slog.Int64("fga.latency_ms", result.LatencyMs),
 	)
+}
+
+// ============================================================================
+// Step 1: Capability Check
+// ============================================================================
+
+// checkCapability is Step 1: the request's CapabilityCheck when it carries
+// one, otherwise AgentService.HasCapability against the capabilities granted
+// to the agent. A denial that gives no reason gets capabilityDeniedReason.
+func (e *FGAEngine) checkCapability(ctx context.Context, req *FGARequest) (allowed bool, reason string, err error) {
+	if req.CapabilityCheck != nil {
+		allowed, reason, err = req.CapabilityCheck(ctx)
+	} else {
+		allowed, err = e.agentSvc.HasCapability(ctx, req.AgentID, req.Capability, req.Resource)
+	}
+	if err != nil {
+		return false, reason, err
+	}
+	if !allowed && reason == "" {
+		reason = capabilityDeniedReason
+	}
+	return allowed, reason, nil
 }
 
 // ============================================================================

@@ -2,12 +2,14 @@
 What decides an @perform_action call, as the docs and `aim-sdk login` say it.
 
 The SDK posts each decorated call to /api/v1/sdk-api/verifications. The server
-decides that request with AgentService.VerifyCapability: the capabilities
-granted to the agent, the organization's enforcement mode and its security
-policies. The 5-step Fine-Grained Authorization engine (FGAEngine.Authorize)
-runs on POST /api/v1/agents/:id/authorize, which no SDK here calls. The
-READMEs and the login closing text said each decorated call ran through the
-5-step engine (#656).
+decides that request with FGAEngine.Authorize, the 5-step Fine-Grained
+Authorization engine, with AgentService.VerifyCapability as step 1: the
+capabilities granted to the agent, the organization's enforcement mode and its
+security policies. Steps 2 to 5 run on the agent's FGA policy for the
+capability, or on the default policy when it has none. The READMEs first said
+each decorated call ran through the 5-step engine while the route decided with
+VerifyCapability alone, then said the engine did not decide these calls; the
+route now runs through it (#656).
 """
 import base64
 import io
@@ -94,11 +96,6 @@ def login_output(monkeypatch):
     return " ".join(out.split())
 
 
-def test_login_closing_text_does_not_say_the_five_step_engine_decides_a_call(login_output):
-    assert "5-step" not in login_output
-    assert "Fine-Grained Authorization" not in login_output
-
-
 def test_login_closing_text_names_what_the_server_checks_and_the_enforcement_modes(login_output):
     assert "checked by the server against the agent's granted capabilities" in login_output
     assert "security policies" in login_output
@@ -107,11 +104,13 @@ def test_login_closing_text_names_what_the_server_checks_and_the_enforcement_mod
 
 
 @pytest.mark.parametrize("name", sorted(READMES))
-def test_readme_does_not_say_the_decorator_runs_through_the_five_step_engine(name):
+def test_readme_says_the_decorator_runs_through_the_five_step_engine(name):
     lines = READMES[name].read_text(encoding="utf-8").splitlines()
     claims = [line for line in lines if DECORATOR.search(line) and ENGINE.search(line)]
+    assert claims, f"{name} must say the decorated call runs through the 5-step engine"
     for line in claims:
-        assert "does not decide" in line, f"{name}: {line}"
+        assert "5-step Fine-Grained Authorization engine" in line, f"{name}: {line}"
+        assert "does not decide" not in line, f"{name}: {line}"
     stated = [line for line in lines if DECORATOR.search(line)
               and "granted" in line and "security policies" in line]
     assert stated, f"{name} must say the server checks the call against grants and security policies"
@@ -129,25 +128,30 @@ def _fga_section(guide):
     return guide[start:end]
 
 
-def test_server_features_guide_names_the_route_the_five_step_engine_runs_on():
+def test_server_features_guide_names_both_routes_the_five_step_engine_runs_on():
     readme = READMES["README.md"].read_text(encoding="utf-8")
     guide = SERVER_FEATURES.read_text(encoding="utf-8")
     section = _fga_section(guide)
     assert "Every privileged action runs through five checks" not in readme
     assert "Every privileged action runs through five checks" not in guide
     assert "`POST /api/v1/agents/:id/authorize`" in section
-    assert "it runs step 1 only" in section
+    assert "`POST /api/v1/sdk-api/verifications`" in section
+    assert "it runs step 1 only" not in section
+    assert "decided under a default policy" in section
     assert "never denies" in section
-    assert "The SDKs do not call this route" in section
-    assert "`/api/v1/sdk-api/verifications`" in section
+    assert "The SDKs do not call `POST /api/v1/agents/:id/authorize`" in section
+    assert "in monitoring mode it runs" in section
+    assert "`fgaDeniedBy`" in section
 
 
-def test_deployment_guide_does_not_say_every_decision_has_five_child_spans():
+def test_deployment_guide_says_which_routes_carry_the_step_spans():
     readme = READMES["README.md"].read_text(encoding="utf-8")
     guide = DEPLOYMENT.read_text(encoding="utf-8")
     assert "with 5 child spans" not in readme
     assert "with 5 child spans" not in guide
     assert "one child span per FGA step it ran" in guide
+    assert "and on `POST /api/v1/sdk-api/verifications`" in guide
+    assert "the decision is an SDK verification's" not in guide
 
 
 def test_the_sdk_posts_verifications_to_the_route_the_docs_name_and_never_to_authorize():
