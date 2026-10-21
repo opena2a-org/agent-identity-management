@@ -344,9 +344,11 @@ score = agent.get_trust_score()["score"]
 print(f"Trust Score: {score:.2f}")
 ```
 
-**Get Audit Trail**: the SDK has no audit log method. Read an agent's audit log
-in the dashboard, or with `GET /api/v1/agents/{id}/audit-logs` and a user's
-access token.
+**Get Audit Trail**:
+```python
+for record in agent.get_audit_logs(limit=20)["logs"]:
+    print(record["timestamp"], record["action"])
+```
 
 ---
 

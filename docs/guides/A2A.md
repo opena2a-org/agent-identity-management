@@ -421,9 +421,11 @@ for server_id, stats in report["servers"].items():
 
 ### Audit Trail
 
-All A2A interactions are logged. The SDK has no audit log method: read an
-agent's audit log in the dashboard, or with
-`GET /api/v1/agents/{id}/audit-logs?limit=50&offset=0` and a user's access token.
+All A2A interactions are logged. An agent's audit log holds the records whose
+resource is that agent, such as its creation, updates, verification and
+suspension. Read it in the dashboard, with `client.get_audit_logs()`, or with
+`GET /api/v1/agents/{id}/audit-logs?limit=50&offset=0`. A request the agent
+signs with its Ed25519 key, as the SDK signs it, may name only its own ID.
 
 ### Compliance Reports
 

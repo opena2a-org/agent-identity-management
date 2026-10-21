@@ -3669,6 +3669,80 @@ class AIMClient:
         except Exception as e:
             raise VerificationError(f"Failed to get trust score history: {e}")
 
+    def get_audit_logs(
+        self,
+        agent_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
+    ) -> Dict:
+        """
+        Get an agent's audit log: the audit records whose resource is the
+        agent, such as its creation, updates, verification and suspension.
+
+        Calls GET /api/v1/agents/{id}/audit-logs. A client that signs its
+        requests reads its own agent's log only: the server answers another
+        agent's ID with 403.
+
+        Args:
+            agent_id: Agent ID to query (defaults to current agent)
+            limit: Number of records to return, a positive integer. When
+                omitted the server returns up to 50; it returns at most 100.
+            offset: Number of records to skip, a non-negative integer. When
+                omitted the server skips none.
+
+        Returns:
+            Dict containing:
+            - agentId: str
+            - agentName: str
+            - logs: List of records, each with id, action, resourceType,
+              resourceId, timestamp and actorType ("user", "agent" or
+              "system")
+            - total: int - number of the agent's records
+            - limit: int - the limit the server applied
+            - offset: int
+
+        Example:
+            result = client.get_audit_logs(limit=20)
+            for record in result["logs"]:
+                print(record["timestamp"], record["action"], record["actorType"])
+
+        Raises:
+            ConfigurationError: If limit is not a positive integer or offset is
+                not a non-negative integer
+            AuthenticationError: If the server answers 401 or 403
+            VerificationError: If request fails
+        """
+        if limit is not None and (
+            isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
+        ):
+            raise ConfigurationError(
+                f"limit must be a positive integer -- got {limit!r}"
+            )
+        if offset is not None and (
+            isinstance(offset, bool) or not isinstance(offset, int) or offset < 0
+        ):
+            raise ConfigurationError(
+                f"offset must be a non-negative integer -- got {offset!r}"
+            )
+
+        target_agent_id = agent_id or self.agent_id
+        endpoint = f"/api/v1/agents/{target_agent_id}/audit-logs"
+        query = [
+            f"{name}={value}"
+            for name, value in (("limit", limit), ("offset", offset))
+            if value is not None
+        ]
+        if query:
+            endpoint += "?" + "&".join(query)
+
+        try:
+            return self._make_request(method="GET", endpoint=endpoint)
+
+        except (AuthenticationError, VerificationError):
+            raise
+        except Exception as e:
+            raise VerificationError(f"Failed to get audit logs: {e}")
+
     def update_agent(
         self,
         agent_id: Optional[str] = None,

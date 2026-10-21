@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — `get_audit_logs()` reads an agent's audit log (#666)
+
+- `AIMClient.get_audit_logs(agent_id=None, limit=None, offset=None)` reads `GET /api/v1/agents/{id}/audit-logs` and
+  returns the server's answer: `agentId`, `agentName`, `logs`, `total`, `limit` and `offset`. Without `limit` the
+  server returns up to 50 records, and it returns at most 100. A `limit` that is not a positive integer, or an
+  `offset` that is not a non-negative integer, raises `ConfigurationError` before a request is sent.
+- A client that signs its requests reads its own agent's log: the server answers another agent's ID with 403, raised
+  as `AuthenticationError`. A server from before the platform change for #666 answers a signed request on this route
+  with 401 whether it names the client's own agent, another agent or an ID that names no agent; the SDK raises that
+  as `AuthenticationError` too.
+- `docs/sdk/python.md`, `docs/guides/A2A.md` and `docs/DOCUMENTATION_INDEX.md` show `get_audit_logs()` where they
+  said the SDK had no audit log method. `tests/test_documented_names_exist.py` flags the `start_date` and
+  `action_name` filters the pages once passed to it.
+- Tests: `tests/test_audit_log_reads.py`.
+
 ### Fixed — `get_trust_score()`'s docstring says how the factors in `excludedFactors` count in `score` (#792)
 
 - The docstring said `excludedFactors` is present when one or more factors "were excluded from the score". It now

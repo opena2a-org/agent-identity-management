@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed — an agent reads its own audit log with a request it signs or with its service token (#666)
+
+- `GET /api/v1/agents/:id/audit-logs` answers a request an agent signs with its Ed25519 key, and one it sends with its
+  OAuth service token, when `:id` is that agent's own ID. Neither credential carries a user ID, which the route
+  required: it answered both `401` `{"error":"Unauthorized"}` for the agent's own ID, for another agent of its
+  organization, for an agent of another organization and for an ID that names no agent.
+- Such a request gets each record without `ipAddress`, `userAgent` and `metadata`, as every caller but an admin does,
+  and its read is recorded in the audit log with the agent as the actor.
+- Such a request that names another agent ID is answered `403` with `reasonCode` `agent_path_mismatch`, the answer of
+  a route bound to its agent, before the named agent or any audit record is read.
+- A user's session and an API key are answered as before.
+- Tests: `apps/backend/internal/interfaces/http/handlers/agent_audit_logs_agent_caller_test.go`.
+
 ### Changed — `POST /api/v1/sdk-api/verifications` decides with the FGA engine's five steps, and an agent with no FGA policy is decided under a default policy (#656)
 
 - The SDK verification route (`POST /api/v1/sdk-api/verifications`, and `POST /api/v1/verifications`, which shares its
