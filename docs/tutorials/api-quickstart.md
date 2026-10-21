@@ -34,8 +34,8 @@ curl -X POST "http://localhost:8080/api/v1/agents" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "api-demo-agent",
-    "display_name": "API Demo Agent",
-    "agent_type": "ai_agent",
+    "displayName": "API Demo Agent",
+    "agentType": "ai_agent",
     "description": "Agent registered via API",
     "capabilities": ["read_data", "send_notifications"]
   }'
@@ -125,8 +125,7 @@ curl -X POST "http://localhost:8080/api/v1/mcp-servers" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "filesystem-server",
-    "display_name": "Filesystem MCP Server",
-    "server_url": "stdio://filesystem-server",
+    "url": "stdio://filesystem-server",
     "capabilities": ["read_file", "write_file", "list_directory"],
     "description": "Local filesystem access"
   }'
@@ -193,8 +192,8 @@ AGENT_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/agents" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "demo-agent-'$(date +%s)'",
-    "display_name": "Demo Agent",
-    "agent_type": "ai_agent",
+    "displayName": "Demo Agent",
+    "agentType": "ai_agent",
     "description": "Demo agent"
   }')
 AGENT_ID=$(echo $AGENT_RESPONSE | jq -r '.id')
