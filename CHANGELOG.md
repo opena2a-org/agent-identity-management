@@ -11,6 +11,23 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added — a check that the root and `apps/web` manifests, the newest `CHANGELOG.md` release section and a `platform-v` tag name one platform version (#688)
+
+- The root `package.json` holds the platform version. `node scripts/check-platform-version.mjs` exits 1, with one
+  `refused:` line for each disagreement, when `apps/web/package.json` or the newest release section of `CHANGELOG.md`
+  (the first `## [<version>]` heading other than `## [Unreleased]`, outside fenced code blocks) names another version,
+  and exits 0 when they agree. Given a tag, it also exits 1 when the tag is not `platform-vX.Y.Z`, or when its X.Y.Z,
+  as written, is not the root's version. On this tree, where both manifests read 1.0.0 and the newest release section
+  is `[1.0.0]`, it exits 0 for `platform-v1.0.0` and 1 for `platform-v1.1.0`. It takes the tag from its argument and
+  reads no environment variable. It exits 2 when a file cannot be read or parsed, a manifest carries no version, or
+  `CHANGELOG.md` has no release section.
+- The TypeScript SDK's test suite runs the check and its tests, `scripts/test-check-platform-version.mjs`, from
+  `sdk/typescript/tests/platform-version.test.ts`. CI runs that suite on every pull request to `main` and every push
+  to it, so a commit that opens a release section in `CHANGELOG.md` without setting both manifests to its version
+  fails it.
+- `CONTRIBUTING.md` names the root `package.json` as the platform's source of truth for its version, and its platform
+  release steps run the check on the commit to be tagged, before the tag is pushed.
+
 ### Fixed — the API reference states the record refusal of a verification, a reactivation, an agent delete and a capability request approval only for a server that writes their audit record (#740)
 
 - `docs/API.md` said that a verification, a reactivation and an agent delete, and the dashboard's API reference said
