@@ -1,0 +1,25 @@
+{
+  "schema": "demo-narration/1",
+  "tool": "aim-sdk",
+  "version": "2.0.3",
+  "language": "en",
+  "wordsPerMinute": 150,
+  "steps": [
+    {
+      "id": "s1",
+      "text": "Sign in from the terminal: aim-sdk prints a one-time code for an administrator to approve."
+    },
+    {
+      "id": "s2",
+      "text": "Register an agent that holds db:read. It starts pending."
+    },
+    {
+      "id": "s3",
+      "text": "Once an administrator has verified it, a call that needs db:read runs."
+    },
+    {
+      "id": "s4",
+      "text": "In strict mode, a call that needs db:write is refused before the function runs."
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+$ aim-sdk login --url http://localhost:8080
+Sign in to AIM.
+  Server: http://localhost:8080
+  Open:   http://localhost:3000/device
+  Code:   8JR3-XSH3
+Waiting for your approval (up to 15 min). Ctrl+C stops the wait. Nothing is stored until you approve.
+No browser was opened (standard output is not a terminal): open the page above and approve the code. This command waits up to 900 seconds for the approval and exits 1 if the code is not approved in that time.
+Signed in as admin@example.com on http://localhost:8080.
+Credentials: ~/.aim/sdk_credentials.json (owner read/write only)
+
+You can now use the AIM SDK. Register an agent, then protect any
+function with a capability grant:
+
+   from aim_sdk import secure
+
+   agent = secure('my-agent', capabilities=['db:read'])
+
+   @agent.perform_action(capability='db:read')
+   def get_customer(customer_id):
+       return db.query('SELECT * FROM customers WHERE id = ?', customer_id)
+
+Every @perform_action call is signed, checked by the server against the
+agent's granted capabilities and your organization's security policies,
+and recorded in the audit log. In strict enforcement mode, calls outside
+the granted capabilities are denied unless a security policy allows
+them; in monitoring mode, the default, they run and are recorded. An
+administrator turns strict mode on with Global Enforcement Mode on the
+dashboard page /dashboard/admin/security-policies.
+
+   Verify auth:   aim-sdk status
+   Quickstart:    https://opena2a.org/docs/tutorials/sdk-quickstart
+   Full docs:     https://opena2a.org/docs/aim
+
+[exit 0]
+$ python3
+Python 3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>> from aim_sdk import secure
+>>> agent = secure("my-first-agent", capabilities=["db:read"])
+  ○ Agent Type: using default 'ai_agent'
+Token rotated successfully. Old refresh token revoked (new id: c537f436...)
+
+[OK] Agent registered: my-first-agent
+  ID: 3b1cb98c...5766  Type: ai_agent  Version: 1.0.0
+  Status: ○ pending  Trust: 59%
+  Capabilities: db:read
+
+>>> @agent.perform_action(capability="db:read")
+... def get_customer(customer_id):
+...     return customers[customer_id]
+... 
+>>> get_customer(42)
+{'name': 'Example Co', 'plan': 'team'}
+>>> @agent.perform_action(capability="db:write")
+... def delete_customer(customer_id):
+...     del customers[customer_id]
+... 
+>>> delete_customer(42)
+Capability 'db:write' pending admin approval (strict mode)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/work/env/venv/lib/python3.13/site-packages/aim_sdk/client.py", line 3915, in wrapper
+    raise verdict.error
+aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violation blocked by security policy 'default_policy': Agent does not have permission for capability 'db:write' (allowed: [db:read]). The action was blocked and not executed. AIM denies an action after applying your organization's enforcement mode (currently strict), so a denial blocks in every mode -- monitoring mode governs verifications AIM could not answer, not ones it refused. To permit this capability, grant it to this agent in the AIM dashboard under Agents. If the agent should not be denied at all, check its status there: an agent marked compromised, suspended or unverified is refused regardless of its capabilities.

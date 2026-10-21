@@ -134,6 +134,10 @@ sdk-page
 !docs/images/*.jpg
 !docs/images/*.gif
 
+# Allow the terminal recording's GIF and its step frames (docs/demo/record-quickstart.sh)
+!docs/demo/*.gif
+!docs/demo/*.png
+
 # Allow logo files in public folder
 !apps/web/public/opena2a-logo.png
 !apps/web/public/opena2a-logo.svg
