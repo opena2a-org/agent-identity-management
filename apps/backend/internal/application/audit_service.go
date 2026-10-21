@@ -141,6 +141,12 @@ func (s *AuditService) GetAuditLogs(
 	// "orgID referenced only on default branch" — every branch in a
 	// multi-filter service method must propagate orgID.
 
+	// A negative offset is read as 0. The entity branch slices the records
+	// it reads at the offset, and a negative index panics.
+	if offset < 0 {
+		offset = 0
+	}
+
 	// If filtering by specific entity (e.g., MCP server), use GetByResource
 	if entityType != "" && entityID != nil {
 		logs, err := s.auditRepo.GetByResource(orgID, entityType, *entityID)

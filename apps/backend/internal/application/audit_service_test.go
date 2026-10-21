@@ -585,6 +585,71 @@ func TestAuditService_GetAuditLogs_ByEntityTypeAndID_Pagination(t *testing.T) {
 	assert.Equal(t, 10, total)
 }
 
+// A negative offset is read as 0: an entity's records are paged from the
+// first, with none and with some, instead of slicing at a negative index.
+func TestAuditService_GetAuditLogs_ByEntityTypeAndID_NegativeOffsetReadsAsZero(t *testing.T) {
+	for _, records := range []int{0, 1, 5} {
+		repo := NewMockAuditLogRepository()
+		service := NewAuditService(repo)
+		orgID := uuid.New()
+		entityID := uuid.New()
+		for i := 0; i < records; i++ {
+			repo.Create(&domain.AuditLog{
+				OrganizationID: orgID,
+				Action:         domain.AuditActionUpdate,
+				ResourceType:   "agent",
+				ResourceID:     entityID,
+			})
+		}
+
+		want, wantTotal, err := service.GetAuditLogs(context.Background(), orgID, "", "agent", &entityID, nil, nil, nil, 3, 0)
+		require.NoError(t, err)
+
+		for _, offset := range []int{-1, -50} {
+			var logs []*domain.AuditLog
+			var total int
+			require.NotPanics(t, func() {
+				logs, total, err = service.GetAuditLogs(context.Background(), orgID, "", "agent", &entityID, nil, nil, nil, 3, offset)
+			}, "%d records, offset %d", records, offset)
+			require.NoError(t, err)
+			assert.Equal(t, want, logs, "%d records, offset %d", records, offset)
+			assert.Equal(t, wantTotal, total, "%d records, offset %d", records, offset)
+		}
+	}
+}
+
+// offsetRecordingAuditRepo records the offset each paged query is given.
+type offsetRecordingAuditRepo struct {
+	domain.AuditLogRepository
+	offsets []int
+}
+
+func (r *offsetRecordingAuditRepo) GetByUser(_, _ uuid.UUID, _, offset int) ([]*domain.AuditLog, error) {
+	r.offsets = append(r.offsets, offset)
+	return []*domain.AuditLog{}, nil
+}
+
+func (r *offsetRecordingAuditRepo) GetByOrganization(_ uuid.UUID, _, offset int) ([]*domain.AuditLog, error) {
+	r.offsets = append(r.offsets, offset)
+	return []*domain.AuditLog{}, nil
+}
+
+// The user and organization queries are given offset 0 for a negative
+// offset, as the entity query pages from its first record.
+func TestAuditService_GetAuditLogs_NegativeOffsetReachesTheRepositoryAsZero(t *testing.T) {
+	repo := &offsetRecordingAuditRepo{}
+	service := NewAuditService(repo)
+	orgID := uuid.New()
+	userID := uuid.New()
+
+	_, _, err := service.GetAuditLogs(context.Background(), orgID, "", "", nil, &userID, nil, nil, 10, -1)
+	require.NoError(t, err)
+	_, _, err = service.GetAuditLogs(context.Background(), orgID, "", "", nil, nil, nil, nil, 10, -1)
+	require.NoError(t, err)
+
+	assert.Equal(t, []int{0, 0}, repo.offsets)
+}
+
 func TestAuditService_GetAuditLogs_ByUserID(t *testing.T) {
 	repo := NewMockAuditLogRepository()
 	service := NewAuditService(repo)
