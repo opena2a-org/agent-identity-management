@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `aim-sdk init` links to the dashboard address the server reports in the exchange answer (#740)
+
+- After it registered the agent, `aim-sdk init` printed a dashboard link derived from `--url` by `dashboard_url_for`
+  and did not read `dashboardUrl`, the dashboard origin (`FRONTEND_URL`) the server reports in the bootstrap token
+  exchange answer. Measured with the previous `cli.py`: for `--url https://aim-api.example.com` and an answer that
+  reported `https://aim.example.com`, it printed `https://aim-api.example.com/dashboard/agents/<id>`.
+- `init` now prints the link on the reported address, without surrounding whitespace or a trailing `/` and with its
+  path kept. It falls back to the address derived from `--url` when the answer reports none, or one it does not
+  print: a value that is not a string or not an `http(s)` URL with a host; one with a user part, a port that is not
+  a number from 0 to 65535, a query or a fragment; one with a backslash, or with whitespace, a control character, a
+  bidirectional formatting character or a lone surrogate within it; one over 500 characters; and a loopback address
+  (`localhost`, `127.0.0.1`, `[::1]`) from a server reached at another host, as the server's default `FRONTEND_URL`,
+  `http://localhost:3000`, is.
+- Tests: `tests/test_cli_init_bootstrap_token.py`.
+
 ### Fixed: `client.secrets.resolve()` refuses a namespace that begins with `DSSEv1 `
 
 - `client.secrets.resolve()` raises `SecretsError` before anything is signed or sent when the namespace begins with

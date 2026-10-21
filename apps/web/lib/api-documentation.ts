@@ -2703,7 +2703,7 @@ export const apiDocumentation: EndpointCategory[] = [
         method: "POST",
         path: "/api/v1/admin/capability-requests/:id/approve",
         description:
-          "Approve capability request. The approval and its grant are made only together with their audit record; when that record cannot be written, nothing is approved and the route answers 503 with Retry-After (seconds) and reasonCode recordUnavailable.",
+          "Approve capability request. On a server that writes an audit record for each approval, the approval and its grant are made only together with that record; when the record cannot be written, nothing is approved and the route answers 503 with Retry-After (seconds) and reasonCode recordUnavailable. This version of the server writes no audit record for an approval, so it does not answer this 503.",
         summary: "Approve capability",
         auth: "Bearer Token (JWT)",
         requiresAuth: true,

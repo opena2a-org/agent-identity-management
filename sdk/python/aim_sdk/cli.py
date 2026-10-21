@@ -1252,9 +1252,10 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
 
     Returns:
         dict: the server's answer (agentId, organizationId, name, status,
-        publicKey, aimUrl), or {'error': reason} with a bare reason the caller
-        prefixes. No returned string contains the token, and server text in a
-        reason (its error message, a redirect address) is one terminal line.
+        publicKey, aimUrl, dashboardUrl), or {'error': reason} with a bare
+        reason the caller prefixes. No returned string contains the token, and
+        server text in a reason (its error message, a redirect address) is one
+        terminal line.
         A request that got no HTTP answer also carries 'token_state':
         'unused' when the request was not sent, 'unknown' otherwise.
     """
@@ -1305,6 +1306,38 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
         return {'error': (f"HTTP 404 from {url}. Check that --url is the AIM API address and that the "
                           f"server runs an AIM version with onboarding tokens.")}
     return {'error': reason or f"HTTP {status_code} from {url}"}
+
+
+def _reported_dashboard_url(value, aim_url):
+    """
+    The dashboard address the server reported in its exchange answer
+    (dashboardUrl), without surrounding whitespace and with no '/' at its end,
+    or None when it reported none or one `init` does not print. Not printed:
+    a value that is not a string or
+    not an http(s) URL with a host; one with a user part, a port that is not
+    a number from 0 to 65535, a query or a fragment; one that
+    _url_text_refusal refuses or _terminal_line would change; and a loopback
+    address from a server reached at another host, where it names the
+    server's own machine (the server's FRONTEND_URL default is
+    http://localhost:3000).
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if invalid_server_url_reason(text) or _url_text_refusal(text) or _terminal_line(text) != text:
+        return None
+    parts = urlsplit(text)
+    try:
+        parts.port
+    except ValueError:
+        # The port is not a number from 0 to 65535.
+        return None
+    if '@' in parts.netloc or parts.query or parts.fragment:
+        return None
+    aim_host = urlsplit(aim_url).hostname
+    if parts.hostname in LOOPBACK_HOSTS and aim_host and aim_host not in LOOPBACK_HOSTS:
+        return None
+    return f"{parts.scheme}://{parts.netloc}{parts.path.rstrip('/')}"
 
 
 def init(args):
@@ -1423,7 +1456,10 @@ def init(args):
 
     from ._dashboard import dashboard_url_for
 
-    dashboard_url = dashboard_url_for(aim_url)
+    # The server's dashboard origin when its answer carries a usable one; the
+    # API address does not name the dashboard of a deployment that serves the
+    # two on hosts of their own.
+    dashboard_url = _reported_dashboard_url(result.get('dashboardUrl'), aim_url) or dashboard_url_for(aim_url)
     print()
     print("Agent registered.")
     print()

@@ -611,3 +611,125 @@ def test_terminal_line_replaces_control_and_bidi_characters_and_caps_the_length(
     cap = cli.TERMINAL_LINE_MAX_CHARS
     assert cli._terminal_line("x" * cap) == "x" * cap
     assert cli._terminal_line("x" * (cap + 1)) == "x" * cap + " [truncated]"
+
+
+# --- the dashboard link: the address the server reports, else one derived from --url --
+
+SELF_HOSTED_API = "https://aim-api.example.com"
+
+
+def dashboard_lines(out):
+    return [line for line in out.splitlines() if line.startswith("   Dashboard:")]
+
+
+def exchanged_with(**fields):
+    """An exchange_bootstrap_token stand-in: the 201 answer's fields, with `fields` over them."""
+    def exchange(aim_url, token, name, public_key):
+        answer = {"agentId": AGENT_ID, "organizationId": ORG_ID, "name": name, "displayName": name,
+                  "status": "pending", "publicKey": public_key, "aimUrl": aim_url}
+        answer.update(fields)
+        return answer
+    return exchange
+
+
+def test_a_self_hosted_api_on_its_own_host_links_to_the_dashboard_the_server_reports(agents_dir, monkeypatch,
+                                                                                    capsys):
+    monkeypatch.setattr(cli, "exchange_bootstrap_token", exchanged_with(dashboardUrl="https://aim.example.com"))
+
+    assert run_init(SELF_HOSTED_API, token=TOKEN) == 0
+
+    out = capsys.readouterr().out
+    assert dashboard_lines(out) == [f"   Dashboard:   https://aim.example.com/dashboard/agents/{AGENT_ID}"]
+    assert f"{SELF_HOSTED_API}/dashboard" not in out
+
+
+@pytest.mark.parametrize("reported", ["https://aim.example.com/", " https://aim.example.com\t"],
+                         ids=["trailing-slash", "surrounding-whitespace"])
+def test_the_reported_address_is_printed_without_a_trailing_slash_or_surrounding_whitespace(
+        fake_server, agents_dir, capsys, reported):
+    server = fake_server(answering(dashboardUrl=reported))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    out = capsys.readouterr().out
+    assert dashboard_lines(out) == [f"   Dashboard:   https://aim.example.com/dashboard/agents/{AGENT_ID}"]
+
+
+def test_a_dashboard_served_under_a_path_keeps_the_path(fake_server, agents_dir, capsys):
+    server = fake_server(answering(dashboardUrl="https://example.com/aim/"))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    out = capsys.readouterr().out
+    assert dashboard_lines(out) == [f"   Dashboard:   https://example.com/aim/dashboard/agents/{AGENT_ID}"]
+
+
+def test_a_reported_address_as_long_as_the_line_cap_is_printed(fake_server, agents_dir, capsys):
+    base = "https://aim.example.com/"
+    reported = base + "a" * (cli.TERMINAL_LINE_MAX_CHARS - len(base))
+    server = fake_server(answering(dashboardUrl=reported))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    out = capsys.readouterr().out
+    assert len(reported) == cli.TERMINAL_LINE_MAX_CHARS
+    assert dashboard_lines(out) == [f"   Dashboard:   {reported}/dashboard/agents/{AGENT_ID}"]
+
+
+def test_a_loopback_address_from_a_server_on_this_machine_is_printed(fake_server, agents_dir, capsys):
+    server = fake_server(answering(dashboardUrl="http://localhost:3000"))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    out = capsys.readouterr().out
+    assert dashboard_lines(out) == [f"   Dashboard:   http://localhost:3000/dashboard/agents/{AGENT_ID}"]
+
+
+@pytest.mark.parametrize("reported", ["http://localhost:3000", "http://127.0.0.1:3000/", "http://[::1]:3000"])
+def test_a_loopback_address_from_a_server_on_another_host_is_not_printed(agents_dir, monkeypatch, capsys,
+                                                                          reported):
+    monkeypatch.setattr(cli, "exchange_bootstrap_token", exchanged_with(dashboardUrl=reported))
+
+    assert run_init(SELF_HOSTED_API, token=TOKEN) == 0
+
+    out = capsys.readouterr().out
+    assert dashboard_lines(out) == [f"   Dashboard:   {SELF_HOSTED_API}/dashboard/agents/{AGENT_ID}"]
+
+
+@pytest.mark.parametrize("reported", [
+    None,
+    7,
+    ["https://aim.example.com"],
+    {"url": "https://aim.example.com"},
+    "",
+    "   ",
+    "aim.example.com",
+    "javascript:alert(1)",
+    "ftp://aim.example.com",
+    "https://",
+    "https://someone@aim.example.com",
+    "https://aim.example.com/?next=x",
+    "https://aim.example.com/#top",
+    "https://aim.example.com:http",
+    "https://aim.example.com:99999",
+    "https://aim.example.com/a b",
+    "https://aim.example.com\\@elsewhere.example.test",
+    f"https://aim.example.com/{ESC}[31m",
+    f"https://aim.example.com/x\n{SECOND_LINE}",
+    f"https://aim.example.com/{RLO}x",
+    "https://aim.example.com/\ud800x",
+    "https://aim.example.com/" + "a" * cli.TERMINAL_LINE_MAX_CHARS,
+], ids=["null", "number", "array", "object", "empty", "spaces", "no-scheme", "javascript", "ftp", "no-host",
+        "user-part", "query", "fragment", "port-not-a-number", "port-out-of-range", "space-in-path", "backslash",
+        "escape-sequence", "newline", "right-to-left-override", "lone-surrogate", "over-the-line-cap"])
+def test_a_reported_value_init_does_not_print_falls_back_to_the_address_derived_from_url(
+        fake_server, agents_dir, capsys, reported):
+    server = fake_server(answering(dashboardUrl=reported))
+
+    assert run_init(server.url, token=TOKEN) == 0
+
+    out = capsys.readouterr()
+    assert dashboard_lines(out.out) == [f"   Dashboard:   {server.url}/dashboard/agents/{AGENT_ID}"]
+    printed = out.out + out.err
+    assert ESC not in printed and RLO not in printed
+    assert SECOND_LINE not in printed
