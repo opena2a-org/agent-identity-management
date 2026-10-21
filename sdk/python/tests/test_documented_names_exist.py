@@ -2,7 +2,7 @@
 Every aim_sdk name the Python SDK pages document exists.
 
 The pages documented AIMClient methods the class never had
-(``get_audit_logs``, ``export_compliance_report``, ``rotate_key`` ...),
+(``export_compliance_report``, ``rotate_key``, ``submit_feedback`` ...),
 functions and modules the package never shipped (``auto_detect_mcp_servers``,
 ``aim_sdk.crypto.generate_keypair``, ``aim_sdk.validation`` ...) and keyword
 arguments the callables do not take (``AIMCallbackHandler(aim_agent=...)``).
@@ -320,7 +320,7 @@ def test_the_check_catches_each_kind_of_missing_name():
         "from aim_sdk.integrations.langchain import AIMCallbackHandler",
         "import aim_sdk.validation",
         "agent = secure('a', private_key='k')",
-        "agent.get_audit_logs(limit=10)",
+        "agent.rotate_key(limit=10)",
         "handler = AIMCallbackHandler(aim_agent=agent)",
         "```",
         "```python",
@@ -339,11 +339,26 @@ def test_the_check_catches_each_kind_of_missing_name():
         "3: from aim_sdk.crypto import generate_keypair",
         "5: import aim_sdk.validation",
         "6: secure() takes no private_key=",
-        "7: agent.get_audit_logs is not an AIMClient member",
+        "7: agent.rotate_key is not an AIMClient member",
         "8: AIMCallbackHandler() takes no aim_agent=",
         "11: agent.export_compliance_report is not an AIMClient member",
         "16: from aim_sdk.detection import health_check_server",
         "18: secured.submit_feedback is not an AIMClient member",
+    ]
+
+
+def test_the_check_catches_the_filters_the_pages_gave_get_audit_logs():
+    # The pages called get_audit_logs with date and action filters the
+    # method does not take.
+    page = "\n".join([
+        "```python",
+        "agent = secure('a')",
+        "agent.get_audit_logs(limit=100, start_date='2025-10-01T00:00:00Z', action_name='delete_user')",
+        "```",
+    ])
+    assert _check_text(page) == [
+        "3: agent.get_audit_logs() takes no action_name=",
+        "3: agent.get_audit_logs() takes no start_date=",
     ]
 
 
@@ -357,6 +372,7 @@ def test_the_check_accepts_the_names_the_sdk_has():
         "client = AIMClient.from_credentials('a')",
         "client.get_trust_score()",
         "client.get_trust_score_history(limit=5)",
+        "client.get_audit_logs(limit=20, offset=40)",
         "print(client.agent_id, client.public_key)",
         "handler = AIMCallbackHandler(agent=client)",
         "crew = AIMCrewWrapper(crew=None, aim_agent=client)",

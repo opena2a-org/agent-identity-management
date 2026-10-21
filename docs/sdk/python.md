@@ -262,15 +262,31 @@ for entry in history["history"]:
     print(f"{entry['timestamp']} | {entry['trustScore']:.2f} | {entry['reason']}")
 ```
 
-#### Audit Logs and Compliance Reports
+#### Get Audit Logs
 
-The SDK has no method for these: the server routes that serve them read a user
-identity, which an agent's own credentials do not carry. Read them in the
-dashboard, or call the REST API with a user's access token:
+Get the agent's audit log: the records whose resource is the agent, such as its
+creation, updates, verification and suspension. Without `limit` the server
+returns up to 50 records, and it returns at most 100; `offset` skips records.
 
-- An agent's audit log: `GET /api/v1/agents/{id}/audit-logs?limit=50&offset=0`
-- Organization audit logs (admin): `GET /api/v1/admin/audit-logs`
-- Compliance report export (admin): `GET /api/v1/compliance/export`
+```python
+result = agent.get_audit_logs(limit=20)
+for record in result["logs"]:
+    print(f"{record['timestamp']} | {record['action']} | {record['actorType']}")
+print(f"{result['total']} records")
+```
+
+The method calls `GET /api/v1/agents/{id}/audit-logs`. A client that signs its
+requests may name only its own agent's ID: another agent's ID is answered with
+403, which the SDK raises as `AuthenticationError`.
+
+#### Organization Audit Logs and Compliance Reports
+
+The SDK has no method for these: the server routes that serve them need an
+administrator's session. Read them in the dashboard, or call the REST API with
+an administrator's access token:
+
+- Organization audit logs: `GET /api/v1/admin/audit-logs`
+- Compliance report export: `GET /api/v1/compliance/export`
 
 ---
 

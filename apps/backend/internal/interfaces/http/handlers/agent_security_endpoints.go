@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
 // ========================================
@@ -94,9 +95,13 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 	})
 }
 
+// agentAuditLogsRoute names the audit log route as the server registers it,
+// for the outcome middleware.BindAgentID records.
+const agentAuditLogsRoute = "GET /api/v1/agents/:id/audit-logs"
+
 // GetAgentAuditLogs returns audit logs for a specific agent with pagination
 // @Summary Get agent audit logs
-// @Description Get audit logs for a specific agent with pagination support. Only an admin's records carry ipAddress, userAgent and metadata; every other caller gets each record without them.
+// @Description Get audit logs for a specific agent with pagination support. Only an admin's records carry ipAddress, userAgent and metadata; every other caller gets each record without them. A request an agent signs with its Ed25519 key, or sends with its service token, may name only that agent's own ID.
 // @Tags agents
 // @Produce json
 // @Param id path string true "Agent ID"
@@ -105,7 +110,7 @@ func (h *AgentHandler) GetAgentKeyVault(c fiber.Ctx) error {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse "Invalid agent ID"
 // @Failure 404 {object} ErrorResponse "Agent not found"
-// @Failure 403 {object} ErrorResponse "Access denied"
+// @Failure 403 {object} ErrorResponse "Access denied, or another agent's ID named by an agent's own request"
 // @Router /agents/{id}/audit-logs [get]
 func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 	orgID, ok := c.Locals("organization_id").(uuid.UUID)
@@ -114,8 +119,11 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 			"error": "Unauthorized",
 		})
 	}
-	userID, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
+	// A user's session and an API key carry a user ID. A request an agent
+	// signs, and its service token, carry the agent's ID alone.
+	userID, byUser := c.Locals("user_id").(uuid.UUID)
+	callerAgentID, byAgent := c.Locals("agent_id").(uuid.UUID)
+	if !byUser && (!byAgent || callerAgentID == uuid.Nil) {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "Unauthorized",
 		})
@@ -125,6 +133,15 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid agent ID",
 		})
+	}
+
+	// An agent without a user ID reads its own audit log only: another
+	// agent's ID is refused as a route bound to its agent refuses it, before
+	// the agent it names is read. An API key carries its creator's user ID and
+	// is served as before while the route's binding is held
+	// (agent_binding_routes_test.go).
+	if !byUser && !middleware.BindAgentID(c, agentAuditLogsRoute, agentID) {
+		return nil
 	}
 
 	// Parse pagination parameters
@@ -178,23 +195,18 @@ func (h *AgentHandler) GetAgentAuditLogs(c fiber.Ctx) error {
 		})
 	}
 
-	// Log this audit log query
-	h.auditService.LogAction(
-		c.Context(),
-		orgID,
-		userID,
-		domain.AuditActionView,
-		"agent_audit_logs",
-		agentID,
-		c.IP(),
-		c.Get("User-Agent"),
-		map[string]interface{}{
-			"agentName":        agent.Name,
-			"results_returned": len(logs),
-			"limit":            limit,
-			"offset":           offset,
-		},
-	)
+	// Log this audit log query, with the agent as its actor when no user made it
+	metadata := map[string]interface{}{
+		"agentName":        agent.Name,
+		"results_returned": len(logs),
+		"limit":            limit,
+		"offset":           offset,
+	}
+	if byUser {
+		h.auditService.LogAction(c.Context(), orgID, userID, domain.AuditActionView, "agent_audit_logs", agentID, c.IP(), c.Get("User-Agent"), metadata)
+	} else {
+		h.auditService.LogAgentAction(c.Context(), orgID, callerAgentID, domain.AuditActionView, "agent_audit_logs", agentID, c.IP(), c.Get("User-Agent"), metadata)
+	}
 
 	return c.JSON(fiber.Map{
 		"agentId":   agentID.String(),
