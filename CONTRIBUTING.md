@@ -130,7 +130,11 @@ The TypeScript SDK's `npm test` also runs five of the repository's documentation
 `tests/repo-executable-blobs.test.ts` it runs `scripts/lint-no-executable-blobs.py` with `python3`, which
 refuses a file in the tree of `HEAD` that starts with a compiled executable's magic bytes, and that lint's
 tests, `scripts/test-lint-no-executable-blobs.sh` with `bash`. CI runs this suite on every pull request to
-`main`, so a pull request that commits a compiled executable fails it.
+`main`, so a pull request that commits a compiled executable fails it. From `tests/platform-version.test.ts` it
+runs `scripts/check-platform-version.mjs` and its tests, `scripts/test-check-platform-version.mjs`, with `node`.
+The check refuses a tree whose `apps/web/package.json` or newest `CHANGELOG.md` release section names another
+version than the root `package.json`, so a pull request that opens a release section without setting both
+manifests to its version fails the suite too.
 The suite needs `git`, `bash` and `python3` on the `PATH`, and a git checkout of the repository: the link lint
 asks `git` which files to read. In a tree without `.git`, such as a source archive, the link lint stops
 with "is not the top of a git work tree" and its case fails. Outside any git work tree the executable lint,
@@ -173,7 +177,7 @@ This repository ships multiple independently versioned artifacts (the platform i
 
 | Artifact | Tag prefix | Example | Source of truth for version |
 |---|---|---|---|
-| Platform (backend + frontend release artifacts) | `platform-v` | `platform-v1.0.0` | release commit |
+| Platform (backend + frontend release artifacts) | `platform-v` | `platform-v1.0.0` | root `package.json`; `apps/web/package.json` and the newest release section of `CHANGELOG.md` carry the same version |
 | Python SDK | `sdk-py-v` | `sdk-py-v1.23.0` | `sdk/python/VERSION` |
 | TypeScript SDK | `sdk-ts-v` | `sdk-ts-v1.0.0` | `sdk/typescript/package.json` |
 | Java SDK | `sdk-java-v` | `sdk-java-v1.0.0` | `sdk/java/VERSION` and `sdk/java/pom.xml` |
@@ -182,8 +186,15 @@ This repository ships multiple independently versioned artifacts (the platform i
 
 **Cutting a release:**
 
+A platform release is tagged from a commit whose `package.json` and `apps/web/package.json` carry the release's
+version as `version` and whose newest `CHANGELOG.md` release section is that version's (`## [1.0.0] - 2026-06-01`
+for 1.0.0). `node scripts/check-platform-version.mjs platform-v<version>` exits 0 on such a commit, and exits 1 when
+the tag, the two manifests and the newest release section do not all name one version. Run it on the commit to be
+tagged before pushing the tag.
+
 ```bash
 # Platform (example: cutting 1.0.0)
+node scripts/check-platform-version.mjs platform-v1.0.0
 git tag -a platform-v1.0.0 -m "Platform v1.0.0"
 git push origin platform-v1.0.0
 
