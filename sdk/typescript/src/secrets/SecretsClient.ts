@@ -43,14 +43,33 @@ import { ConfigurationError, SecretsError } from '../exceptions';
  */
 const RESOLVE_FIELD_SEPARATORS = /[\n\r|]/;
 const DSSE_PREFIX = 'DSSEv1 ';
-const RESOLVE_NOT_SENT = 'the request was not sent';
+const NOT_SENT = 'the request was not sent';
 const RESOLVE_FIELD_FIX =
   'Pass a namespace and an operation that contain no line feed, carriage return or vertical bar (|).';
 const NAMESPACE_FIELD_FIX = 'Pass a namespace that contains no line feed, carriage return or vertical bar (|).';
 const DSSE_PREFIX_FIX = 'Pass a namespace that does not begin with "DSSEv1 ".';
 
-function resolveRefusal(line: string, fix: string): ConfigurationError {
-  return new ConfigurationError(`${line}; ${RESOLVE_NOT_SENT}\nFix: ${fix}`);
+function refusal(line: string, fix: string): ConfigurationError {
+  return new ConfigurationError(`${line}; ${NOT_SENT}\nFix: ${fix}`);
+}
+
+/**
+ * A namespace ID is the UUID the server answers as a namespace's `id`, and the
+ * namespace routes read it from the request path. Any other value is refused
+ * before a request is made: with `/`, `..`, `?` or `#` in it, the request
+ * would go to another path. The ID is also percent-encoded into the path.
+ */
+const UUID_TEXT = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const NAMESPACE_ID_FIX =
+  'Pass the id the server answered for the namespace, a UUID such as the id of an entry ' +
+  'listNamespaces returns.';
+
+/** The namespace ID as one path segment; ConfigurationError when it is not a UUID. */
+function namespaceIdSegment(namespaceId: string): string {
+  if (typeof namespaceId !== 'string' || !UUID_TEXT.test(namespaceId)) {
+    throw refusal('the namespace ID is not a UUID', NAMESPACE_ID_FIX);
+  }
+  return encodeURIComponent(namespaceId);
 }
 
 /** Result of a credential resolution. */
@@ -148,14 +167,14 @@ export class SecretsClient {
       ['operation', operationText],
     ] as const) {
       if (RESOLVE_FIELD_SEPARATORS.test(text)) {
-        throw resolveRefusal(
+        throw refusal(
           `the ${field} contains a line feed, a carriage return or a vertical bar (|)`,
           RESOLVE_FIELD_FIX,
         );
       }
     }
     if (namespaceText.startsWith(DSSE_PREFIX)) {
-      throw resolveRefusal(
+      throw refusal(
         'the namespace begins with "DSSEv1 ", the first bytes of a DSSE statement an agent key signs',
         DSSE_PREFIX_FIX,
       );
@@ -315,13 +334,13 @@ export class SecretsClient {
     // The namespace as resolve's signed text renders it.
     const namespaceText = `${namespace}`;
     if (RESOLVE_FIELD_SEPARATORS.test(namespaceText)) {
-      throw resolveRefusal(
+      throw refusal(
         'the namespace contains a line feed, a carriage return or a vertical bar (|), which resolve refuses to sign',
         NAMESPACE_FIELD_FIX,
       );
     }
     if (namespaceText.startsWith(DSSE_PREFIX)) {
-      throw resolveRefusal('the namespace begins with "DSSEv1 ", which resolve refuses to sign', DSSE_PREFIX_FIX);
+      throw refusal('the namespace begins with "DSSEv1 ", which resolve refuses to sign', DSSE_PREFIX_FIX);
     }
 
     return this.host.request('POST', '/api/v1/secrets/namespaces', {
@@ -340,30 +359,52 @@ export class SecretsClient {
     return result.namespaces ?? [];
   }
 
+  /**
+   * @throws ConfigurationError when `namespaceId` is not a UUID; nothing is
+   *   sent.
+   */
   async getNamespace(namespaceId: string): Promise<Record<string, unknown>> {
-    return this.host.request('GET', `/api/v1/secrets/namespaces/${namespaceId}`);
+    return this.host.request(
+      'GET',
+      `/api/v1/secrets/namespaces/${namespaceIdSegment(namespaceId)}`,
+    );
   }
 
+  /**
+   * @throws ConfigurationError when `namespaceId` is not a UUID; nothing is
+   *   sent.
+   */
   async deleteNamespace(namespaceId: string): Promise<Record<string, unknown>> {
-    return this.host.request('DELETE', `/api/v1/secrets/namespaces/${namespaceId}`);
+    return this.host.request(
+      'DELETE',
+      `/api/v1/secrets/namespaces/${namespaceIdSegment(namespaceId)}`,
+    );
   }
 
   // ---------------------------------------------------------------------------
   // Credential storage (JWT/API key auth)
   // ---------------------------------------------------------------------------
 
+  /**
+   * @throws ConfigurationError when `options.namespaceId` is not a UUID;
+   *   nothing is sent.
+   */
   async storeCredential(options: StoreCredentialOptions): Promise<Record<string, unknown>> {
     return this.host.request(
       'POST',
-      `/api/v1/secrets/namespaces/${options.namespaceId}/credentials`,
+      `/api/v1/secrets/namespaces/${namespaceIdSegment(options.namespaceId)}/credentials`,
       credentialBody(options),
     );
   }
 
+  /**
+   * @throws ConfigurationError when `options.namespaceId` is not a UUID;
+   *   nothing is sent.
+   */
   async rotateCredential(options: StoreCredentialOptions): Promise<Record<string, unknown>> {
     return this.host.request(
       'POST',
-      `/api/v1/secrets/namespaces/${options.namespaceId}/rotate`,
+      `/api/v1/secrets/namespaces/${namespaceIdSegment(options.namespaceId)}/rotate`,
       credentialBody(options),
     );
   }

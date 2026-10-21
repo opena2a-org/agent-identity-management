@@ -29,6 +29,10 @@ from aim_sdk.secrets import SecretsClient
 from aim_sdk.exceptions import SecretsError
 
 
+# A namespace ID as the server answers it: the namespace routes read a UUID.
+NAMESPACE_ID = "0f8fad5b-d9cb-469f-a165-70867728950e"
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -595,23 +599,23 @@ class TestNamespaceCRUD:
 
     def test_get_namespace(self):
         client, _ = make_test_client()
-        mock_resp = {"id": "ns-123", "namespace": "github", "status": "active"}
+        mock_resp = {"id": NAMESPACE_ID, "namespace": "github", "status": "active"}
 
         with patch.object(client, "_make_request", return_value=mock_resp) as mock_req:
-            result = client.secrets.get_namespace("ns-123")
+            result = client.secrets.get_namespace(NAMESPACE_ID)
 
         assert result["namespace"] == "github"
-        mock_req.assert_called_once_with("GET", "/api/v1/secrets/namespaces/ns-123")
+        mock_req.assert_called_once_with("GET", f"/api/v1/secrets/namespaces/{NAMESPACE_ID}")
 
     def test_delete_namespace(self):
         client, _ = make_test_client()
         mock_resp = {"message": "Namespace deleted"}
 
         with patch.object(client, "_make_request", return_value=mock_resp) as mock_req:
-            result = client.secrets.delete_namespace("ns-123")
+            result = client.secrets.delete_namespace(NAMESPACE_ID)
 
         assert result["message"] == "Namespace deleted"
-        mock_req.assert_called_once_with("DELETE", "/api/v1/secrets/namespaces/ns-123")
+        mock_req.assert_called_once_with("DELETE", f"/api/v1/secrets/namespaces/{NAMESPACE_ID}")
 
 
 # ---------------------------------------------------------------------------
@@ -686,13 +690,13 @@ class TestCredentialStorage:
         blob = b"encrypted-data"
 
         with patch.object(client, "_make_request", return_value=mock_resp) as mock_req:
-            result = client.secrets.store_credential("ns-123", blob)
+            result = client.secrets.store_credential(NAMESPACE_ID, blob)
 
         assert result["message"] == "Credential stored"
         # The server reads the algorithm as encryptionAlg.
         mock_req.assert_called_once_with(
             "POST",
-            "/api/v1/secrets/namespaces/ns-123/credentials",
+            f"/api/v1/secrets/namespaces/{NAMESPACE_ID}/credentials",
             data={
                 "encryptedBlob": base64.b64encode(blob).decode("utf-8"),
                 "encryptionAlg": "X25519-ChaCha20-Poly1305",
@@ -706,13 +710,13 @@ class TestCredentialStorage:
 
         with patch.object(client, "_make_request", return_value={}) as mock_req:
             with pytest.warns(DeprecationWarning, match="ephemeral_public_key"):
-                client.secrets.store_credential("ns-123", blob, encryption_alg="AES-256-GCM", ephemeral_public_key=ephemeral)
+                client.secrets.store_credential(NAMESPACE_ID, blob, encryption_alg="AES-256-GCM", ephemeral_public_key=ephemeral)
 
         # The store route reads encryptedBlob and encryptionAlg only, so the
         # deprecated ephemeral key is not sent.
         mock_req.assert_called_once_with(
             "POST",
-            "/api/v1/secrets/namespaces/ns-123/credentials",
+            f"/api/v1/secrets/namespaces/{NAMESPACE_ID}/credentials",
             data={
                 "encryptedBlob": base64.b64encode(blob).decode("utf-8"),
                 "encryptionAlg": "AES-256-GCM",
@@ -727,14 +731,14 @@ class TestCredentialStorage:
 
         with patch.object(client, "_make_request", return_value=mock_resp) as mock_req:
             with pytest.warns(DeprecationWarning, match="ephemeral_public_key"):
-                result = client.secrets.rotate_credential("ns-123", blob, ephemeral_public_key=ephemeral)
+                result = client.secrets.rotate_credential(NAMESPACE_ID, blob, ephemeral_public_key=ephemeral)
 
         assert result["message"] == "Credential rotated"
         # The server reads the algorithm as encryptionAlg, and the rotate route
         # reads no ephemeral key.
         mock_req.assert_called_once_with(
             "POST",
-            "/api/v1/secrets/namespaces/ns-123/rotate",
+            f"/api/v1/secrets/namespaces/{NAMESPACE_ID}/rotate",
             data={
                 "encryptedBlob": base64.b64encode(blob).decode("utf-8"),
                 "encryptionAlg": "X25519-ChaCha20-Poly1305",

@@ -25,6 +25,9 @@ const SECRETS_HANDLER = join(
   'apps', 'backend', 'internal', 'interfaces', 'http', 'handlers', 'secrets_handler.go',
 );
 
+// A namespace ID as the server answers it: the namespace routes read a UUID.
+const NAMESPACE_ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
+
 // ---------------------------------------------------------------------------
 // Test helpers: simulate server-side encryption
 // ---------------------------------------------------------------------------
@@ -508,16 +511,16 @@ describe('SecretsClient', () => {
     });
 
     it('should get a namespace', async () => {
-      host.request.mockResolvedValue({ id: 'ns-123', namespace: 'github-creds' });
-      const result = await client.getNamespace('ns-123');
-      expect(host.request).toHaveBeenCalledWith('GET', '/api/v1/secrets/namespaces/ns-123');
-      expect(result).toEqual({ id: 'ns-123', namespace: 'github-creds' });
+      host.request.mockResolvedValue({ id: NAMESPACE_ID, namespace: 'github-creds' });
+      const result = await client.getNamespace(NAMESPACE_ID);
+      expect(host.request).toHaveBeenCalledWith('GET', `/api/v1/secrets/namespaces/${NAMESPACE_ID}`);
+      expect(result).toEqual({ id: NAMESPACE_ID, namespace: 'github-creds' });
     });
 
     it('should delete a namespace', async () => {
       host.request.mockResolvedValue({ deleted: true });
-      const result = await client.deleteNamespace('ns-123');
-      expect(host.request).toHaveBeenCalledWith('DELETE', '/api/v1/secrets/namespaces/ns-123');
+      const result = await client.deleteNamespace(NAMESPACE_ID);
+      expect(host.request).toHaveBeenCalledWith('DELETE', `/api/v1/secrets/namespaces/${NAMESPACE_ID}`);
       expect(result).toEqual({ deleted: true });
     });
   });
@@ -539,11 +542,11 @@ describe('SecretsClient', () => {
       host.request.mockResolvedValue({ version: 1 });
       const blob = new Uint8Array([1, 2, 3, 4]);
 
-      await client.storeCredential({ namespaceId: 'ns-1', encryptedBlob: blob });
+      await client.storeCredential({ namespaceId: NAMESPACE_ID, encryptedBlob: blob });
 
       expect(host.request).toHaveBeenCalledWith(
         'POST',
-        '/api/v1/secrets/namespaces/ns-1/credentials',
+        `/api/v1/secrets/namespaces/${NAMESPACE_ID}/credentials`,
         { encryptedBlob: 'AQIDBA==', encryptionAlg: 'X25519-ChaCha20-Poly1305' },
       );
     });
@@ -552,11 +555,11 @@ describe('SecretsClient', () => {
       host.request.mockResolvedValue({ version: 2 });
       const blob = new Uint8Array([5, 6, 7, 8]);
 
-      await client.rotateCredential({ namespaceId: 'ns-1', encryptedBlob: blob });
+      await client.rotateCredential({ namespaceId: NAMESPACE_ID, encryptedBlob: blob });
 
       expect(host.request).toHaveBeenCalledWith(
         'POST',
-        '/api/v1/secrets/namespaces/ns-1/rotate',
+        `/api/v1/secrets/namespaces/${NAMESPACE_ID}/rotate`,
         { encryptedBlob: 'BQYHCA==', encryptionAlg: 'X25519-ChaCha20-Poly1305' },
       );
     });
@@ -564,7 +567,7 @@ describe('SecretsClient', () => {
     it('should send the encryptionAlgorithm option as encryptionAlg when storing and rotating', async () => {
       host.request.mockResolvedValue({ version: 1 });
       const options = {
-        namespaceId: 'ns-1',
+        namespaceId: NAMESPACE_ID,
         encryptedBlob: new Uint8Array([1, 2, 3]),
         encryptionAlgorithm: 'X25519-AES-256-GCM',
       };
@@ -576,13 +579,13 @@ describe('SecretsClient', () => {
       expect(host.request).toHaveBeenNthCalledWith(
         1,
         'POST',
-        '/api/v1/secrets/namespaces/ns-1/credentials',
+        `/api/v1/secrets/namespaces/${NAMESPACE_ID}/credentials`,
         body,
       );
       expect(host.request).toHaveBeenNthCalledWith(
         2,
         'POST',
-        '/api/v1/secrets/namespaces/ns-1/rotate',
+        `/api/v1/secrets/namespaces/${NAMESPACE_ID}/rotate`,
         body,
       );
     });
@@ -594,7 +597,7 @@ describe('SecretsClient', () => {
     it('should send the members the server reads, and not ephemeralPublicKey, when storing and rotating', async () => {
       host.request.mockResolvedValue({ version: 1 });
       const options = {
-        namespaceId: 'ns-1',
+        namespaceId: NAMESPACE_ID,
         encryptedBlob: new Uint8Array([1, 2, 3]),
         ephemeralPublicKey: new Uint8Array([10, 20, 30]),
       };

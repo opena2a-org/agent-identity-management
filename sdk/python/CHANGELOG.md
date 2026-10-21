@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
+
+- `get_namespace`, `delete_namespace`, `store_credential` and `rotate_credential` put `namespace_id` into the request
+  path as passed. Measured before this change against a server on 127.0.0.1, through `AIMClient`:
+  `delete_namespace("../../agents/<id>")` sent `DELETE /api/v1/agents/<id>`, `get_namespace("../../agents/<id>")`
+  sent `GET /api/v1/agents/<id>`, `store_credential` and `rotate_credential` with the ID `"../x"` sent
+  `POST /api/v1/secrets/x/credentials` and `POST /api/v1/secrets/x/rotate`, `get_namespace("a/b")` sent
+  `GET /api/v1/secrets/namespaces/a/b`, and a `?` or `#` in the ID ended the path there.
+- The four methods now raise `SecretsError` and send no request when `namespace_id` is not a `uuid.UUID` or a string
+  holding a UUID written as the server answers a namespace's `id`: 32 hexadecimal digits, of either letter case, in
+  groups of 8, 4, 4, 4 and 12 joined by hyphens. They percent-encode the ID into the path. The message begins
+  `namespace_id is not a UUID; the request was not sent.`
+- Tests: `tests/test_secrets_namespace_id.py`. The namespace and credential storage tests in `tests/test_secrets.py`
+  pass a UUID.
+
 ### Fixed — `client.secrets.resolve()` checks, signs and sends the text a `str` subclass holds, so a member of an enum that mixes in `str` is signed as it is sent (#831)
 
 - `resolve()` read the namespace and the operation through `str()` for its refusals, signed them as an f-string
