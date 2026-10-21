@@ -872,6 +872,32 @@ Authorization: Bearer YOUR_JWT_TOKEN
 
 ---
 
+#### GET /api/v1/agents/{id}/feedback
+
+Get a summary of the 1-5 ratings users have given an agent: the number of ratings, how many are positive (4 or 5), neutral (3) and negative (1 or 2), and their average, which is `null` when the agent has no ratings. The user feedback factor of the trust score is calculated from `total`, `positiveCount` and `negativeCount`. The response carries no rating's comment and not the user who left it.
+
+A user's session reads any agent of the user's organization. A request made with an agent's own credential (a request it signs with its Ed25519 key, its OAuth service token or its API key) may name only that agent's ID: another agent's ID is answered `403` with `reasonCode` `agent_path_mismatch`. A signed-in user records a rating with `POST /api/v1/trust-score/agents/{id}/feedback`.
+
+**Headers:**
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+**Response** (ratings of 5, 5, 5, 4, 4, 3, 2 and 1):
+```json
+{
+  "agentId": "550e8400-e29b-41d4-a716-446655440000",
+  "agentName": "my-agent",
+  "total": 8,
+  "positiveCount": 5,
+  "neutralCount": 1,
+  "negativeCount": 2,
+  "averageRating": 3.625
+}
+```
+
+---
+
 ### Audit Logs Endpoints
 
 The organization-wide audit log routes need an administrator's session. `GET /api/v1/agents/{id}/audit-logs` and `GET /api/v1/mcp-servers/{id}/audit-logs` list one agent's or one MCP server's entries.

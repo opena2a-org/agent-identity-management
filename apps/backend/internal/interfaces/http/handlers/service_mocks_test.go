@@ -1557,6 +1557,7 @@ type MockTrustCalculatorServicerImpl struct {
 	GetLatestTrustScoreFunc            func(ctx context.Context, agentID uuid.UUID) (*domain.TrustScore, error)
 	GetTrustScoreHistoryAuditTrailFunc func(ctx context.Context, agentID uuid.UUID, limit int) ([]*domain.TrustScoreHistoryEntry, error)
 	RecordUserFeedbackFunc             func(ctx context.Context, agentID, orgID uuid.UUID, userID *uuid.UUID, rating int, comment string) (*domain.UserFeedback, error)
+	GetUserFeedbackStatsFunc           func(ctx context.Context, agentID uuid.UUID) (*domain.UserFeedbackStats, error)
 	RecordIsolationAttestationFunc     func(ctx context.Context, agentID uuid.UUID, sandbox domain.SandboxType, network domain.NetworkIsolation, filesystem domain.FilesystemIsolation, process domain.ProcessIsolation) (*domain.IsolationAttestation, error)
 }
 
@@ -1606,6 +1607,13 @@ func (m *MockTrustCalculatorServicerImpl) RecordUserFeedback(ctx context.Context
 		Comment:        comment,
 		CreatedAt:      time.Now(),
 	}, nil
+}
+
+func (m *MockTrustCalculatorServicerImpl) GetUserFeedbackStats(ctx context.Context, agentID uuid.UUID) (*domain.UserFeedbackStats, error) {
+	if m.GetUserFeedbackStatsFunc != nil {
+		return m.GetUserFeedbackStatsFunc(ctx, agentID)
+	}
+	return &domain.UserFeedbackStats{}, nil
 }
 
 func (m *MockTrustCalculatorServicerImpl) RecordIsolationAttestation(ctx context.Context, agentID uuid.UUID, sandbox domain.SandboxType, network domain.NetworkIsolation, filesystem domain.FilesystemIsolation, process domain.ProcessIsolation) (*domain.IsolationAttestation, error) {

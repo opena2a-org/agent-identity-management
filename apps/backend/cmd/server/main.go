@@ -1965,6 +1965,9 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// agent's ID is still served, and recorded on its api_calls row, until the
 	// per-route count decides whether each route is bound or an exception.
 	agentsHeld := holdAgentRoutes(agents)
+	// A route added after the hold binds :id to the authenticated agent from
+	// the start: it has no earlier caller whose requests the binding changes.
+	agentsBound := bindAgentRoutes(agents)
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus)                          // Bulk agent status lookup
 	agents.Post("/", middleware.MemberOrAPIKeyMiddleware(), h.Agent.CreateAgent) // machine API keys (org-scoped) OR member+ JWT; other routes stay MemberMiddleware (JWT-only)
@@ -2010,6 +2013,7 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agentsHeld.Get("/:id/trust-score/history", h.Agent.GetAgentTrustScoreHistory)                                       // Get trust score history
 	agentsHeld.Put("/:id/trust-score", middleware.AdminMiddleware(), h.Agent.UpdateAgentTrustScore)                     // Manually update score (admin)
 	agentsHeld.Post("/:id/trust-score/recalculate", middleware.ManagerMiddleware(), h.Agent.RecalculateAgentTrustScore) // Recalculate score
+	agentsBound.Get("/:id/feedback", h.TrustScore.GetUserFeedback)                                                      // Counts and average of the agent's user ratings (no comments, no raters)
 	// Agent-specific alerts endpoint
 	agentsHeld.Get("/:id/alerts", h.Agent.GetAgentAlerts) // Get alerts for this agent (trust score drops, security events, etc.)
 	// Agent security endpoints - Key vault and audit logs per agent
