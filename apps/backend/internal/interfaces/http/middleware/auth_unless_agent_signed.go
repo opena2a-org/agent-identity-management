@@ -9,9 +9,8 @@ import (
 // AuthMiddlewareUnlessAgentSigned passes on a request that PQCAgentMiddleware
 // authenticated, whichever algorithm the agent signed it with (Ed25519, ML-DSA, or both
 // for an agent in hybrid mode), and answers any other request with AuthMiddleware.
-// AuthMiddleware passes on an agent-signed request only when it was signed with Ed25519,
-// so mounted after PQCAgentMiddleware by itself it refuses an agent that signs with
-// ML-DSA or with both keys.
+// AuthMiddleware itself passes on a request authenticated with any of these algorithms;
+// this guard names that pass at the route that mounts it.
 func AuthMiddlewareUnlessAgentSigned(jwtService *auth.JWTService) fiber.Handler {
 	authenticate := AuthMiddleware(jwtService)
 	return func(c fiber.Ctx) error {

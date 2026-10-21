@@ -11,6 +11,18 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — the `/sdk-api`, `/detection`, `/agents` and `/a2a` routes admit a request an agent signed with ML-DSA or with both keys (#825)
+
+- `AuthMiddleware` passes on a request the agent signature check authenticated with ML-DSA (`authenticated_via`
+  `mldsa`) or with Ed25519 and ML-DSA together (`hybrid`), as it already did for one signed with Ed25519. Before, a
+  request signed with `X-Algorithm` `ML-DSA-65` or `Ed25519+ML-DSA-65` was answered 401
+  `{"error":"No authentication token provided"}` on `POST /api/v1/sdk-api/agents/:id/capabilities`,
+  `POST /api/v1/detection/agents/:id/report`, `GET /api/v1/agents/:id` and `POST /api/v1/a2a/agents/:id/sign`, the
+  routes measured, including from an agent in hybrid mode, which the agent signature check refuses when it signs with
+  Ed25519 alone.
+- Tests: `apps/backend/cmd/server/agent_signed_route_groups_auth_test.go`,
+  `TestAuthMiddleware_SkipsIfAgentSignedWithAnyAlgorithm` in `apps/backend/internal/interfaces/http/middleware/auth_test.go`.
+
 ### Fixed — the session middleware records a revoked session's refused request at a credential route (#738)
 
 - When the session middleware refuses an access token because its session (token family) is revoked, and the
