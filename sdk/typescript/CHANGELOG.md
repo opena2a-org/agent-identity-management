@@ -829,6 +829,19 @@ they stay in scope if one ever grows an observational side-channel.
 
 - The entry points (`.`, `/arp`, `/express`, `/fastify`) share one copy of `AIMClient` and the error classes (#334). Each bundled its own copy, so an `ActionDeniedError` raised through `@opena2a/aim-sdk/express` was not `instanceof` the class imported from `@opena2a/aim-sdk`. The build now emits shared chunks in both formats. The ESM and CommonJS builds remain two copies; match on `error.code` where one process loads both.
 
+### Fixed — `engines.node` admits only the Node.js releases on which the CommonJS build loads (#836)
+
+- `package.json` declares `"node": "^20.19.0 || >=22.12.0"` in place of `">=18.0.0"`. The CommonJS build loads
+  `@noble/ed25519`, which ships as an ES module only, with `require()`. Measured in `node:<version>` container images
+  with 1.3.1 from the registry and with the package packed from the source before the change: npm installed it on
+  18.20.8 and 22.11.0 with no `EBADENGINE` warning, and `require('@opena2a/aim-sdk')` and
+  `require('@opena2a/aim-sdk/arp')` then failed with `ERR_REQUIRE_ESM`. The packed package did the same on 20.18.3
+  and 21.7.3, and loaded on 20.19.0, 22.12.0 and 23.0.0. Packed after the change, it installs with an
+  `EBADENGINE Unsupported engine` warning on 18.20.8, 20.18.3, 21.7.3 and 22.11.0, and with none on 20.19.0, 22.12.0
+  and 23.0.0. On 18.20.8 the ES module build imports, and `generateKeyPair()` fails with `Cannot read properties of
+  undefined (reading 'getRandomValues')`: `@noble/ed25519` reads `globalThis.crypto`, which is undefined in a module
+  there. The README's Installation section states the same range.
+
 ## [1.3.1] - 2026-09-02
 
 ### Added

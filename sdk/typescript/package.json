@@ -75,7 +75,7 @@
   },
   "homepage": "https://opena2a.org/agent-identity-management",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "dependencies": {
     "@noble/ed25519": "^2.1.0",
