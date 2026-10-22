@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
+import responses
 
 from aim_sdk import cli
 from aim_sdk import credentials as credentials_module
@@ -279,3 +280,99 @@ def test_logout_sends_no_revocation_to_the_stored_address(no_network, home, monk
 def test_the_recovery_command_names_a_placeholder_for_an_address_with_user_info():
     command = credentials_module.login_recovery_command(WITH_USER_INFO)
     assert command == "aim-sdk login --url <server address> --force"
+
+
+# --- an address saved in an agent's file -------------------------------------
+
+AGENT = "issue-859-agent"
+AGENT_ID = "00000000-0000-4000-8000-000000000859"
+CLEAN = "http://127.0.0.1:8080"
+
+
+def _store_agent(aim_dir, aim_url=WITH_USER_INFO):
+    path = aim_dir / "agents" / f"{AGENT}.json"
+    path.write_text(json.dumps({
+        "agent_id": AGENT_ID,
+        "public_key": "not-a-real-key",
+        "private_key": "not-a-real-key",
+        "aim_url": aim_url,
+    }))
+    os.chmod(path, 0o600)
+    return path
+
+
+@pytest.mark.parametrize("kwargs", [
+    {},
+    {"aim_url": CLEAN},
+    {"aim_url": CLEAN, "api_key": "not-a-real-key"},
+])
+def test_secure_sends_nothing_to_the_address_in_the_agent_file(no_network, home, capsys, kwargs):
+    from aim_sdk.client import register_agent
+
+    path = _store_agent(home)
+    before = path.read_bytes()
+    with pytest.raises(ConfigurationError) as raised:
+        register_agent(AGENT, **kwargs)
+    assert str(raised.value) == (
+        f"The server address saved for agent '{AGENT}' in {path} has a user name or password, so it is "
+        "not used for a request; set the file's \"aim_url\" to the server's address alone, e.g. "
+        "https://aim.example.com"
+    )
+    out = capsys.readouterr()
+    assert _shows_no_user_info(str(raised.value) + out.out + out.err)
+    assert no_network == []
+    assert path.read_bytes() == before
+
+
+def test_auto_register_or_load_sends_nothing_to_the_address_in_the_agent_file(no_network, home, capsys):
+    from aim_sdk.client import AIMClient
+
+    path = _store_agent(home)
+    with pytest.raises(ConfigurationError) as raised:
+        AIMClient.auto_register_or_load(AGENT)
+    assert str(path) in str(raised.value)
+    out = capsys.readouterr()
+    assert _shows_no_user_info(str(raised.value) + out.out + out.err)
+    assert no_network == []
+
+
+def test_the_cannot_reach_warning_leaves_the_user_info_out(home, monkeypatch):
+    import requests
+
+    from aim_sdk import client as client_module
+
+    def unreachable(*args, **kwargs):
+        raise requests.exceptions.ConnectionError("refused")
+
+    shown = []
+    monkeypatch.setattr(requests, "get", unreachable)
+    monkeypatch.setattr(client_module.console, "warning", shown.append)
+    assert client_module._validate_cached_credentials(AGENT_ID, WITH_USER_INFO, AGENT) == (True, None)
+    assert shown == [f"Cannot reach AIM backend at {CLEAN} - using cached credentials"]
+
+
+@responses.activate
+def test_an_address_with_user_info_in_a_registration_answer_is_not_saved(home, capsys):
+    from aim_sdk.client import register_agent
+
+    def registered(request):
+        sent = json.loads(request.body)["publicKey"]
+        body = {"id": AGENT_ID, "publicKey": sent, "aimUrl": WITH_USER_INFO}
+        return 201, {"Content-Type": "application/json"}, json.dumps(body)
+
+    responses.add_callback(responses.POST, f"{CLEAN}/api/v1/agents", callback=registered)
+    responses.add(responses.GET, f"{CLEAN}/api/v1/agents/{AGENT_ID}", json={"id": AGENT_ID}, status=200)
+
+    options = dict(aim_url=CLEAN, api_key="not-a-real-key", auto_detect=False, auto_hooks=False)
+    first = register_agent(AGENT, **options)
+    saved = (home / "agents" / f"{AGENT}.json").read_text()
+    second = register_agent(AGENT, **options)
+
+    assert json.loads(saved)["aim_url"] == CLEAN
+    assert first.aim_url == second.aim_url == CLEAN
+    assert [call.request.method for call in responses.calls] == ["POST", "GET"]
+    for call in responses.calls:
+        assert call.request.url.startswith(f"{CLEAN}/")
+        assert not call.request.headers.get("Authorization", "").startswith("Basic")
+    out = capsys.readouterr()
+    assert _shows_no_user_info(saved + out.out + out.err)
