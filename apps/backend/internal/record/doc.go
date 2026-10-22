@@ -41,9 +41,14 @@
 //
 // Verify walks records from the genesis and reports the first position at
 // which the chain or a signature fails. It cannot see records removed from the
-// end of a sequence: that needs a head held outside the sequence, which this
-// package does not build yet. An empty sequence is reported as no chain
-// started, never as verified.
+// end of a sequence: that needs a checkpoint, a signed statement of a chain's
+// head at one moment, held outside the sequence. A checkpoint is built by
+// this package's serializer alone, signed under the checkpoint class by the
+// key in force after its head, and read back by a verifier that accepts it
+// under that key alone. Result.VerifyCheckpoint compares a held checkpoint
+// with the walk and reports records removed from the end, and a record at
+// the checkpoint's sequence other than the one the checkpoint names. An
+// empty sequence is reported as no chain started, never as verified.
 //
 // The package is pure: it reads and writes no database and serves no route.
 // Its subpackage store keeps chains in PostgreSQL: it starts a chain, appends
@@ -56,6 +61,6 @@
 // store reads whether a foreign key still removes audit rows by cascade:
 // while one does and no chain has started, the deployment is in the pre-chain
 // state, no chain starts and a write of an ordinary record commits with no
-// record. Not built here: checkpoints, and the placement table that decides
-// which member sits in which part.
+// record. Not built here: the store writes no checkpoint yet, and the
+// placement table that decides which member sits in which part.
 package record

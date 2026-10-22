@@ -111,6 +111,12 @@ const (
 	// ReasonSignatureInvalid: the signature does not verify over the signing
 	// input of the expected class.
 	ReasonSignatureInvalid Reason = "signature_invalid"
+	// ReasonMalformedPayload: the envelope opened, but its payload is not a
+	// checkpoint of this format in canonical form.
+	ReasonMalformedPayload Reason = "malformed_payload"
+	// ReasonSchemaVersion: the payload's opena2a.schema names a format
+	// version other than the one in the payload type.
+	ReasonSchemaVersion Reason = "schema_version"
 )
 
 // Refusal is the error of every refusal in this package. Its text never
