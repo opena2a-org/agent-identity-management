@@ -4,6 +4,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { RuntimeTwin } from './runtime-twin';
 import { EventEngine } from '../engine/event-engine';
+import { AgentRuntimeProtection } from '../index';
 import { writeOptOutMarker } from '../telemetry/signature/config';
 import type { ARPEvent, ARPConfig } from '../types';
 
@@ -111,6 +112,18 @@ describe('fleet gradients honor the master opt-out', () => {
     expect(gradientPosts()).toHaveLength(0);
   });
 
+  it('sends nothing when signatureTelemetry.enabled is false in the config', async () => {
+    const engine = new EventEngine(testConfig);
+    const twin = new RuntimeTwin('config-optout-agent', {
+      fleetEnabled: true,
+      signatureTelemetry: { enabled: false },
+    });
+
+    await runAndFlush(twin, engine);
+
+    expect(gradientPosts()).toHaveLength(0);
+  });
+
   it('honors an opt-out written AFTER the twin was constructed', async () => {
     // Pins the pre-send re-check specifically. The constructor gate cannot
     // catch this case: fleet was legitimately enabled when the process started
@@ -135,6 +148,52 @@ describe('fleet gradients honor the master opt-out', () => {
     const twin = new RuntimeTwin('default-agent');
 
     await runAndFlush(twin, engine);
+
+    expect(gradientPosts()).toHaveLength(0);
+  });
+});
+
+/**
+ * The same opt-out through the twin AgentRuntimeProtection builds from its
+ * config. stop() does not flush the twin, so a running ARP posts a gradient
+ * when the 300th event (GRADIENT_FLUSH_INTERVAL in runtime-twin.ts) reaches
+ * the twin; these tests send that many through the ARP's engine.
+ */
+describe('the twin AgentRuntimeProtection builds honors signatureTelemetry: { enabled: false }', () => {
+  const FLUSH_INTERVAL = 300;
+
+  function arpConfig(overrides: Partial<ARPConfig> = {}): ARPConfig {
+    return {
+      agentName: 'runtime-twin-optout-arp',
+      dataDir: join(home, 'arp-data'),
+      monitors: {
+        process: { enabled: false },
+        network: { enabled: false },
+        filesystem: { enabled: false },
+      },
+      intelligence: { runtimeTwin: { fleetEnabled: true } },
+      ...overrides,
+    };
+  }
+
+  async function runARP(config: ARPConfig) {
+    const arp = new AgentRuntimeProtection(config);
+    // The opt-out stops the gradient channel, not the twin's local scoring.
+    expect(arp.getRuntimeTwin()).not.toBeNull();
+    await arp.start();
+    for (let i = 0; i < FLUSH_INTERVAL; i++) await emitTestEvent(arp.getEngine());
+    await new Promise(r => setTimeout(r, 50));
+    await arp.stop();
+  }
+
+  it('POSITIVE CONTROL: transmits with intelligence.runtimeTwin.fleetEnabled and no opt-out', async () => {
+    await runARP(arpConfig());
+
+    expect(gradientPosts()).toHaveLength(1);
+  });
+
+  it('sends nothing when the ARP config carries signatureTelemetry: { enabled: false }', async () => {
+    await runARP(arpConfig({ signatureTelemetry: { enabled: false } }));
 
     expect(gradientPosts()).toHaveLength(0);
   });

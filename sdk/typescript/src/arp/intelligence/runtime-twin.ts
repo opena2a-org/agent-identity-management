@@ -35,7 +35,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { isOptedOut } from '../telemetry/signature/config';
 import { rotateLogIfNeeded } from '../reporting/log-rotation';
-import type { ARPEvent } from '../types';
+import type { ARPEvent, SignatureTelemetryConfig } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 
 // === Types (mirroring @nanomind/runtime-core) ===
@@ -123,15 +123,29 @@ export class RuntimeTwin {
   private gradientLossSum = 0;
   private fleetEnabled: boolean;
   private agentCategory: string;
+  private readonly signatureTelemetry: SignatureTelemetryConfig | undefined;
 
-  constructor(agentId: string, config?: { enabled?: boolean; fleetEnabled?: boolean; agentCategory?: string }) {
+  /**
+   * `signatureTelemetry` is the ARP config's `signatureTelemetry` section;
+   * `enabled: false` there is one of the opt-outs that stop fleet gradients.
+   */
+  constructor(
+    agentId: string,
+    config?: {
+      enabled?: boolean;
+      fleetEnabled?: boolean;
+      agentCategory?: string;
+      signatureTelemetry?: SignatureTelemetryConfig;
+    },
+  ) {
     this.agentId = agentId;
     this.sessionId = crypto.randomUUID();
     this.enabled = config?.enabled ?? true;
+    this.signatureTelemetry = config?.signatureTelemetry;
     // Opt-in only, and an opt-out beats the opt-in. Resolved once here so the
     // per-event accumulation path costs no syscall; flushGradient re-checks
     // before sending so an opt-out written after startup is still honored.
-    this.fleetEnabled = (config?.fleetEnabled ?? false) && !isOptedOut();
+    this.fleetEnabled = (config?.fleetEnabled ?? false) && !isOptedOut(this.signatureTelemetry);
     this.agentCategory = config?.agentCategory ?? 'general';
     this.eventLogPath = path.join(os.homedir(), '.opena2a', 'arp', 'events.jsonl');
 
@@ -435,7 +449,7 @@ export class RuntimeTwin {
    * call before it posts.
    */
   wouldSendFleetGradient(): boolean {
-    return this.fleetEnabled && !isOptedOut();
+    return this.fleetEnabled && !isOptedOut(this.signatureTelemetry);
   }
 
   /**

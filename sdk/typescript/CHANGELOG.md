@@ -898,6 +898,21 @@ they stay in scope if one ever grows an observational side-channel.
   undefined (reading 'getRandomValues')`: `@noble/ed25519` reads `globalThis.crypto`, which is undefined in a module
   there. The README's Installation section states the same range.
 
+### Fixed — `signatureTelemetry: { enabled: false }` in the ARP config stops the runtime twin's fleet gradients (#862)
+
+- `AgentRuntimeProtection` passes the config's `signatureTelemetry` section to the runtime twin it builds, through a
+  new `signatureTelemetry` option of `RuntimeTwin`. The twin reads `enabled: false` there with the same opt-out
+  check it applies to the environment variables and the opt-out marker, when it is constructed and again before it
+  sends a gradient. Measured on the code before this change: an `AgentRuntimeProtection` with
+  `intelligence.runtimeTwin.fleetEnabled: true` and `signatureTelemetry: { enabled: false }` whose engine received
+  300 events posted one gradient to `https://api.oa2a.org/api/v1/telemetry/behavioral-gradient`. After the change it
+  posts none, and a `RuntimeTwin` given `fleetEnabled: true` and `signatureTelemetry: { enabled: false }` posts none
+  at `shutdown()` after five events. The README's "Turn it off again" section lists this setting among the switches
+  that disable fleet behavioral gradients. The setting leaves the twin in place: `getRuntimeTwin()` still returns it.
+- Tests: `src/arp/intelligence/runtime-twin.optout.test.ts`, beside the tests of the environment variables and the
+  opt-out marker, with a positive control in which an `AgentRuntimeProtection` with no opt-out posts one gradient
+  after 300 events.
+
 ## [1.3.1] - 2026-09-02
 
 ### Added
