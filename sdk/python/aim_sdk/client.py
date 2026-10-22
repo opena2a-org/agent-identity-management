@@ -4911,7 +4911,9 @@ def _validate_cached_credentials(
     except requests.exceptions.ConnectionError:
         # Backend unreachable - can't validate, but don't invalidate credentials
         # The user might be offline or backend is down temporarily
-        console.warning(f"Cannot reach AIM backend at {aim_url} - using cached credentials")
+        from .credentials import without_user_info
+
+        console.warning(f"Cannot reach AIM backend at {without_user_info(aim_url)} - using cached credentials")
         return True, None
 
     except requests.exceptions.Timeout:
@@ -5163,6 +5165,21 @@ def register_agent(
             agent_id = existing_creds['agent_id']
             cached_aim_url = existing_creds.get('aim_url', aim_url or 'http://localhost:8080')
 
+            # Before any request: an address with a user name or password in
+            # the agent's file is not used, and the message does not repeat it
+            # (#859). The file's address is read in preference to a given
+            # aim_url, so passing another one does not help.
+            from .credentials import get_agent_credentials_path, has_user_info
+
+            if has_user_info(existing_creds.get('aim_url')):
+                raise ConfigurationError(
+                    f"The server address saved for agent '{name}' in "
+                    f"{get_agent_credentials_path(name)} has a user name or "
+                    f"password, so it is not used for a request; set the "
+                    f"file's \"aim_url\" to the server's address alone, e.g. "
+                    f"https://aim.example.com"
+                )
+
             # Validate agent still exists in backend
             is_valid, validation_error = _validate_cached_credentials(
                 agent_id=agent_id,
@@ -5191,10 +5208,13 @@ def register_agent(
                     }
                 )
 
+                from .credentials import without_user_info
+
+                shown_aim_url = without_user_info(cached_aim_url)
                 raise StaleCredentialsError(
                     f"\nCached agent credentials for '{name}' reference agent "
                     f"{agent_id[:8]}... which is no longer present in the AIM "
-                    f"backend at {cached_aim_url}.\n"
+                    f"backend at {shown_aim_url}.\n"
                     f"\n"
                     f"Reason: {validation_error}\n"
                     f"\n"
@@ -5204,7 +5224,7 @@ def register_agent(
                     f"grants) applied to the previous agent under this name.\n"
                     f"\n"
                     f"TO RECOVER:\n"
-                    f"  1. Confirm the AIM URL is correct: {cached_aim_url}\n"
+                    f"  1. Confirm the AIM URL is correct: {shown_aim_url}\n"
                     f"  2. Check the dashboard to see if the agent was deleted.\n"
                     f"  3. If you intend to register a new agent under this "
                     f"name, remove the cached file explicitly:\n"
@@ -5949,8 +5969,13 @@ def _register_via_api_key(
     # name the server's own canonical URL, which is honoured -- but only when
     # it is a URL the SDK could actually send a request to. A response carrying
     # a placeholder there used to become the client's base URL for every later
-    # call, in place of the URL the caller just registered against.
-    if not _is_usable_aim_url(credentials.get("aim_url")):
+    # call, in place of the URL the caller just registered against. An address
+    # with a user name or password is not honoured either, so it is not saved
+    # to the agent's file (#859).
+    from .credentials import has_user_info
+
+    answered_aim_url = credentials.get("aim_url")
+    if not _is_usable_aim_url(answered_aim_url) or has_user_info(answered_aim_url):
         credentials["aim_url"] = aim_url
 
     # Save credentials locally
