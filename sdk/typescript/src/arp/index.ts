@@ -49,6 +49,7 @@ export type {
   L2NotRunningReason,
   L2Status,
   BudgetState,
+  L2CallFailure,
   AlertRule,
   AlertCondition,
   MonitorConfig,
@@ -441,6 +442,11 @@ export class AgentRuntimeProtection {
   async start(): Promise<void> {
     if (this.running) return;
 
+    // Ask L2's destination whether it answers, so that one that cannot be reached is
+    // reported now rather than at the first event L1 flags. It runs while the monitors
+    // start; start() waits for it at most the check's timeout and never fails because of it.
+    const l2Health = this.intelligence.checkL2Health();
+
     // Attach the runtime twin to the event engine BEFORE monitors start
     // so the twin observes every event from the first tick. The twin
     // trains its own baseline over the first 100 events and does not
@@ -466,6 +472,7 @@ export class AgentRuntimeProtection {
       this.signatureEmitter.start();
     }
 
+    await l2Health;
     this.running = true;
   }
 

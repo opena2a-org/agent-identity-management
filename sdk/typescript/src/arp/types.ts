@@ -301,6 +301,12 @@ export type LLMAdapterType =
 export interface LLMAdapter {
   /** Adapter name */
   readonly name: string;
+  /**
+   * Where `assess` sends its calls, as a URL: the server for a local adapter, the vendor's
+   * API host for a vendor adapter. ARP names it when a call fails. Absent when the adapter
+   * cannot say, for example when its configured host is not a URL.
+   */
+  readonly endpoint?: string;
   /** Send a micro-prompt and get a structured response */
   assess(prompt: string, maxTokens: number): Promise<LLMResponse>;
   /** Estimate cost for a given prompt length */
@@ -378,12 +384,26 @@ export interface BudgetState {
   periodStart: string;
   /** Number of L2 calls answered in the current period */
   totalCalls: number;
+  /** Number of L2 calls in the current period that threw instead of answering */
+  failedCalls: number;
+  /** The latest of those calls, or null when there is none */
+  lastFailure: L2CallFailure | null;
   /** Calls reserved in current hour, in flight or answered */
   callsThisHour: number;
   /** Hour start (ISO timestamp) */
   hourStart: string;
   /** Per-call cost history (last 100) */
   recentCosts: Array<{ timestamp: string; cost: number; tokens: number }>;
+}
+
+/** An L2 call that threw: when, through which adapter, and the error's code or message. */
+export interface L2CallFailure {
+  /** When the call failed (ISO timestamp) */
+  at: string;
+  /** The adapter's name, such as 'ollama' */
+  adapter: string;
+  /** The error's code, such as ECONNREFUSED, or its message; never the prompt or the answer */
+  message: string;
 }
 
 // --- Enforcement ---

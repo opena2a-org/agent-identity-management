@@ -337,4 +337,68 @@ describe('BudgetController', () => {
       expect(status.callsThisHour).toBe(0);
     });
   });
+
+  describe('failed calls', () => {
+    it('recordFailure counts a call that threw and keeps the latest one, beside totalCalls and in budget.json', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 9, 18, 10, 0));
+      const budget = new BudgetController(tmpDir);
+      expect(budget.getStatus().failedCalls).toBe(0);
+      expect(budget.getStatus().lastFailure).toBeNull();
+
+      budget.release(reserveOrFail(budget, 0.01));
+      budget.recordFailure('ollama', 'ECONNREFUSED');
+      vi.setSystemTime(new Date(2026, 9, 18, 10, 5));
+      budget.release(reserveOrFail(budget, 0.01));
+      budget.recordFailure('ollama', 'HTTP 500');
+      budget.record(reserveOrFail(budget, 0.01), 0.01, 10);
+
+      const status = budget.getStatus();
+      expect(status.failedCalls).toBe(2);
+      expect(status.totalCalls).toBe(1);
+      expect(status.lastFailure).toEqual({
+        at: new Date(2026, 9, 18, 10, 5).toISOString(),
+        adapter: 'ollama',
+        message: 'HTTP 500',
+      });
+
+      // budget.json keeps them with totalCalls, so a status command in another process reads them.
+      const reloaded = new BudgetController(tmpDir).getStatus();
+      expect(reloaded.failedCalls).toBe(2);
+      expect(reloaded.totalCalls).toBe(1);
+      expect(reloaded.lastFailure).toEqual(status.lastFailure);
+
+      // The status is a copy: changing it changes nothing the controller holds.
+      if (status.lastFailure) status.lastFailure.message = 'changed';
+      expect(budget.getStatus().lastFailure?.message).toBe('HTTP 500');
+    });
+
+    it('a budget.json saved before failedCalls existed reads as no failed call', () => {
+      const now = new Date().toISOString();
+      fs.writeFileSync(
+        path.join(tmpDir, 'budget.json'),
+        JSON.stringify({ totalSpentUsd: 0.2, periodStart: now, totalCalls: 3, callsThisHour: 0, hourStart: now, recentCosts: [] }),
+      );
+
+      const status = new BudgetController(tmpDir).getStatus();
+
+      expect(status.totalCalls).toBe(3);
+      expect(status.failedCalls).toBe(0);
+      expect(status.lastFailure).toBeNull();
+    });
+
+    it('failedCalls and lastFailure start again with the monthly period, as totalCalls does', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(2026, 2, 31, 23, 30));
+      const budget = new BudgetController(tmpDir);
+      budget.recordFailure('ollama', 'ECONNREFUSED');
+      expect(budget.getStatus().failedCalls).toBe(1);
+
+      vi.setSystemTime(new Date(2026, 3, 1, 0, 30));
+
+      const status = budget.getStatus();
+      expect(status.failedCalls).toBe(0);
+      expect(status.lastFailure).toBeNull();
+    });
+  });
 });
