@@ -60,15 +60,28 @@ function parseConfigFile(filePath: string): ARPConfig {
   const ext = path.extname(filePath).toLowerCase();
 
   if (ext === '.json') {
-    return { ...defaultConfig(), ...JSON.parse(content) };
+    return { ...defaultConfig(), ...parseOrThrow(filePath, () => JSON.parse(content)) };
   }
 
-  // YAML parsing (dynamic import to keep it optional)
+  // YAML parsing (dynamic import to keep it optional). Loading js-yaml and
+  // parsing with it fail separately, so a syntax error is not reported as a
+  // missing parser.
+  let yaml: { load(content: string): unknown };
   try {
-    const yaml = nodeRequire('js-yaml');
-    return { ...defaultConfig(), ...yaml.load(content) };
-  } catch {
-    throw new Error(`Failed to parse config: ${filePath}. Install js-yaml for YAML support.`);
+    yaml = nodeRequire('js-yaml');
+  } catch (err) {
+    throw new Error(`Failed to parse config: ${filePath}. Install js-yaml for YAML support.`, { cause: err });
+  }
+  return { ...defaultConfig(), ...parseOrThrow(filePath, () => yaml.load(content)) };
+}
+
+/** Run a parser; a failure names the file and keeps the parser's message. */
+function parseOrThrow(filePath: string, parse: () => unknown): Partial<ARPConfig> {
+  try {
+    return parse() as Partial<ARPConfig>;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse config: ${filePath}: ${reason}`, { cause: err });
   }
 }
 

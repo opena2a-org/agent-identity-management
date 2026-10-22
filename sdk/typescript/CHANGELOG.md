@@ -7,6 +7,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — ARP's `loadConfig` names the file and gives the parser's message when a config does not parse (#861)
+
+- Run on the code before this change (Node.js 26.12.0, js-yaml 4.3.2), `loadConfig(path)` from
+  `@opena2a/aim-sdk/arp` failed with `Failed to parse config: <path>. Install js-yaml for YAML support.` for a
+  `.yaml` file holding `monitors: [unclosed` and for a `.yml` file holding `agentName: [a`, with js-yaml installed.
+  A `.json` file holding `{,}` failed with a `SyntaxError` whose message,
+  `Expected property name or '}' in JSON at position 1 (line 1 column 2)`, does not name the file.
+- A YAML or JSON config that does not parse now fails with `Failed to parse config: <path>: <parser message>`, and
+  the error's `cause` is the parser's error. On Node.js 26.12.0 the `.yaml` file above gives
+  `unexpected end of the stream within a flow collection (2:1)` followed by js-yaml's excerpt of the file, and the
+  `.json` file gives the message quoted above. The install hint appears when js-yaml cannot be loaded; a JSON config
+  still loads then.
+- Tests: `src/arp/config/loader.parse-errors.test.ts`.
+
 ### Fixed — `init` removes only group and other permissions from an existing `~/.aim` or `~/.aim/agents`, and prints each mode it changes (#860)
 
 - Measured with the previous code: `init` set an existing `~/.aim/agents` at 0755, 0555 or 0500 to 0700 and printed
