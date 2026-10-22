@@ -32,6 +32,13 @@
 // its position in the chain, and fails a record after the rotation that the
 // retired key signs, whatever that record's timestamp says.
 //
+// A correction is a new record that names, by event_id, an earlier record of
+// its chain that it corrects; the corrected record is left as it is. The
+// reference sits in the correction's tenant part, so erasing that part removes
+// it and leaves the chain verifying. Verify fails a correction that commits to
+// no tenant part, or whose tenant part, while it exists, names no record
+// before it in the chain.
+//
 // Verify walks records from the genesis and reports the first position at
 // which the chain or a signature fails. It cannot see records removed from the
 // end of a sequence: that needs a head held outside the sequence, which this
@@ -46,7 +53,7 @@
 // record built from that row. At process start the store reads whether a
 // foreign key still removes audit rows by cascade: while one does and no
 // chain has started, the deployment is in the pre-chain state, no chain
-// starts and a write commits with no record. Not built here: correction
-// records, checkpoints, the placement table that decides which member sits in
-// which part, and a store path that appends a key rotation to a chain.
+// starts and a write commits with no record. Not built here: checkpoints, the
+// placement table that decides which member sits in which part, and store
+// paths that append a key rotation or a correction to a chain.
 package record

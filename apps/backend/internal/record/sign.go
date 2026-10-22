@@ -78,7 +78,7 @@ type Record struct {
 // and a signature that does not verify under that key.
 func Sign(ctx context.Context, b Body, kp SigningKeyProvider) (Record, error) {
 	if len(b.canonical) == 0 {
-		return Record{}, fmt.Errorf("%w: the body was not built by NewGenesis, NewRecord or NewKeyRotation", ErrSigning)
+		return Record{}, fmt.Errorf("%w: the body was not built by NewGenesis, NewRecord, NewKeyRotation or NewCorrection", ErrSigning)
 	}
 	if kp == nil {
 		return Record{}, fmt.Errorf("%w: no key provider", ErrSigning)

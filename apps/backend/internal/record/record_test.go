@@ -196,6 +196,7 @@ func TestSeal_RefusesInvalidDrafts(t *testing.T) {
 		"no type":                   func(d *Draft) { d.Type = "" },
 		"genesis type after start":  func(d *Draft) { d.Type = TypeChainGenesis },
 		"key rotation type":         func(d *Draft) { d.Type = TypeKeyRotation },
+		"correction type":           func(d *Draft) { d.Type = TypeCorrection },
 		"no timestamp":              func(d *Draft) { d.Timestamp = time.Time{} },
 		"caller sets type":          func(d *Draft) { d.Retained["type"] = "other" },
 		"caller sets timestamp":     func(d *Draft) { d.Retained["timestamp"] = "2026-01-01T00:00:00.000000Z" },
@@ -228,6 +229,16 @@ func TestSeal_RefusesInvalidDrafts(t *testing.T) {
 		"caller sets rotation_reason": func(d *Draft) { d.Retained["opena2a"].(map[string]any)["rotation_reason"] = RotationScheduled },
 		"caller sets exposure_began_at": func(d *Draft) {
 			d.Retained["opena2a"].(map[string]any)["exposure_began_at"] = "2026-01-01T00:00:00.000000Z"
+		},
+		"caller sets corrected_event_id": func(d *Draft) {
+			d.Retained["opena2a"].(map[string]any)["corrected_event_id"] = fixtureAdminEvent
+		},
+		"tenant corrected_event_id": func(d *Draft) {
+			d.Tenant["opena2a"] = map[string]any{"corrected_event_id": fixtureAdminEvent}
+		},
+		"personal corrected_event_id": func(d *Draft) {
+			d.Personal = map[string]any{"opena2a": map[string]any{"corrected_event_id": fixtureAdminEvent}}
+			d.PersonalSalt = fixtureSalt(2)
 		},
 	}
 	for name, mutate := range cases {

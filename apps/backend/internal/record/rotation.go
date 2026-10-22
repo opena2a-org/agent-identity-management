@@ -75,7 +75,7 @@ func NewKeyRotation(prev Head, r KeyRotation) (Body, error) {
 	case !r.ExposureBegan.IsZero():
 		return Body{}, fmt.Errorf("%w: only a rotation on exposure states when an exposure began", ErrInvalidRecord)
 	}
-	b, err := seal(prev.ChainID, prev.Seq+1, prev.Hash, d, own)
+	b, err := seal(prev.ChainID, prev.Seq+1, prev.Hash, d, owned{retained: own})
 	if err != nil {
 		return Body{}, err
 	}

@@ -102,6 +102,9 @@ func TestChainGoldenVectors(t *testing.T) {
 		{"key_rotation.json", vectorOf(t,
 			"A genesis, a scheduled key rotation to a second key, a key rotation on exposure to a third key, then one record.",
 			nil, twiceRotatedBodies(t, [3]PublicKey{keylessKey(), keylessNextKey(1), keylessNextKey(2)}))},
+		{"correction.json", vectorOf(t,
+			"A genesis, an administrative record, then a correction that names the administrative record by its event_id in its tenant part.",
+			nil, correctedBodies(t, keylessKey()))},
 	}
 	for _, v := range vectors {
 		t.Run(v.file, func(t *testing.T) {
@@ -134,8 +137,8 @@ func TestChainGoldenVectors(t *testing.T) {
 
 // checkVectorFile reads a committed vector with nothing but a JSON decoder and
 // SHA-256, and checks what it claims: each hash, each signing input, each
-// commitment, each link to the record before, and each key rotation's next
-// key and reason.
+// commitment, each link to the record before, each key rotation's next key
+// and reason, and the record before it that each correction names.
 func checkVectorFile(t *testing.T, raw []byte) {
 	t.Helper()
 	var file chainVectorFile
@@ -153,6 +156,7 @@ func checkVectorFile(t *testing.T, raw []byte) {
 		return hex.EncodeToString(h.Sum(nil))
 	}
 	type body struct {
+		EventID string `json:"event_id"`
 		Type    string `json:"type"`
 		OpenA2A struct {
 			Schema string `json:"schema"`
@@ -172,6 +176,7 @@ func checkVectorFile(t *testing.T, raw []byte) {
 		} `json:"opena2a"`
 	}
 	used := map[string]bool{file.FirstKey.KeyID: true}
+	events := map[string]bool{}
 	for i, r := range file.Records {
 		if got := sha([]byte(r.Canonical)); got != r.RecordHash {
 			t.Fatalf("record %d: recordHash is not the SHA-256 of canonical", i)
@@ -232,6 +237,20 @@ func checkVectorFile(t *testing.T, raw []byte) {
 				t.Fatalf("record %d: exposure_began_at is not present exactly when the reason is exposure", i)
 			}
 		}
+		if b.Type == "opena2a.correction" {
+			var tenant struct {
+				OpenA2A struct {
+					CorrectedEventID string `json:"corrected_event_id"`
+				} `json:"opena2a"`
+			}
+			if err := json.Unmarshal([]byte(r.TenantPart), &tenant); err != nil {
+				t.Fatalf("record %d: the correction's tenant part is not JSON: %v", i, err)
+			}
+			if !events[tenant.OpenA2A.CorrectedEventID] {
+				t.Fatalf("record %d: the correction does not name the event_id of a record before it", i)
+			}
+		}
+		events[b.EventID] = true
 		for name, part := range map[string][2]string{
 			"tenant":   {r.TenantSalt, r.TenantPart},
 			"personal": {r.PersonalSalt, r.PersonalPart},
