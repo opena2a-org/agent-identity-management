@@ -99,6 +99,9 @@ func TestChainGoldenVectors(t *testing.T) {
 		{"chain.json", vectorOf(t,
 			"A genesis that pins three earlier rows, then three records: one with a tenant and a personal part, two with a tenant part alone.",
 			fixturePreGenesis(), buildChain(t, keylessKey()))},
+		{"key_rotation.json", vectorOf(t,
+			"A genesis, a scheduled key rotation to a second key, a key rotation on exposure to a third key, then one record.",
+			nil, twiceRotatedBodies(t, [3]PublicKey{keylessKey(), keylessNextKey(1), keylessNextKey(2)}))},
 	}
 	for _, v := range vectors {
 		t.Run(v.file, func(t *testing.T) {
@@ -131,7 +134,8 @@ func TestChainGoldenVectors(t *testing.T) {
 
 // checkVectorFile reads a committed vector with nothing but a JSON decoder and
 // SHA-256, and checks what it claims: each hash, each signing input, each
-// commitment and each link to the record before.
+// commitment, each link to the record before, and each key rotation's next
+// key and reason.
 func checkVectorFile(t *testing.T, raw []byte) {
 	t.Helper()
 	var file chainVectorFile
@@ -158,12 +162,16 @@ func checkVectorFile(t *testing.T, raw []byte) {
 				PrevHash *string `json:"prev_hash"`
 			} `json:"chain"`
 			Commitments map[string]string `json:"commitments"`
-			FirstKey    *vectorFirstKey   `json:"first_key"`
+			FirstKey    *vectorNamedKey   `json:"first_key"`
 			PreGenesis  *struct {
 				SetDigest string `json:"set_digest"`
 			} `json:"pre_genesis"`
+			NextKey         *vectorNamedKey `json:"next_key"`
+			RotationReason  *string         `json:"rotation_reason"`
+			ExposureBeganAt *string         `json:"exposure_began_at"`
 		} `json:"opena2a"`
 	}
+	used := map[string]bool{file.FirstKey.KeyID: true}
 	for i, r := range file.Records {
 		if got := sha([]byte(r.Canonical)); got != r.RecordHash {
 			t.Fatalf("record %d: recordHash is not the SHA-256 of canonical", i)
@@ -187,7 +195,7 @@ func checkVectorFile(t *testing.T, raw []byte) {
 			if b.Type != "opena2a.chain_genesis" || b.OpenA2A.Chain.PrevHash != nil {
 				t.Fatalf("record 0 is not a genesis with a null predecessor hash")
 			}
-			if b.OpenA2A.FirstKey == nil || *b.OpenA2A.FirstKey != (vectorFirstKey{Alg: file.FirstKey.Alg, KeyID: file.FirstKey.KeyID, PublicKey: file.FirstKey.PublicKey}) {
+			if b.OpenA2A.FirstKey == nil || *b.OpenA2A.FirstKey != (vectorNamedKey{Alg: file.FirstKey.Alg, KeyID: file.FirstKey.KeyID, PublicKey: file.FirstKey.PublicKey}) {
 				t.Fatalf("the genesis does not name the vector's first key")
 			}
 			publicKey, err := hex.DecodeString(file.FirstKey.PublicKey)
@@ -199,6 +207,30 @@ func checkVectorFile(t *testing.T, raw []byte) {
 			}
 		} else if b.OpenA2A.Chain.PrevHash == nil || *b.OpenA2A.Chain.PrevHash != file.Records[i-1].RecordHash {
 			t.Fatalf("record %d does not commit to the hash of record %d", i, i-1)
+		}
+		if b.Type == "opena2a.key_rotation" {
+			next := b.OpenA2A.NextKey
+			if next == nil {
+				t.Fatalf("record %d: the key rotation names no next key", i)
+			}
+			publicKey, err := hex.DecodeString(next.PublicKey)
+			if err != nil || sha(publicKey) != next.KeyID {
+				t.Fatalf("record %d: the next key's id is not the SHA-256 of its bytes", i)
+			}
+			if used[next.KeyID] {
+				t.Fatalf("record %d: the next key is a key the chain already used", i)
+			}
+			used[next.KeyID] = true
+			reason := ""
+			if b.OpenA2A.RotationReason != nil {
+				reason = *b.OpenA2A.RotationReason
+			}
+			switch {
+			case reason != "scheduled" && reason != "custody_change" && reason != "exposure":
+				t.Fatalf("record %d: rotation reason %q", i, reason)
+			case (reason == "exposure") != (b.OpenA2A.ExposureBeganAt != nil):
+				t.Fatalf("record %d: exposure_began_at is not present exactly when the reason is exposure", i)
+			}
 		}
 		for name, part := range map[string][2]string{
 			"tenant":   {r.TenantSalt, r.TenantPart},
@@ -222,7 +254,7 @@ func checkVectorFile(t *testing.T, raw []byte) {
 	}
 }
 
-type vectorFirstKey struct {
+type vectorNamedKey struct {
 	Alg       string `json:"alg"`
 	KeyID     string `json:"keyid"`
 	PublicKey string `json:"public_key"`

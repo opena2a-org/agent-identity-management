@@ -25,6 +25,13 @@
 // choosing. Open compares an envelope's payload type with the one class the
 // caller expects before it reads anything else in the envelope.
 //
+// A chain's genesis names its first key. A key rotation record, signed by the
+// key in force, names the next key and the reason (scheduled, custody change
+// or exposure, with the time an exposure is believed to have begun), all in
+// its retained part. Verify accepts a later key only through such a record at
+// its position in the chain, and fails a record after the rotation that the
+// retired key signs, whatever that record's timestamp says.
+//
 // Verify walks records from the genesis and reports the first position at
 // which the chain or a signature fails. It cannot see records removed from the
 // end of a sequence: that needs a head held outside the sequence, which this
@@ -39,7 +46,7 @@
 // record built from that row. At process start the store reads whether a
 // foreign key still removes audit rows by cascade: while one does and no
 // chain has started, the deployment is in the pre-chain state, no chain
-// starts and a write commits with no record. Not built here: key rotation
-// and correction records, checkpoints, and the placement table that decides
-// which member sits in which part.
+// starts and a write commits with no record. Not built here: correction
+// records, checkpoints, the placement table that decides which member sits in
+// which part, and a store path that appends a key rotation to a chain.
 package record
