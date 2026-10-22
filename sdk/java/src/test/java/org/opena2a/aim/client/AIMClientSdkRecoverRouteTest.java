@@ -70,6 +70,16 @@ class AIMClientSdkRecoverRouteTest {
     private static final String MINT_GUARD =
             "apps/backend/internal/interfaces/http/handlers/credential_mint_family.go";
 
+    /** Repo-relative location of the credential routes' labels. */
+    private static final String CREDENTIAL_ROUTES =
+            "apps/backend/internal/interfaces/http/middleware/credential_route_refusal.go";
+
+    /** The label the recovery route's sign-in check records a refusal under. */
+    private static final String SDK_RECOVER_ROUTE = "sdk_recover";
+
+    /** The recovery handler's read of the old token. */
+    private static final String OLD_TOKEN_READ = "GetTokenID(req.OldRefreshToken)";
+
     /** Repo-relative location of the backend's JWT service. */
     private static final String JWT_SERVICE = "apps/backend/internal/infrastructure/auth/jwt.go";
 
@@ -108,6 +118,9 @@ class AIMClientSdkRecoverRouteTest {
                     + "\\s*recordMintRefused\\([^)]*\\)\\s*return refuseMint\\(c\\)");
     private static final Pattern SDK_ACCESS_HAS_NO_SIGN_IN = Pattern.compile(
             "signedIn := time\\.Time\\{\\}\\s*if !isSDKToken \\{\\s*signedIn = claims\\.SignedInAt\\(\\)\\s*\\}");
+    /** The sign-in check, with its route label written as a string literal (group 1) or a middleware constant (group 2). */
+    private static final Pattern LIVE_SIGN_IN_GUARD = Pattern.compile(
+            "refuseUnlessLiveSignIn\\(c, h\\.jwtService, h\\.audit, (?:\"([^\"]+)\"|middleware\\.(\\w+))\\)");
     private static final Pattern DEVELOPERS_TABS = Pattern.compile(
             "developers: \\[\\s*\\{ name: \"Guide\"[^\\n]*\\n\\s*\\{ name: \"SDK & docs\", href: \"/dashboard/sdk\""
                     + "[^\\n]*\\n(?:\\s*//[^\\n]*\\n)*\\s*\\{ name: \"Credentials\", href: \"/dashboard/credentials\"");
@@ -217,14 +230,43 @@ class AIMClientSdkRecoverRouteTest {
         // JWT service's refresh gives an SDK token's access token no sign-in
         // time.
         String handler = source(RECOVERY_HANDLER);
-        int guard = handler.indexOf("refuseUnlessLiveSignIn(c, h.jwtService, h.audit, \"sdk_recover\")");
-        int read = handler.indexOf("GetTokenID(req.OldRefreshToken)");
+        int guard = sdkRecoverGuardAt(handler, source(CREDENTIAL_ROUTES));
+        int read = handler.indexOf(OLD_TOKEN_READ);
         assertTrue(guard >= 0, RECOVERY_HANDLER + " no longer refuses an access token without a sign-in");
         assertTrue(read > guard, RECOVERY_HANDLER + " reads the old token before it checks the sign-in");
         assertTrue(NO_SIGN_IN_REFUSED.matcher(source(MINT_GUARD)).find(),
                 MINT_GUARD + " no longer refuses an access token whose session records no sign-in");
         assertTrue(SDK_ACCESS_HAS_NO_SIGN_IN.matcher(source(JWT_SERVICE)).find(),
                 JWT_SERVICE + " no longer mints an SDK token's access token without a sign-in time");
+    }
+
+    @Test
+    @DisplayName("the recovery route's sign-in check is found with its label as a literal or a constant, and only before the old token is read")
+    void sdkRecoverGuard_isFoundByLiteralOrConstant_andOnlyBeforeTheOldTokenIsRead() {
+        String routes = "const (\n\tCredentialRouteSDKDownload = \"sdk_download\"\n"
+                + "\tCredentialRouteSDKRecover  = \"sdk_recover\"\n)\n";
+        String read = "\ttokenID, err := h.jwtService." + OLD_TOKEN_READ + "\n";
+        String literal = "\tif !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, \"sdk_recover\") {\n\t\treturn nil\n\t}\n";
+        String constant = "\tif !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, middleware.CredentialRouteSDKRecover) {\n"
+                + "\t\treturn nil\n\t}\n";
+        String otherRoute = "\tif !refuseUnlessLiveSignIn(c, h.jwtService, h.audit, middleware.CredentialRouteSDKDownload) {\n"
+                + "\t\treturn nil\n\t}\n";
+
+        for (String guard : List.of(literal, constant)) {
+            String handler = guard + read;
+            int at = sdkRecoverGuardAt(handler, routes);
+            assertTrue(at >= 0, "the check was not found in: " + handler);
+            assertTrue(handler.indexOf(OLD_TOKEN_READ) > at, "the check was not found before the read in: " + handler);
+
+            String moved = read + guard;
+            assertTrue(moved.indexOf(OLD_TOKEN_READ) < sdkRecoverGuardAt(moved, routes),
+                    "a check moved after the read was taken as before it: " + moved);
+        }
+        assertEquals(-1, sdkRecoverGuardAt(read, routes), "a handler without the check was taken as having it");
+        assertEquals(-1, sdkRecoverGuardAt(otherRoute + read, routes),
+                "a check for another route was taken as the recovery route's");
+        assertEquals(-1, sdkRecoverGuardAt(constant + read, "const (\n\tCredentialRouteSDKRecover = \"sdk_download\"\n)\n"),
+                "a constant that is not \"sdk_recover\" was taken as the recovery route's label");
     }
 
     @Test
@@ -446,6 +488,28 @@ class AIMClientSdkRecoverRouteTest {
     }
 
     /** The text of a repository file, found above the working directory. */
+    /**
+     * Returns where the handler calls the sign-in check for the recovery
+     * route, or -1. The route label is accepted as the literal "sdk_recover"
+     * or as a middleware constant that credentialRoutes defines as it.
+     */
+    private static int sdkRecoverGuardAt(String handler, String credentialRoutes) {
+        Matcher call = LIVE_SIGN_IN_GUARD.matcher(handler);
+        while (call.find()) {
+            String route = call.group(1) != null ? call.group(1) : constantValue(credentialRoutes, call.group(2));
+            if (SDK_RECOVER_ROUTE.equals(route)) {
+                return call.start();
+            }
+        }
+        return -1;
+    }
+
+    /** Returns the string a Go constant named name is set to in goSource, or null. */
+    private static String constantValue(String goSource, String name) {
+        Matcher constant = Pattern.compile("\\b" + Pattern.quote(name) + "\\s*=\\s*\"([^\"]*)\"").matcher(goSource);
+        return constant.find() ? constant.group(1) : null;
+    }
+
     private static String source(String relative) throws IOException {
         return new String(Files.readAllBytes(locate(relative)), StandardCharsets.UTF_8);
     }
