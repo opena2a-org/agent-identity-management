@@ -930,6 +930,9 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 			limit = parsedLimit
 		}
 	}
+	if limit < 1 {
+		limit = 100 // read a limit below 1 as the default page size
+	}
 
 	offset := 0
 	if offsetStr := c.Query("offset"); offsetStr != "" {
