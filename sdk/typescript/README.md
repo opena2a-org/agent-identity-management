@@ -49,7 +49,9 @@ console.log(`Trust score: ${result.trustScore}`);
 
 `init` is not in 1.3.1, the published version: the 1.3.1 package answers `init` with `Unknown command: init`. While 1.3.1 is the published version, run `init` from a source build of this repository, which reports its version as `1.3.1+source`.
 
-The onboarding screen in the dashboard generates a bootstrap token: it lasts 15 minutes and registers one agent. `init` exchanges it for an agent and saves the agent's credentials:
+`init` needs an AIM server that has onboarding tokens, which are in builds of this repository's main branch from 2026-10-08 on and in no release yet. A released server answers the token exchange with HTTP 404, which `aim-arp init` reports as `has no onboarding endpoint (HTTP 404)` and the Python SDK's `aim-sdk init` as `HTTP 404 from <url>/api/v1/onboarding/bootstrap-tokens/exchange`.
+
+The dashboard has no screen that mints a bootstrap token yet: a signed-in member, manager or admin mints one with `POST /api/v1/onboarding/bootstrap-tokens` ([API reference](https://github.com/opena2a-org/agent-identity-management/blob/main/docs/API.md#post-apiv1onboardingbootstrap-tokens)). The token lasts 15 minutes and registers one agent. `init` exchanges it for an agent and saves the agent's credentials:
 
 ```bash
 git clone https://github.com/opena2a-org/agent-identity-management.git
