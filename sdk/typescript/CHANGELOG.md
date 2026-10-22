@@ -137,6 +137,18 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - Tests: `tests/arp/intelligence/coordinator-l2-failure.test.ts`, and the failed-call cases in
   `tests/arp/intelligence/budget.test.ts`.
 
+### Fixed: the org pseudonym's doc comment names the `sensorId` and `publicKey` every report also carries
+
+- The comment at the top of `src/arp/telemetry/signature/org-pseudonym.ts` said the pseudonym "rotates ACROSS months
+  (so no long-term tracking)", and that the registry must count orgs "WITHOUT a stable per-customer identifier".
+  Every signature telemetry report also carries the sensor's `sensorId` and `publicKey`, and a new month changes
+  neither: in the test, two reports one install built at 2026-06-30T23:59:59Z and 2026-07-01T00:00:00Z carried
+  different `orgPseudonym` values and the same `sensorId` and `publicKey`. The comment now names both values and
+  says that anyone who holds the reports, the registry included, can link one sensor's reports across months by
+  either one. The rotation test in `org-pseudonym.test.ts` is now titled "ROTATES across epochs (a new pseudonym when
+  the UTC month changes)". Outside the tests, only the comment changed; no code that builds a report changed.
+- Test: `src/arp/telemetry/signature/org-pseudonym.linkability.test.ts`.
+
 ### Fixed: the GTIN event ARP sends carries `_unattributed` as its package name in place of the agent name
 
 - `AgentRuntimeProtection` built its GTIN forwarder (`gtin: { enabled: true }`) with the config's `agentName` as the

@@ -22,7 +22,7 @@ describe('computeOrgPseudonym', () => {
     expect(computeOrgPseudonym(secret, orgId, '2026-06')).toBe(computeOrgPseudonym(secret, orgId, '2026-06'));
   });
 
-  it('ROTATES across epochs (no long-term tracking)', () => {
+  it('ROTATES across epochs (a new pseudonym when the UTC month changes)', () => {
     expect(computeOrgPseudonym(secret, orgId, '2026-06')).not.toBe(computeOrgPseudonym(secret, orgId, '2026-07'));
   });
 

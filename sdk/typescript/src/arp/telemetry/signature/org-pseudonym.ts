@@ -2,16 +2,24 @@
  * Rotating salted org pseudonym (G4).
  *
  * The registry must count DISTINCT orgs reporting a hash (k-anonymity, G3) and
- * tell "first seen at A" from "blocked at B", WITHOUT a stable per-customer
- * identifier that would let an observer track one customer across hashes over
- * time. See opena2a-registry/docs/telemetry-behavioral-hash-spec.md.
+ * tell "first seen at A" from "blocked at B". A report carries this pseudonym
+ * in place of the org id. See
+ * opena2a-registry/docs/telemetry-behavioral-hash-spec.md.
  *
  *   orgSalt_epoch = HKDF(orgRootSecret, info="telemetry-org-pseudonym|"+epochId)
  *   orgPseudonym  = HMAC-SHA256(orgSalt_epoch, orgId)  [truncated to 32 hex]
  *
  * - orgRootSecret and orgId never leave the device.
  * - Stable WITHIN a UTC month (so distinct-org counting + first-seen/blocked
- *   correlation work); rotates ACROSS months (so no long-term tracking).
+ *   correlation work); a new value when the UTC month changes.
+ * - The pseudonym is not the only identifier a report carries. Every report
+ *   also carries the sensor's sensorId and publicKey (wire.ts), and a new
+ *   month changes neither: sensorId is OPENA2A_SENSOR_ID or the sensor id
+ *   file, and publicKey comes from the sensor key file (sensor-identity.ts).
+ *   Anyone who holds the reports, the registry included, can link one
+ *   sensor's reports across months by either value. The monthly rotation
+ *   limits what the pseudonym links; it does not make a sensor's reports
+ *   unlinkable.
  */
 
 import { createHmac, hkdfSync, randomBytes, randomUUID } from 'crypto';
