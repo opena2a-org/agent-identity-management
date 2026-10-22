@@ -2005,8 +2005,8 @@ func (h *A2AHandler) GetSecurityViolations(c fiber.Ctx) error {
 	limit := 50
 	offset := 0
 	if limitStr := c.Query("limit"); limitStr != "" {
-		// A negative limit keeps the default page size.
-		if l, err := strconv.Atoi(limitStr); err == nil && l >= 0 {
+		// A limit below 1 keeps the default page size.
+		if l, err := strconv.Atoi(limitStr); err == nil && l >= 1 {
 			limit = l
 		}
 	}

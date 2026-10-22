@@ -1856,8 +1856,8 @@ func (h *AgentHandler) GetAgentAlerts(c fiber.Ctx) error {
 	// Parse pagination params
 	limit := 50
 	if limitStr := c.Query("limit"); limitStr != "" {
-		// A negative limit keeps the default page size.
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit >= 0 {
+		// A limit below 1 keeps the default page size.
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit >= 1 {
 			limit = parsedLimit
 		}
 	}
