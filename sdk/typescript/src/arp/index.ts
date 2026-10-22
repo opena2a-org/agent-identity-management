@@ -590,7 +590,9 @@ export class AgentRuntimeProtection {
  *     implies the behavioral layer is also unwanted).
  *   - When `intelligence.runtimeTwin.enabled === false`: no twin.
  *   - Otherwise: construct a twin seeded from `config.agentName`, with
- *     fleet federation opt-in from the config (default off).
+ *     fleet federation opt-in from the config (default off). The twin is
+ *     also given `config.signatureTelemetry`, so `enabled: false` there
+ *     stops fleet gradients as the other opt-outs do.
  *
  * Note the asymmetry with the L2 gates, which require `enabled === true`. Here an
  * ABSENT `enabled` still builds the twin, and that difference is load-bearing:
@@ -610,6 +612,7 @@ function buildRuntimeTwin(config: ARPConfig): RuntimeTwin | null {
     enabled: true,
     fleetEnabled: twinCfg?.fleetEnabled ?? false,
     agentCategory: twinCfg?.agentCategory ?? 'general',
+    signatureTelemetry: config.signatureTelemetry,
   });
 }
 
