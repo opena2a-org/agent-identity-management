@@ -316,6 +316,59 @@ export interface LLMResponse {
   model: string;
 }
 
+// --- Intelligence status (AgentRuntimeProtection.getStatus().intelligence) ---
+
+/**
+ * The kind of adapter L2 uses. A name other than `anthropic`, `openai` or
+ * `ollama` is reported as `other`, so the status does not repeat a configured name.
+ */
+export type L2AdapterKind = 'anthropic' | 'openai' | 'ollama' | 'other';
+
+/**
+ * Why L2 is not running.
+ *
+ * - `not-enabled`: `intelligence.enabled` is not `true`.
+ * - `no-adapter`: `intelligence.enabled` is `true` and no `intelligence.adapter` is set.
+ * - `adapter-failed`: the adapter `intelligence.adapter` names could not be built,
+ *   as for `'agent-proxy'` or a name the SDK has no adapter for.
+ */
+export type L2NotRunningReason = 'not-enabled' | 'no-adapter' | 'adapter-failed';
+
+/**
+ * Whether L2 runs, as the intelligence coordinator decided when it was built.
+ * When L2 runs, `adapter` is the kind of the adapter the coordinator built.
+ * When the named adapter could not be built, `adapter` is the kind of that name.
+ */
+export type L2Status =
+  | { running: true; adapter: L2AdapterKind }
+  | { running: false; adapter?: L2AdapterKind; reason: L2NotRunningReason };
+
+/**
+ * The `intelligence` block of `AgentRuntimeProtection.getStatus()`, read from the
+ * objects the instance built. It holds booleans and codes from fixed sets only,
+ * so it carries no `adapterConfig` value, model name, error message or
+ * environment variable's value.
+ *
+ * `l2.running` and `twin.running` say whether the layer is on in this instance.
+ * Both are settled when the instance is built, so `start()` does not change
+ * them; the top-level `running` says whether the instance is started.
+ */
+export interface IntelligenceStatus {
+  l2: L2Status;
+  twin: {
+    /** The runtime twin was built (`getRuntimeTwin()` returns it). `start()` attaches it to the event engine. */
+    running: boolean;
+    /**
+     * The twin would send its fleet gradient at a flush now: it was built with
+     * `intelligence.runtimeTwin.fleetEnabled` while `isTelemetryOptedOut()` was
+     * false, and `isTelemetryOptedOut()` is false now (the twin calls it with no
+     * config). Read from `RuntimeTwin.wouldSendFleetGradient()`, which the twin's
+     * send path calls before it posts.
+     */
+    fleetGradient: boolean;
+  };
+}
+
 // --- Budget Tracking ---
 
 export interface BudgetState {

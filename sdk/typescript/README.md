@@ -496,6 +496,13 @@ embed up to 100 characters of the child command line.
 If `enabled` is true but no `adapter` is set, L2 does not run and ARP says so
 once on startup; L0 and L1 are unaffected and still gate.
 
+To read the same from code, `arp.getStatus().intelligence.l2` holds `running`
+and, when L2 does not run, a `reason` of `not-enabled`, `no-adapter` or
+`adapter-failed`. `intelligence.twin.running` says whether the behavioral twin
+was built, and `intelligence.twin.fleetGradient` whether it would send its
+fleet gradient at a flush now. The block holds booleans and codes from fixed
+sets only, so no value from `adapterConfig` appears in it.
+
 > **Changed after 1.3.1.** Versions 1.0.0 through 1.3.1 defaulted to
 > `enabled: true` with `adapter: 'agent-proxy'`, which picked a destination from
 > whichever model key was exported in the environment, so a default
