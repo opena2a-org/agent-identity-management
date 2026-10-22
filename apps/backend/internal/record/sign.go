@@ -73,11 +73,12 @@ type Record struct {
 
 // Sign seals a body in its envelope as a record of ClassRecordV1, signed by
 // the provider's key. It refuses a genesis that names a first key other than
-// the provider's, an envelope whose key identifier is not the provider's
-// public key's, and a signature that does not verify under that key.
+// the provider's, a key rotation that names the provider's key as the next
+// key, an envelope whose key identifier is not the provider's public key's,
+// and a signature that does not verify under that key.
 func Sign(ctx context.Context, b Body, kp SigningKeyProvider) (Record, error) {
 	if len(b.canonical) == 0 {
-		return Record{}, fmt.Errorf("%w: the body was not built by NewGenesis or NewRecord", ErrSigning)
+		return Record{}, fmt.Errorf("%w: the body was not built by NewGenesis, NewRecord or NewKeyRotation", ErrSigning)
 	}
 	if kp == nil {
 		return Record{}, fmt.Errorf("%w: no key provider", ErrSigning)
@@ -91,6 +92,9 @@ func Sign(ctx context.Context, b Body, kp SigningKeyProvider) (Record, error) {
 	}
 	if b.recordType == TypeChainGenesis && b.firstKeyID != key.KeyID() {
 		return Record{}, fmt.Errorf("%w: the genesis names a first key other than the provider's", ErrSigning)
+	}
+	if b.recordType == TypeKeyRotation && b.nextKeyID == key.KeyID() {
+		return Record{}, fmt.Errorf("%w: a key rotation is signed by the key it retires, not by the next key it names", ErrSigning)
 	}
 	payload := Payload{canonical: b.canonical}
 	message, err := SigningInput(ClassRecordV1, payload)

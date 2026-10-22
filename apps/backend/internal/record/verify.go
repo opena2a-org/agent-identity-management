@@ -40,6 +40,16 @@ const (
 	// FailureGenesis: the record at sequence 0 does not follow the genesis
 	// rule, or a genesis sits after the start.
 	FailureGenesis FailureKind = "genesis"
+	// FailureRetiredKey: the record is signed by a key that a key rotation
+	// earlier in the chain retired. Key validity is decided by position, so
+	// the record's timestamp does not change this.
+	FailureRetiredKey FailureKind = "retired_key"
+	// FailureKeyRotation: a key rotation cannot be followed. It names no
+	// usable next key, or a key the chain has already signed with; its reason
+	// is missing or outside the closed set; or its exposure time is missing
+	// on a rotation on exposure, present on a scheduled or custody change
+	// rotation, or not a timestamp in canonical form.
+	FailureKeyRotation FailureKind = "key_rotation"
 )
 
 // Failure is the first point at which a sequence fails verification.
@@ -60,6 +70,10 @@ type Result struct {
 	Verified int
 	// Head is the newest verified record, nil when none verified.
 	Head *Head
+	// Key is the key the record after Head must be signed with: the
+	// verifier's key, or the next key of the newest verified key rotation.
+	// Nil when no record verified.
+	Key *PublicKey
 	// Failure is the first failure, nil when the walk reached the end.
 	Failure *Failure
 }
@@ -70,8 +84,15 @@ func (r Result) OK() bool { return r.Failure == nil && r.Verified > 0 }
 
 // Verify walks records from the genesis of a chain, in sequence order, and
 // stops at the first position where the chain or a signature fails. key is the
-// chain's signing key as the verifier holds it; the records' own claims about
+// chain's first key as the verifier holds it; the records' own claims about
 // keys are checked against it and never trusted in its place.
+//
+// A later key is accepted only through a key rotation record that the key in
+// force signs at its position in the chain. From the record after it, the key
+// the rotation names is the only key a record verifies under. Key validity is
+// decided by position and never by time: a record that sits after its chain's
+// rotation and is signed by the key the rotation retired fails, whatever its
+// timestamp says.
 //
 // Verification reads the stored canonical bytes and never serializes a record
 // again. Records removed from the end of the sequence leave nothing to see
@@ -81,24 +102,30 @@ func Verify(records []Record, key PublicKey) (Result, error) {
 		return Result{}, fmt.Errorf("record: the verifier's key is unusable: %v", err)
 	}
 	var res Result
+	ring := keyRing{current: key}
 	for i := range records {
-		head, failure := verifyAt(records, i, res.Head, key)
+		head, next, failure := verifyAt(records, i, res.Head, ring)
 		if failure != nil {
 			res.Failure = failure
 			return res, nil
 		}
+		ring = next
 		res.Verified = i + 1
 		res.Head = head
+		inForce := ring.current
+		res.Key = &inForce
 	}
 	return res, nil
 }
 
 // verifyAt checks the record at position i against the head of the verified
-// records before it.
-func verifyAt(records []Record, i int, prev *Head, key PublicKey) (*Head, *Failure) {
+// records before it and the keys of the chain at that position. It returns the
+// keys at the next position.
+func verifyAt(records []Record, i int, prev *Head, ring keyRing) (*Head, keyRing, *Failure) {
 	rec := records[i]
-	fail := func(kind FailureKind, format string, args ...any) (*Head, *Failure) {
-		return nil, &Failure{Position: i, Kind: kind, Detail: fmt.Sprintf(format, args...)}
+	key := ring.current
+	fail := func(kind FailureKind, format string, args ...any) (*Head, keyRing, *Failure) {
+		return nil, ring, &Failure{Position: i, Kind: kind, Detail: fmt.Sprintf(format, args...)}
 	}
 
 	if rec.Envelope.PayloadType != PayloadTypeRecordV1 {
@@ -113,11 +140,17 @@ func verifyAt(records []Record, i int, prev *Head, key PublicKey) (*Head, *Failu
 		return fail(FailureModified, "the stored record hash is not the hash of the stored canonical bytes")
 	}
 	if reason := checkSignatures(rec.Envelope, key); reason != "" {
+		// A holder of a retired key chooses the time it writes, so a record
+		// it signs after the rotation fails here, whatever its timestamp.
+		if old, ok := ring.retiredSigner(rec.Envelope); ok {
+			return fail(FailureRetiredKey, "the record is signed by key %s, which the key rotation at sequence %d retired", old.key.KeyID(), old.seq)
+		}
 		// The bytes fail their signature. When the next record is authentic
 		// and commits to a different hash, the bytes changed after they were
-		// chained; otherwise the signature is what is wrong.
+		// chained; otherwise the signature is what is wrong. The next record
+		// is read under the key these bytes name for it.
 		if i+1 < len(records) {
-			if next, ok := authenticHeader(records[i+1], key); ok && next.seq == int64(i)+1 && next.prevHash != nil && *next.prevHash != digest {
+			if next, ok := authenticHeader(records[i+1], keyAfter(payload, key)); ok && next.seq == int64(i)+1 && next.prevHash != nil && *next.prevHash != digest {
 				return fail(FailureModified, "%s, and the next record commits to a different hash", reason)
 			}
 		}
@@ -180,7 +213,14 @@ func verifyAt(records []Record, i int, prev *Head, key PublicKey) (*Head, *Failu
 	if reason := checkPart("personal", rec.PersonalPart, rec.PersonalSalt, h.commitments); reason != "" {
 		return fail(FailureModified, "%s", reason)
 	}
-	return &Head{ChainID: h.chainID, Seq: h.seq, Hash: digest}, nil
+	next := ring
+	if h.recordType == TypeKeyRotation {
+		var reason string
+		if next, reason = ring.rotate(h); reason != "" {
+			return fail(FailureKeyRotation, "%s", reason)
+		}
+	}
+	return &Head{ChainID: h.chainID, Seq: h.seq, Hash: digest}, next, nil
 }
 
 // checkSignatures returns why the envelope does not open as a record under the
@@ -262,20 +302,38 @@ func authenticHeader(rec Record, key PublicKey) (header, bool) {
 
 // header is what the verifier reads from a record's canonical bytes.
 type header struct {
-	recordType  string
-	schema      string
-	chainID     string
-	seq         int64
-	prevHash    *string
-	sigAlgs     []string
-	commitments map[string]string
-	firstKey    *firstKey
+	recordType      string
+	schema          string
+	chainID         string
+	seq             int64
+	prevHash        *string
+	sigAlgs         []string
+	commitments     map[string]string
+	firstKey        *namedKey
+	nextKey         *namedKey
+	rotationReason  *string
+	exposureBeganAt *string
 }
 
-type firstKey struct {
+// namedKey is a key as a record names it.
+type namedKey struct {
 	keyID     string
 	alg       string
 	publicKey string
+}
+
+// keyDoc decodes a member that names a key.
+type keyDoc struct {
+	KeyID     string `json:"keyid"`
+	Alg       string `json:"alg"`
+	PublicKey string `json:"public_key"`
+}
+
+func (d *keyDoc) named() *namedKey {
+	if d == nil {
+		return nil
+	}
+	return &namedKey{keyID: d.KeyID, alg: d.Alg, publicKey: d.PublicKey}
 }
 
 func parseHeader(payload []byte) (header, error) {
@@ -288,13 +346,12 @@ func parseHeader(payload []byte) (header, error) {
 				Seq      *int64  `json:"seq"`
 				PrevHash *string `json:"prev_hash"`
 			} `json:"chain"`
-			SigAlgs     []string          `json:"sig_algs"`
-			Commitments map[string]string `json:"commitments"`
-			FirstKey    *struct {
-				KeyID     string `json:"keyid"`
-				Alg       string `json:"alg"`
-				PublicKey string `json:"public_key"`
-			} `json:"first_key"`
+			SigAlgs         []string          `json:"sig_algs"`
+			Commitments     map[string]string `json:"commitments"`
+			FirstKey        *keyDoc           `json:"first_key"`
+			NextKey         *keyDoc           `json:"next_key"`
+			RotationReason  *string           `json:"rotation_reason"`
+			ExposureBeganAt *string           `json:"exposure_began_at"`
 		} `json:"opena2a"`
 	}
 	if err := json.Unmarshal(payload, &doc); err != nil {
@@ -312,17 +369,17 @@ func parseHeader(payload []byte) (header, error) {
 	case *doc.OpenA2A.Chain.Seq < 0:
 		return header{}, errors.New("the record's sequence number is negative")
 	}
-	h := header{
-		recordType:  *doc.Type,
-		schema:      *doc.OpenA2A.Schema,
-		chainID:     *doc.OpenA2A.Chain.ID,
-		seq:         *doc.OpenA2A.Chain.Seq,
-		prevHash:    doc.OpenA2A.Chain.PrevHash,
-		sigAlgs:     doc.OpenA2A.SigAlgs,
-		commitments: doc.OpenA2A.Commitments,
-	}
-	if k := doc.OpenA2A.FirstKey; k != nil {
-		h.firstKey = &firstKey{keyID: k.KeyID, alg: k.Alg, publicKey: k.PublicKey}
-	}
-	return h, nil
+	return header{
+		recordType:      *doc.Type,
+		schema:          *doc.OpenA2A.Schema,
+		chainID:         *doc.OpenA2A.Chain.ID,
+		seq:             *doc.OpenA2A.Chain.Seq,
+		prevHash:        doc.OpenA2A.Chain.PrevHash,
+		sigAlgs:         doc.OpenA2A.SigAlgs,
+		commitments:     doc.OpenA2A.Commitments,
+		firstKey:        doc.OpenA2A.FirstKey.named(),
+		nextKey:         doc.OpenA2A.NextKey.named(),
+		rotationReason:  doc.OpenA2A.RotationReason,
+		exposureBeganAt: doc.OpenA2A.ExposureBeganAt,
+	}, nil
 }

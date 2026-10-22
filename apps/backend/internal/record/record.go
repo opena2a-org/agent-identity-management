@@ -16,6 +16,10 @@ const (
 	// TypeChainGenesis is the type of the first record of a chain.
 	TypeChainGenesis = "opena2a.chain_genesis"
 
+	// TypeKeyRotation is the type of the record that retires the key in force
+	// and names the key that signs every later record of its chain.
+	TypeKeyRotation = "opena2a.key_rotation"
+
 	// SaltSize is the length in bytes of the salt of an erasable part.
 	SaltSize = 32
 
@@ -41,7 +45,8 @@ type Draft struct {
 	// Retained holds the further members of the retained part. Members under
 	// "opena2a" sit in one map[string]any. The members this package sets
 	// (event_id, type, timestamp, and schema, chain, commitments, sig_algs,
-	// first_key and pre_genesis under "opena2a") are refused here.
+	// first_key, pre_genesis, next_key, rotation_reason and exposure_began_at
+	// under "opena2a") are refused here.
 	Retained map[string]any
 	// Tenant and Personal are the erasable parts.
 	Tenant       map[string]any
@@ -62,13 +67,15 @@ type Head struct {
 }
 
 // Body is a record with its place in a chain and its canonical bytes fixed,
-// not yet signed. Only NewGenesis and NewRecord produce one, so the bytes Sign
-// hands to a key provider always come from this package's serializer.
+// not yet signed. Only NewGenesis, NewRecord and NewKeyRotation produce one,
+// so the bytes Sign hands to a key provider always come from this package's
+// serializer.
 type Body struct {
 	canonical    []byte
 	head         Head
 	recordType   string
 	firstKeyID   string
+	nextKeyID    string
 	tenantPart   []byte
 	tenantSalt   []byte
 	personalPart []byte
@@ -114,11 +121,7 @@ func NewGenesis(g Genesis) (Body, error) {
 		return Body{}, err
 	}
 	own := map[string]any{
-		"first_key": map[string]any{
-			"keyid":      g.FirstKey.KeyID(),
-			"alg":        g.FirstKey.Alg,
-			"public_key": hex.EncodeToString(g.FirstKey.Key),
-		},
+		"first_key":   keyMember(g.FirstKey),
 		"pre_genesis": pre,
 	}
 	b, err := seal(g.ChainID, 0, nil, d, own)
@@ -132,19 +135,40 @@ func NewGenesis(g Genesis) (Body, error) {
 // NewRecord builds the record that follows prev: sequence prev.Seq plus one,
 // committing to prev.Hash.
 func NewRecord(prev Head, d Draft) (Body, error) {
-	if !isCanonicalUUID(prev.ChainID) {
-		return Body{}, fmt.Errorf("%w: the head's chain id is not a lowercase hyphenated UUID", ErrInvalidRecord)
-	}
-	if prev.Seq < 0 {
-		return Body{}, fmt.Errorf("%w: the head's sequence number is negative", ErrInvalidRecord)
-	}
-	if !isLowerHexDigest(prev.Hash) {
-		return Body{}, fmt.Errorf("%w: the head's hash is not 64 lowercase hex characters", ErrInvalidRecord)
+	if err := checkHead(prev); err != nil {
+		return Body{}, err
 	}
 	if d.Type == TypeChainGenesis {
 		return Body{}, fmt.Errorf("%w: a chain has one genesis, at sequence 0", ErrInvalidRecord)
 	}
+	if d.Type == TypeKeyRotation {
+		return Body{}, fmt.Errorf("%w: a key rotation is built by NewKeyRotation", ErrInvalidRecord)
+	}
 	return seal(prev.ChainID, prev.Seq+1, prev.Hash, d, nil)
+}
+
+// checkHead refuses a head that names no record a next record can link to.
+func checkHead(prev Head) error {
+	if !isCanonicalUUID(prev.ChainID) {
+		return fmt.Errorf("%w: the head's chain id is not a lowercase hyphenated UUID", ErrInvalidRecord)
+	}
+	if prev.Seq < 0 {
+		return fmt.Errorf("%w: the head's sequence number is negative", ErrInvalidRecord)
+	}
+	if !isLowerHexDigest(prev.Hash) {
+		return fmt.Errorf("%w: the head's hash is not 64 lowercase hex characters", ErrInvalidRecord)
+	}
+	return nil
+}
+
+// keyMember is the member that names a key in a record: its key id, its
+// algorithm and its public key in lowercase hex.
+func keyMember(k PublicKey) map[string]any {
+	return map[string]any{
+		"keyid":      k.KeyID(),
+		"alg":        k.Alg,
+		"public_key": hex.EncodeToString(k.Key),
+	}
 }
 
 // seal fixes a draft's place in a chain and serializes its retained part. own
@@ -183,7 +207,7 @@ func seal(chainID string, seq int64, prevHash any, d Draft, own map[string]any) 
 			ext[k] = v
 		}
 	}
-	for _, name := range []string{"schema", "chain", "commitments", "sig_algs", "first_key", "pre_genesis"} {
+	for _, name := range []string{"schema", "chain", "commitments", "sig_algs", "first_key", "pre_genesis", "next_key", "rotation_reason", "exposure_began_at"} {
 		if _, set := ext[name]; set {
 			return Body{}, fmt.Errorf("%w: %s.%s is set by the record package, not by the caller", ErrInvalidRecord, extensionMember, name)
 		}

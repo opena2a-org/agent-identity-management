@@ -195,6 +195,7 @@ func TestSeal_RefusesInvalidDrafts(t *testing.T) {
 		"event_id in upper case":    func(d *Draft) { d.EventID = strings.ToUpper(fixtureActionEvent) },
 		"no type":                   func(d *Draft) { d.Type = "" },
 		"genesis type after start":  func(d *Draft) { d.Type = TypeChainGenesis },
+		"key rotation type":         func(d *Draft) { d.Type = TypeKeyRotation },
 		"no timestamp":              func(d *Draft) { d.Timestamp = time.Time{} },
 		"caller sets type":          func(d *Draft) { d.Retained["type"] = "other" },
 		"caller sets timestamp":     func(d *Draft) { d.Retained["timestamp"] = "2026-01-01T00:00:00.000000Z" },
@@ -222,6 +223,11 @@ func TestSeal_RefusesInvalidDrafts(t *testing.T) {
 		},
 		"chain in an erasable part": func(d *Draft) {
 			d.Tenant["opena2a"] = map[string]any{"chain": map[string]any{"seq": 0}}
+		},
+		"caller sets next_key":        func(d *Draft) { d.Retained["opena2a"].(map[string]any)["next_key"] = map[string]any{} },
+		"caller sets rotation_reason": func(d *Draft) { d.Retained["opena2a"].(map[string]any)["rotation_reason"] = RotationScheduled },
+		"caller sets exposure_began_at": func(d *Draft) {
+			d.Retained["opena2a"].(map[string]any)["exposure_began_at"] = "2026-01-01T00:00:00.000000Z"
 		},
 	}
 	for name, mutate := range cases {
