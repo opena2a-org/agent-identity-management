@@ -19,6 +19,7 @@ import {
   clearOptOutMarker,
   disclosureText,
   peekSensorId,
+  peekSensorPublicKey,
   peekOrgPseudonym,
   purgeRemoteSignatures,
   manualPurgeCurl,
@@ -185,12 +186,15 @@ export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<
   // Read-only: status must never create identity state. Peeks return null until
   // the first send mints an identity. Peeked values pass the terminal strip as
   // defence in depth -- an on-disk id predating enroll's shape validation, or
-  // one written by another tool, must not drive the terminal.
+  // one written by another tool, must not drive the terminal. The public key is
+  // hex the peek computes from the key, not text read from disk.
   const sensorId = peekSensorId();
+  const publicKey = await peekSensorPublicKey();
   const orgPseudonym = peekOrgPseudonym();
   console.log(
     `  Sensor id:    ${sensorId ? sanitizeTerminalText(sensorId) : 'none yet (created on first send)'}`,
   );
+  console.log(`  Public key:   ${publicKey ?? 'none yet (created on first send)'}`);
   console.log(
     `  Org pseudonym:${' '}${orgPseudonym ? `${sanitizeTerminalText(orgPseudonym)} (rotates monthly)` : 'none yet (created on first send)'}`,
   );

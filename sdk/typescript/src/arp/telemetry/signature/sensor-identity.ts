@@ -89,6 +89,21 @@ export async function publicKeyHex(priv: Uint8Array): Promise<string> {
   return Buffer.from(pub).toString('hex');
 }
 
+/**
+ * Read the sensor's public key WITHOUT creating a key. Returns null when no key
+ * file exists yet, or when the file does not hold a 32-byte hex key, which the
+ * next report build replaces with a new key (loadSensorPrivateKey). Read-only
+ * surfaces (`aim-arp telemetry status`) must use this, for the reason
+ * peekSensorId gives.
+ */
+export async function peekSensorPublicKey(): Promise<string | null> {
+  const p = homePath(SENSOR_KEY_FILE);
+  if (!existsSync(p)) return null;
+  const buf = Buffer.from(readFileSync(p, 'utf8').trim(), 'hex');
+  if (buf.length !== 32) return null;
+  return publicKeyHex(new Uint8Array(buf));
+}
+
 /** Sign a UTF-8 canonical string with the sensor key; returns lowercase-hex sig. */
 export async function signCanonicalHex(priv: Uint8Array, canonical: string): Promise<string> {
   const sig = await ed25519.signAsync(new TextEncoder().encode(canonical), priv);
