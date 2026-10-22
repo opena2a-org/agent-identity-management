@@ -11,6 +11,30 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a failed read of an agent's FGA policy or granted capabilities is answered with a fixed reason, not the database error (#854)
+
+- The verification handler, which serves `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications`,
+  denies a call whose agent's FGA policy cannot be read with the `denialReason`
+  `Action denied: the agent's FGA policy for this capability could not be read`, and a call whose step 1 returns an
+  error and no reason with `Action denied: the verification could not be completed`. Both are answered 403, and the
+  audit entry records the same reason; for the unreadable policy the verification event's error reason is that text
+  too. The error goes to the server log as `verification decision failed for agent <id>: <error>`.
+- `AgentService.VerifyCapability` denies a call whose agent's granted capabilities cannot be read with the reason
+  `Action denied: the capabilities granted to the agent could not be read`, and returns the read's error beside it.
+- `POST /api/v1/agents/:id/authorize` answers an engine error with HTTP 500 and the engine's `ERROR` result, whose
+  `deniedReason` is now `Authorization error: the agent's FGA policy or granted capabilities could not be read`. For
+  an unreadable policy, the engine's `fga.decision` log line carries the error under `fga.denied_reason`, and the
+  `fga.authorize` span's status description carries it.
+- Before, measured with the handler tests over a policy read that sqlmock fails with
+  `pq: relation fga_policies does not exist (host policy-store.internal)`: the verification handler answered 403 with
+  the `denialReason` `Verification error: failed to load FGA policy: ` followed by that error, and the authorize
+  route answered 500 with the `deniedReason` `failed to load FGA policy: ` followed by that error. A step 1 error with
+  no reason was answered 403 with `Verification error: ` followed by the error. `VerifyCapability`'s reason for a
+  failed read of the granted capabilities was `Failed to fetch agent capabilities: ` followed by the read's error.
+- Tests: `apps/backend/internal/interfaces/http/handlers/verification_fga_engine_test.go`,
+  `apps/backend/internal/interfaces/http/handlers/authorize_handler_test.go`,
+  `apps/backend/internal/application/agent_service_capabilities_unreadable_test.go`.
+
 ### Fixed — a limit of 0 on the agent alert, agent violation and A2A violation routes is read as the route's default page size (#849)
 
 - `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations` and `GET /api/v1/a2a/security/violations`
@@ -332,7 +356,7 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
   strict mode the call is denied with the check's reason (HTTP 403, `status` `denied`); in monitoring mode it runs,
   and the audit entry and the verification event record the denial under `fgaDeniedBy` and `fgaDeniedReason`. Both
   records carry `fgaOutcome` and `fgaStepsTriggered` for every decision. A policy row that cannot be read denies the
-  call with `Verification error: failed to load FGA policy: ...` before step 1 runs.
+  call with `Action denied: the agent's FGA policy for this capability could not be read` before step 1 runs (#854).
 - On both routes, an agent with no `fga_policies` row for the capability is decided under a default policy: no
   attribute, action or object restriction, no context rules and no chain rules, and the risk level detected from the
   capability, or the `riskLevel` an SDK verification names, with `critical` and `high` as HIGH. Steps 2, 3 and 4 run

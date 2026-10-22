@@ -406,6 +406,17 @@ func (h *VerificationHandler) statusRefusalAuditEntry(c fiber.Ctx, agent *domain
 	}
 }
 
+// The denial reasons of a verification whose decision failed. The response
+// body, the audit entry and the verification event carry the reason; the
+// error goes to the server log, since a driver's error names tables and hosts.
+const (
+	// fgaPolicyUnreadableReason: the agent's FGA policy could not be read,
+	// so step 1 never ran.
+	fgaPolicyUnreadableReason = "Action denied: the agent's FGA policy for this capability could not be read"
+	// verificationErrorReason: the decision failed and step 1 gave no reason.
+	verificationErrorReason = "Action denied: the verification could not be completed"
+)
+
 // decideAndRecord makes the capability decision for an authenticated request
 // and writes its audit entry, alert and verification event.
 func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, agentID uuid.UUID, in verificationInput) error {
@@ -456,6 +467,7 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 			// error, denied below like a failed VerifyCapability.
 			allowed = false
 			err = fgaErr
+			denialReason = fgaPolicyUnreadableReason
 		}
 	} else {
 		_, _, _ = verifyCapability(c.Context())
@@ -491,9 +503,10 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 	var status string
 	if err != nil {
 		// Error during verification - deny by default for security
+		log.Printf("verification decision failed for agent %s: %v", agentID, err)
 		status = "denied"
 		if denialReason == "" {
-			denialReason = fmt.Sprintf("Verification error: %v", err)
+			denialReason = verificationErrorReason
 		}
 	} else if allowed {
 		// Distinguish between manual approval and auto-approval in monitoring mode

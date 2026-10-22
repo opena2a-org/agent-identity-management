@@ -47,6 +47,11 @@ func NewAuthorizeHandlerWithInterface(fga FGAAuthorizer, agentRepo domain.AgentR
 	return &AuthorizeHandler{fga: fga, agentRepo: agentRepo}
 }
 
+// authorizationEngineErrorReason is the deniedReason of the ERROR result the
+// route answers with HTTP 500. FGAEngine.Authorize returns an error when the
+// agent's FGA policy or the capabilities granted to it cannot be read.
+const authorizationEngineErrorReason = "Authorization error: the agent's FGA policy or granted capabilities could not be read"
+
 // authorizeRequestBody mirrors application.FGARequest minus AgentID, RiskLevel
 // and CapabilityCheck: the agent ID is taken from the URL path so the route
 // parameter is the single source of truth and cannot be spoofed by a request
@@ -129,14 +134,18 @@ func (h *AuthorizeHandler) Authorize(c fiber.Ctx) error {
 	result, err := h.fga.Authorize(c.Context(), req)
 	if err != nil {
 		// FGAEngine's deferred span finalizer already emits the
-		// outcome=ERROR metric/log, so we just translate to HTTP. The
-		// engine returns its synthesized ERROR result via the named
-		// return; surface it so the caller can read DeniedReason.
+		// outcome=ERROR metric/log, with the error on the span and in the
+		// fga.decision log line, so we just translate to HTTP. The engine
+		// returns its synthesized ERROR result via the named return, whose
+		// DeniedReason is the error's text; surface the result with a fixed
+		// reason instead, since a driver's error names tables and hosts.
 		status := fiber.StatusInternalServerError
 		if result == nil {
 			return c.Status(status).JSON(ErrorResponse{Error: "authorization engine failure"})
 		}
-		return c.Status(status).JSON(result)
+		answer := *result
+		answer.DeniedReason = authorizationEngineErrorReason
+		return c.Status(status).JSON(answer)
 	}
 
 	return c.Status(fiber.StatusOK).JSON(result)
