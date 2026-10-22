@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed: `aim-sdk --version`, `aim-sdk -V` and `aim-sdk version` say when the copy is a source build
+
+- The three version lines print `aim-sdk <version>+source (built from source; not the published <version>)` unless
+  the copy is the published release, which prints `aim-sdk <version>`; `aim-arp --version` uses the same wording. A
+  copy is the published release when no `VERSION` file sits beside the imported package and the `aim-sdk`
+  distribution's metadata exists without a `direct_url.json`, which pip writes (PEP 610) for an install from a local
+  directory, a VCS URL or an archive URL and never for an install from a package index. A source tree on
+  `PYTHONPATH`, an install from a clone and a copy without distribution metadata print the qualifier.
+- Measured on Python 3.14.3: a source tree with the previous `cli.py`, the same tree installed with
+  `pip install <directory>`, and aim-sdk 2.0.3 installed from PyPI each printed `aim-sdk 2.0.3` for
+  `aim-sdk --version`, `aim-sdk -V` and `aim-sdk version`. The source build has `init`, `demo`, `help`,
+  `status --json`, `version --json`, `login --no-browser` and `login --allow-http`, which 2.0.3 does not have.
+- `version --json` prints `{"version": "<version>"}` with the bare version, and `aim_sdk.__version__` and the
+  User-Agents are unchanged. `--version` and `-V` print their line as `aim-sdk version` does, on one line on a
+  narrow terminal too.
+- Tests: `tests/test_cli_version_names_a_source_build.py`.
+
+### Changed: the README says what 2.0.3 lacks, what `aim-sdk init` needs from the server, and how a bootstrap token is minted
+
+- Where the Quick start introduces `aim-sdk init`, the README says that `init` is not in 2.0.3, the published
+  version, which answers `aim-sdk init` with
+  `aim-sdk: error: argument command: invalid choice: 'init' (choose from login, logout, status, version)`, and
+  that a source build, installed with `pip install "./sdk/python[rich]"` from the root of a clone, runs it and
+  reports its version as `2.0.3+source`. The CLI commands section names what 2.0.3 has (`login` with `--url` and
+  `--force`, `logout`, `status`, `version`, `--version`) and the commands and flags it does not have (`init`,
+  `demo`, `help`, `status --json`, `version --json`, `login --no-browser`, `login --allow-http`).
+- The `init` paragraph says that `init` needs an AIM server that has onboarding tokens, which are in builds of the
+  main branch from 2026-10-08 on and in no release yet, and how `aim-sdk init` and `aim-arp init` report the HTTP 404
+  a released server answers the token exchange with.
+- The paragraph said to copy the command from the dashboard's onboarding screen. The dashboard has no screen that
+  mints a bootstrap token; the paragraph now says that a signed-in member, manager or admin mints one with
+  `POST /api/v1/onboarding/bootstrap-tokens`, and links to that route in `docs/API.md`.
+
 ### Fixed: `aim-sdk demo --cleanup` sends the stored sign-in's token only to the server that sign-in is for
 
 - `aim-sdk demo --cleanup` looks the demo agent up and deletes it with the access token of the sign-in stored on this

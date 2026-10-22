@@ -59,9 +59,15 @@ def __getattr__(name):
 
 
 # Version - avoid circular import
+def _version_file():
+    """The VERSION file beside the package. A source tree and the sdist carry
+    it; a wheel installs the package without it."""
+    return os.path.join(os.path.dirname(__file__), "..", "VERSION")
+
+
 def _get_version():
     """Get version from VERSION file or fallback."""
-    version_file = os.path.join(os.path.dirname(__file__), "..", "VERSION")
+    version_file = _version_file()
     if os.path.exists(version_file):
         with open(version_file, "r", encoding="utf-8") as vf:
             return vf.read().strip()
@@ -72,6 +78,46 @@ def _get_version():
         return "0.0.0"
 
 __version__ = _get_version()
+
+
+def cli_version():
+    """The version `aim-sdk --version`, `-V` and `aim-sdk version` print.
+
+    `__version__` when this copy is the published release, otherwise
+    `<version>+source (built from source; not the published <version>)`, the
+    wording of `aim-arp --version`. The copy is the published release when no
+    VERSION file sits beside the package and the aim-sdk distribution's
+    metadata exists without a direct_url.json: pip writes that file (PEP 610)
+    for an install from a local directory, a VCS URL or an archive URL, and
+    never for an install from a package index. A source tree on PYTHONPATH, an
+    install from a clone and a copy without distribution metadata are source
+    builds. `version --json`, `__version__` and the User-Agent stay the bare
+    version.
+    """
+    if not os.path.exists(_version_file()):
+        try:
+            from importlib.metadata import distribution
+            if distribution("aim-sdk").read_text("direct_url.json") is None:
+                return __version__
+        except Exception:  # PackageNotFoundError, or metadata it cannot read
+            pass
+    return f"{__version__}+source (built from source; not the published {__version__})"
+
+
+class _VersionLineAction(argparse.Action):
+    """`--version` and `-V`: print the line `aim-sdk version` prints, and exit 0.
+
+    argparse's own version action passes its text through the help formatter,
+    which wraps it at the terminal width.
+    """
+
+    def __init__(self, option_strings, dest=argparse.SUPPRESS, default=argparse.SUPPRESS, help=None):
+        super().__init__(option_strings=option_strings, dest=dest, default=default, nargs=0, help=help)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(f"aim-sdk {cli_version()}")
+        parser.exit()
+
 
 # Default AIM Cloud URL
 DEFAULT_AIM_URL = "https://aim.opena2a.org"
@@ -1544,7 +1590,7 @@ def version_cmd(args):
     if getattr(args, 'json', False):
         print(json.dumps({"version": __version__}))
         return 0
-    print(f"aim-sdk {__version__}")
+    print(f"aim-sdk {cli_version()}")
     return 0
 
 
@@ -1568,8 +1614,7 @@ def main():
     )
     parser.add_argument(
         '--version', '-V',
-        action='version',
-        version=f'aim-sdk {__version__}',
+        action=_VersionLineAction,
         help='Show SDK version and exit',
     )
     subparsers = parser.add_subparsers(dest='command', help='Commands')

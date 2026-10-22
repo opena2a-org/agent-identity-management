@@ -7,6 +7,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed: the README's `init` section says what `init` needs from the server and how a bootstrap token is minted
+
+- "Register a first agent from the terminal" says that `init` needs an AIM server that has onboarding tokens, which
+  are in builds of this repository's main branch from 2026-10-08 on and in no release yet, and how `aim-arp init` and
+  the Python SDK's `aim-sdk init` report the HTTP 404 a released server answers the token exchange with:
+  `has no onboarding endpoint (HTTP 404)` and `HTTP 404 from <url>/api/v1/onboarding/bootstrap-tokens/exchange`.
+- The section said that the onboarding screen in the dashboard generates the bootstrap token. The dashboard has no
+  screen that mints one; the section now says that a signed-in member, manager or admin mints one with
+  `POST /api/v1/onboarding/bootstrap-tokens`, and links to that route in `docs/API.md`. The source-build block and
+  the release condition before the npx form are unchanged.
+
 ### Fixed — ARP's `loadConfig` names the file and gives the parser's message when a config does not parse (#861)
 
 - Run on the code before this change (Node.js 26.12.0, js-yaml 4.3.2), `loadConfig(path)` from

@@ -70,7 +70,11 @@ delete_customer(42)
 
 AIM refuses it before the function body runs, and the `ActionDeniedError` it raises says why. Measured with aim-sdk 2.0.3 against a self-hosted stack on 2026-09-22 (server commit ce68f10), with the organization in strict mode: the decorator files a capability request for `db:write`, the server refuses the call, and the audit log for the agent records the denial with the same reason. An `ActionDeniedError` is a `PermissionError`, so an existing `except PermissionError` handler catches it.
 
-To register a first agent without a browser round trip, copy the command from the dashboard's onboarding screen. It carries a bootstrap token that is valid for 15 minutes and registers one agent:
+To register a first agent without a browser round trip, use `aim-sdk init`. `init` is not in 2.0.3, the published version: 2.0.3 answers `aim-sdk init` with `aim-sdk: error: argument command: invalid choice: 'init' (choose from login, logout, status, version)`. While 2.0.3 is the published version, run `init` from a source build of this repository, which reports its version as `2.0.3+source`: from the root of a clone, `pip install "./sdk/python[rich]"`.
+
+`init` needs an AIM server that has onboarding tokens, which are in builds of this repository's main branch from 2026-10-08 on and in no release yet. A released server answers the token exchange with HTTP 404, which `aim-sdk init` reports as `HTTP 404 from <url>/api/v1/onboarding/bootstrap-tokens/exchange` and the TypeScript SDK's `aim-arp init` as `has no onboarding endpoint (HTTP 404)`.
+
+The dashboard has no screen that mints a bootstrap token yet: a signed-in member, manager or admin mints one with `POST /api/v1/onboarding/bootstrap-tokens` ([API reference](https://github.com/opena2a-org/agent-identity-management/blob/main/docs/API.md#post-apiv1onboardingbootstrap-tokens)). The token is valid for 15 minutes and registers one agent:
 
 ```bash
 AIM_BOOTSTRAP_TOKEN=aim_ob_... aim-sdk init                       # registers my-first-agent
@@ -265,6 +269,8 @@ aim-sdk logout                   # Revoke the session on the server, clear ~/.ai
 aim-sdk status                   # Show the SDK sign-in and the agents saved on this machine
 aim-sdk --version                # Show SDK version
 ```
+
+The published 2.0.3 has `login` with `--url` and `--force`, `logout`, `status`, `version` and `--version`; it does not have `init`, `demo`, `help`, `status --json`, `version --json`, `login --no-browser` or `login --allow-http`, which run from a source build of this repository, as the Quick start describes for `init`.
 
 The demo agent registers in your own organization under agent type `demo`:
 visibly a demo in every list, excluded from adoption and trust analytics,
