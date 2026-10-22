@@ -19,7 +19,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `"offset": 0`. `offset=0` and `offset=2` reach the query as sent.
 - Before, each of the four handlers sent the negative offset to that query unchanged. PostgreSQL refuses a negative
   `OFFSET` (`ERROR: OFFSET must not be negative`, measured on PostgreSQL 14.21 with a bound offset of -1 and of
-  -100), and with the page query refused, a member's session was answered 500: `Failed to fetch alerts` on both
+  -100), and with the page query refused, the request was answered 500: `Failed to fetch alerts` on both
   alert routes, `An internal error occurred. Please try again later.` on the agent violation route and
   `Failed to get security violations` on the A2A route.
 - Tests: `apps/backend/internal/interfaces/http/handlers/list_routes_negative_offset_test.go`.
