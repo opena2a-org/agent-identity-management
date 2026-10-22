@@ -925,7 +925,8 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 	// Parse limit and offset with defaults (Fiber v3 compatibility)
 	limit := 100
 	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil {
+		// A negative limit keeps the default page size.
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit >= 0 {
 			limit = parsedLimit
 		}
 	}
