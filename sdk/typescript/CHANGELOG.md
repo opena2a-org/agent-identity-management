@@ -137,6 +137,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - Tests: `tests/arp/intelligence/coordinator-l2-failure.test.ts`, and the failed-call cases in
   `tests/arp/intelligence/budget.test.ts`.
 
+### Fixed: the GTIN event ARP sends carries `_unattributed` as its package name in place of the agent name
+
+- `AgentRuntimeProtection` built its GTIN forwarder (`gtin: { enabled: true }`) with the config's `agentName` as the
+  `packageName` of each payload it posts to `/api/v1/telemetry/runtime`. The agent name is the operator's own label
+  for the agent, not a public package name. Measured on the code before this change, against a server on 127.0.0.1:
+  an ARP configured with `agentName: 'acme-payroll-agent-7f3'` posted a payload whose `packageName` was
+  `acme-payroll-agent-7f3`, and an ARP loaded from a JSON config file that sets no `agentName` posted the base name
+  of the working directory (`acme-payroll-checkout-7f3` in the test), which `loadConfig` gives an agent the file
+  leaves unnamed.
+- `AgentRuntimeProtection` now posts `_unattributed` as `packageName`, the label the causal-denial relay posts when
+  the integrator declares no package (`SENTINEL_PACKAGE_NAME`). This change does not alter the payload's other
+  members, and does not touch `GTINForwarder` or `buildGTINPayload`, which take `packageName` from their caller.
+  Test: `src/arp/telemetry/gtin.agent-name.test.ts`.
+
 ### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
 
 - `getNamespace`, `deleteNamespace`, `storeCredential` and `rotateCredential` put the namespace ID into the request

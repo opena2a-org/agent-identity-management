@@ -51,6 +51,14 @@ export interface GTINSubmitResult {
   error?: string;
 }
 
+/**
+ * `packageName` for a GTIN event that names no package: the same sentinel the
+ * causal-denial relay sends when the integrator declares none.
+ * AgentRuntimeProtection sends it in place of its configured `agentName`,
+ * which is the operator's own label for the agent, not a public package name.
+ */
+export const GTIN_UNATTRIBUTED_PACKAGE_NAME = '_unattributed';
+
 // --- Sensor Token ---
 
 /**
