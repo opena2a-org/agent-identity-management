@@ -2,12 +2,16 @@ import type { LLMAdapter, LLMResponse, LLMAdapterType } from '../types';
 import * as https from 'https';
 import { nodeRequire } from '../node-require';
 
+const ANTHROPIC_HOST = 'api.anthropic.com';
+const OPENAI_HOST = 'api.openai.com';
+
 /**
  * Anthropic adapter — uses Messages API with Haiku for cheapest assessments.
  * Reads ANTHROPIC_API_KEY from environment.
  */
 export class AnthropicAdapter implements LLMAdapter {
   readonly name = 'anthropic';
+  readonly endpoint = `https://${ANTHROPIC_HOST}`;
   private readonly model: string;
   private readonly apiKey: string;
 
@@ -23,7 +27,7 @@ export class AnthropicAdapter implements LLMAdapter {
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const response = await httpPost('api.anthropic.com', '/v1/messages', body, {
+    const response = await httpPost(ANTHROPIC_HOST, '/v1/messages', body, {
       'x-api-key': this.apiKey,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
@@ -54,6 +58,7 @@ export class AnthropicAdapter implements LLMAdapter {
  */
 export class OpenAIAdapter implements LLMAdapter {
   readonly name = 'openai';
+  readonly endpoint = `https://${OPENAI_HOST}`;
   private readonly model: string;
   private readonly apiKey: string;
 
@@ -69,7 +74,7 @@ export class OpenAIAdapter implements LLMAdapter {
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const response = await httpPost('api.openai.com', '/v1/chat/completions', body, {
+    const response = await httpPost(OPENAI_HOST, '/v1/chat/completions', body, {
       Authorization: `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
     });
@@ -99,16 +104,19 @@ export class OpenAIAdapter implements LLMAdapter {
  */
 export class OllamaAdapter implements LLMAdapter {
   readonly name = 'ollama';
+  /** The server assess() and healthCheck() connect to; undefined when the configured host is not a URL. */
+  readonly endpoint: string | undefined;
   private readonly model: string;
   private readonly host: string;
 
   constructor(config?: Record<string, unknown>) {
     this.model = (config?.model as string) ?? 'llama3.2:1b';
     this.host = (config?.host as string) ?? 'http://localhost:11434';
+    this.endpoint = ollamaEndpoint(this.host);
   }
 
   async assess(prompt: string, maxTokens: number): Promise<LLMResponse> {
-    const url = new URL(this.host);
+    const target = ollamaTarget(this.host);
     const body = JSON.stringify({
       model: this.model,
       prompt,
@@ -117,12 +125,12 @@ export class OllamaAdapter implements LLMAdapter {
     });
 
     const response = await httpPost(
-      url.hostname,
+      target.hostname,
       '/api/generate',
       body,
       { 'Content-Type': 'application/json' },
-      url.port ? parseInt(url.port) : 11434,
-      url.protocol === 'http:',
+      target.port,
+      target.useHttp,
     );
 
     const data = JSON.parse(response);
@@ -140,12 +148,28 @@ export class OllamaAdapter implements LLMAdapter {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const url = new URL(this.host);
-      await httpGet(url.hostname, '/api/tags', url.port ? parseInt(url.port) : 11434, url.protocol === 'http:');
+      const target = ollamaTarget(this.host);
+      await httpGet(target.hostname, '/api/tags', target.port, target.useHttp);
       return true;
     } catch {
       return false;
     }
+  }
+}
+
+/** Where the Ollama adapter connects for a configured host. Throws when the host is not a URL. */
+function ollamaTarget(host: string): { hostname: string; port: number; useHttp: boolean } {
+  const url = new URL(host);
+  return { hostname: url.hostname, port: url.port ? parseInt(url.port) : 11434, useHttp: url.protocol === 'http:' };
+}
+
+/** The URL of the server ollamaTarget connects to, or undefined when the host is not a URL. */
+function ollamaEndpoint(host: string): string | undefined {
+  try {
+    const { hostname, port, useHttp } = ollamaTarget(host);
+    return `${useHttp ? 'http' : 'https'}://${hostname}:${port}`;
+  } catch {
+    return undefined;
   }
 }
 

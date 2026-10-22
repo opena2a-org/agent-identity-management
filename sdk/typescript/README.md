@@ -505,6 +505,11 @@ was built, and `intelligence.twin.fleetGradient` whether it would send its
 fleet gradient at a flush now. The block holds booleans and codes from fixed
 sets only, so no value from `adapterConfig` appears in it.
 
+A destination that cannot be reached, such as no Ollama server listening at
+`adapterConfig.host` (default `http://localhost:11434`), is reported once with
+an `[ARP] L2 call failed` line on stderr, and each call that fails is counted in
+`getStatus().budget.failedCalls`, with the latest in `lastFailure`.
+
 > **Changed after 1.3.1.** Versions 1.0.0 through 1.3.1 defaulted to
 > `enabled: true` with `adapter: 'agent-proxy'`, which picked a destination from
 > whichever model key was exported in the environment, so a default

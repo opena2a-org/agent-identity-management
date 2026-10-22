@@ -104,6 +104,39 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   pins `did not take effect`, and `src/arp/cli/telemetry-help-noexec.test.ts` checks that `opt-out --help` does not
   print the opt-out's `OpenA2A telemetry disabled` line.
 
+### Added — ARP reports a failed L2 call once and counts it in the budget status
+
+- An L2 call that throws, sent for one event or for a batch, prints one line with `console.warn`, the channel of the
+  line ARP prints when L2 is not running: `[ARP] L2 call failed (<adapter>, <endpoint>): <error>. L0 and L1 are
+  unaffected and still gate.`, then a next step. For `ollama` the endpoint is the server the adapter connects to and
+  the next step is `Check that an Ollama server is listening there: curl -sS <endpoint>/api/tags`; for `anthropic`
+  and `openai` it names the key variable, `intelligence.adapterConfig.apiKey` and `curl -sSI` on the vendor endpoint.
+  The error is named by its code (`ECONNREFUSED`, `ENOTFOUND`), an HTTP error by its status alone (`HTTP 500`), and
+  an answer that is not JSON as `the answer was not valid JSON`, so the line carries no text of the prompt, the event
+  or the server's answer. No command is printed for a host that a shell would not hand to curl as written, such as
+  one holding `$(`. The line is printed once for each run of failed calls: a call that answers re-arms it, and the
+  next call that fails prints it again.
+- `BudgetController.getStatus()`, which `AgentRuntimeProtection.getStatus().budget` returns unchanged, carries
+  `failedCalls`, the number of L2 calls that threw, and `lastFailure`: `null`, or `{ at, adapter, message }` with the
+  time as an ISO string, the adapter's name and the error as the line names it. `totalCalls` still counts the
+  answered calls only. `budget.json` already kept `totalCalls` across restarts, and it keeps both new fields with it,
+  so a status read in another process sees them; they start again from zero with the monthly period, as
+  `totalCalls` does, and a `budget.json` saved before this change reads as `failedCalls: 0` and `lastFailure: null`.
+  `BudgetController.recordFailure(adapter, message)` counts one failed call.
+- `AgentRuntimeProtection.start()` calls the L2 adapter's `healthCheck()` once, through the new
+  `IntelligenceCoordinator.checkL2Health()`, and prints the same line when the check fails, throws or does not answer
+  within 2 seconds. `start()` waits for it at most 2 seconds, while the monitors start, and does not fail because of
+  it. A failed check is not counted in `failedCalls`, which counts calls. The check runs only when L2 runs:
+  `intelligence.enabled` is `true` and the adapter was built. The Ollama adapter's check is a `GET /api/tags` to its
+  host; the vendor adapters' check reads whether a key is set and sends nothing.
+- The built-in adapters carry `endpoint`, the URL they send to; `LLMAdapter.endpoint` is optional.
+- Measured before this change with `intelligence: { enabled: true, adapter: 'ollama' }` and nothing listening at the
+  host: two events through `analyze()` printed nothing, `getBudgetStatus()` read `totalCalls: 0` and had no field for
+  the failed calls, and each event kept `classifiedBy: 'L0-rules'`. On 1.0.0 through 1.3.1 a failed L2 call left no
+  trace: nothing was printed, the budget status did not count it, and the event was logged as L0 and L1 left it.
+- Tests: `tests/arp/intelligence/coordinator-l2-failure.test.ts`, and the failed-call cases in
+  `tests/arp/intelligence/budget.test.ts`.
+
 ### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
 
 - `getNamespace`, `deleteNamespace`, `storeCredential` and `rotateCredential` put the namespace ID into the request

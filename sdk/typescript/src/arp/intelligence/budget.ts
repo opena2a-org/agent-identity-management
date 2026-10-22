@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BudgetState, IntelligenceConfig } from '../types';
+import type { BudgetState, IntelligenceConfig, L2CallFailure } from '../types';
 
 const BUDGET_FILE = 'budget.json';
 const DEFAULT_BUDGET_USD = 5.0;
@@ -134,8 +134,27 @@ export class BudgetController {
   }
 
   /**
+   * Count an L2 call that threw instead of answering, and keep it as `lastFailure`.
+   *
+   * `release` gives back the failed call's slot and estimate; this records that the call
+   * was made and failed, so that a status read after any number of failed calls does not
+   * read as one where L2 never ran. `message` is the error's code or message, never the
+   * prompt or the answer. Saved to disk with the rest of the state.
+   */
+  recordFailure(adapter: string, message: string): void {
+    this.rolloverIfNeeded();
+    this.rolloverHourIfNeeded();
+
+    this.state.failedCalls += 1;
+    this.state.lastFailure = { at: new Date().toISOString(), adapter, message };
+
+    this.saveState();
+  }
+
+  /**
    * Get current budget status. `spent` counts each call in flight at its estimate, and
    * `callsThisHour` starts again from zero once the hour is over, as it does in `reserve`.
+   * `totalCalls` counts the answered calls and `failedCalls` the calls that threw.
    */
   getStatus(): {
     spent: number;
@@ -145,6 +164,8 @@ export class BudgetController {
     callsThisHour: number;
     maxCallsPerHour: number;
     totalCalls: number;
+    failedCalls: number;
+    lastFailure: L2CallFailure | null;
   } {
     this.rolloverIfNeeded();
     this.rolloverHourIfNeeded();
@@ -157,6 +178,8 @@ export class BudgetController {
       callsThisHour: this.state.callsThisHour,
       maxCallsPerHour: this.maxCallsPerHour,
       totalCalls: this.state.totalCalls,
+      failedCalls: this.state.failedCalls,
+      lastFailure: this.state.lastFailure ? { ...this.state.lastFailure } : null,
     };
   }
 
@@ -216,7 +239,9 @@ export class BudgetController {
     const filePath = path.join(this.dataDir, BUDGET_FILE);
     try {
       if (fs.existsSync(filePath)) {
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        const saved: BudgetState = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        // A budget.json saved before failed calls were counted holds neither field.
+        return { ...saved, failedCalls: saved.failedCalls ?? 0, lastFailure: saved.lastFailure ?? null };
       }
     } catch {
       // Corrupted file — start fresh
@@ -240,6 +265,8 @@ function freshState(): BudgetState {
     totalSpentUsd: 0,
     periodStart: now,
     totalCalls: 0,
+    failedCalls: 0,
+    lastFailure: null,
     callsThisHour: 0,
     hourStart: now,
     recentCosts: [],

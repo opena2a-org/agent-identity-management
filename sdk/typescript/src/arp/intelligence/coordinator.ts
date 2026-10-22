@@ -23,6 +23,7 @@ import {
   type BehavioralRiskUnavailableCode,
 } from './behavioral-risk';
 import type { GuardAnomalySource, GuardAnomalyStatus } from './guard-anomaly';
+import { sanitizeTerminalLine } from '../telemetry/signature/sanitize';
 
 const SEVERITY_ORDER: EventSeverity[] = ['info', 'low', 'medium', 'high', 'critical'];
 
@@ -32,6 +33,22 @@ const SEVERITY_ORDER: EventSeverity[] = ['info', 'low', 'medium', 'high', 'criti
  * replaces the estimate when the call returns.
  */
 const ESTIMATED_PROMPT_TOKENS = 200;
+
+/**
+ * How long `checkL2Health()` waits for the adapter's health check before it reports the
+ * destination as not answering. `AgentRuntimeProtection.start()` waits no longer than this.
+ */
+const L2_HEALTH_CHECK_TIMEOUT_MS = 2000;
+
+/** Longest error message, in characters, that the line for a failed L2 call carries. */
+const L2_FAILURE_MESSAGE_MAX_CHARS = 200;
+
+/**
+ * A URL that a shell hands to curl as written: a scheme, a host name or IPv4 address, and
+ * a port. The host of a parsed URL can still hold `$(`, a backtick, `;` or `&`, and a
+ * command printed with one of those would run more than curl, so none is printed for it.
+ */
+const PRINTABLE_URL = /^https?:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?$/;
 
 /**
  * Reason the comply gate denied a classified event. `prohibited` means the
@@ -224,6 +241,13 @@ export class IntelligenceCoordinator {
    * contract and the chi-square drift model.
    */
   private guardAnomaly: GuardAnomalySource | null;
+  /**
+   * Whether the line for a failed L2 call was printed since the last call that answered.
+   * A call that answers clears it, so each run of failed calls is reported once.
+   */
+  private l2FailureReported = false;
+  /** The run of checkL2Health(), which every later call returns. */
+  private l2HealthCheck: Promise<void> | null = null;
 
   constructor(
     arpConfig: ARPConfig,
@@ -290,6 +314,37 @@ export class IntelligenceCoordinator {
       `[ARP] L2 intelligence is not running (${reason}). L0 and L1 are unaffected and still gate. ` +
         "To enable it, set intelligence.enabled to true and choose intelligence.adapter explicitly: " +
         "'ollama' keeps inference local; 'anthropic' or 'openai' send event content to that vendor.",
+    );
+  }
+
+  /**
+   * Count a failed L2 call in the budget status and report it. The line is printed even
+   * when the count cannot be saved.
+   */
+  private noteL2CallFailed(adapter: LLMAdapter, error: unknown): void {
+    const message = describeL2Failure(error);
+    try {
+      this.budget.recordFailure(adapter.name, message);
+    } finally {
+      this.reportL2CallFailed(adapter, message);
+    }
+  }
+
+  /**
+   * Report that an L2 call failed, where it was sent and what to check, on the channel
+   * reportL2Unavailable uses, once for each run of failed calls: a call that answers
+   * clears `l2FailureReported`, and the next failure is reported again.
+   *
+   * The line is built from the adapter's name and endpoint and the error's code or
+   * message, never from the prompt or the event.
+   */
+  private reportL2CallFailed(adapter: LLMAdapter, message: string): void {
+    if (this.l2FailureReported) return;
+    this.l2FailureReported = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[ARP] L2 call failed (${adapter.name}, ${adapter.endpoint ?? 'endpoint not reported by the adapter'}): ` +
+        `${message}. L0 and L1 are unaffected and still gate. ${l2FailureNextStep(adapter)}`,
     );
   }
 
@@ -446,6 +501,50 @@ export class IntelligenceCoordinator {
     return { ...this.l2Status };
   }
 
+  /**
+   * Ask the L2 adapter whether it can answer, so that a destination that cannot be reached
+   * is reported before the first event needs it.
+   *
+   * Calls the adapter's `healthCheck()` and waits for it at most `timeoutMs`. A check that
+   * fails, throws or does not answer in time prints the line a failed call prints, under
+   * the same once-only rule, and is not counted in `failedCalls`, which counts calls. The
+   * returned promise never rejects. With L2 off there is no adapter and nothing is asked.
+   * The check runs once per coordinator: a later call returns the first call's promise.
+   */
+  checkL2Health(timeoutMs: number = L2_HEALTH_CHECK_TIMEOUT_MS): Promise<void> {
+    if (!this.l2HealthCheck) {
+      this.l2HealthCheck = this.runL2HealthCheck(timeoutMs);
+    }
+    return this.l2HealthCheck;
+  }
+
+  private async runL2HealthCheck(timeoutMs: number): Promise<void> {
+    // The two gates shouldEscalateToL2 applies: the check reaches the destination as well.
+    if (this.config.enabled !== true) return;
+    const adapter = this.adapter;
+    if (!adapter) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<string>((resolve) => {
+      timer = setTimeout(() => resolve(`health check did not answer within ${timeoutMs} ms`), timeoutMs);
+      // The check never keeps the process alive on its own.
+      timer.unref?.();
+    });
+    const answer = Promise.resolve()
+      .then(() => adapter.healthCheck())
+      .then(
+        (healthy): string | null => (healthy === true ? null : 'health check failed'),
+        (error: unknown): string => `health check failed: ${describeL2Failure(error)}`,
+      );
+
+    try {
+      const failure = await Promise.race([answer, deadline]);
+      if (failure !== null) this.reportL2CallFailed(adapter, failure);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** Stop the coordinator (flush batches, clean up) */
   async stop(): Promise<void> {
     if (this.batchTimer) {
@@ -484,7 +583,8 @@ export class IntelligenceCoordinator {
    * The reservation is taken before the call is awaited, so a call in flight counts
    * against `budgetUsd` and `maxCallsPerHour` when the next event asks for a call.
    * Returns null without calling the adapter when the reservation is refused.
-   * A call that throws releases its reservation; an answered call settles it at the
+   * A call that throws releases its reservation, is counted in `failedCalls` and is
+   * reported once for its run of failures; an answered call settles it at the
    * cost of the tokens the adapter reported, or at the estimate when that cost cannot
    * be worked out.
    */
@@ -502,9 +602,16 @@ export class IntelligenceCoordinator {
     try {
       response = await adapter.assess(prompt, maxTokens);
     } catch (error) {
-      this.budget.release(reservation);
+      // Counted and reported even when giving back the reservation cannot be saved.
+      try {
+        this.budget.release(reservation);
+      } finally {
+        this.noteL2CallFailed(adapter, error);
+      }
       throw error;
     }
+    // The destination answered: a failure after this one starts a new run and is reported.
+    this.l2FailureReported = false;
 
     // Settle even when pricing the answer throws: record() charges the estimate for a
     // cost that is not a number, so the reservation does not stay open.
@@ -532,7 +639,7 @@ export class IntelligenceCoordinator {
       applyAssessment(event, assessment);
       return assessment;
     } catch {
-      // LLM failure — fall back to L1 classification
+      // LLM failure, counted and reported by callWithinBudget: fall back to L1 classification
       return null;
     }
   }
@@ -601,7 +708,7 @@ export class IntelligenceCoordinator {
       );
       events.forEach((event, i) => applyAssessment(event, assessments[i]));
     } catch {
-      // Batch failure — events remain at L1 classification
+      // Batch failure, counted and reported by callWithinBudget: events remain at L1 classification
       return;
     }
 
@@ -615,6 +722,53 @@ export class IntelligenceCoordinator {
         }
       }
     }
+  }
+}
+
+// --- L2 failure reporting ---
+
+/**
+ * What a failed L2 call is reported with: the error's code, or its message reduced to text
+ * that cannot carry the prompt or the answer.
+ *
+ * A system error is named by its code (ECONNREFUSED, ENOTFOUND, a TLS code). An HTTP error
+ * is named by its status alone: the adapters put up to 200 characters of the response body
+ * in the message, and a server can answer with what it was sent. An answer that is not JSON
+ * is named as such, because the parser's message quotes the start of the answer. Any other
+ * message is kept to one line of at most L2_FAILURE_MESSAGE_MAX_CHARS characters.
+ */
+function describeL2Failure(error: unknown): string {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(code)) return code;
+  if (error instanceof SyntaxError) return 'the answer was not valid JSON';
+
+  const message = error instanceof Error ? error.message : String(error);
+  const status = /^HTTP \d{3}\b/.exec(message);
+  if (status) return status[0];
+
+  const line = sanitizeTerminalLine(message.trim(), L2_FAILURE_MESSAGE_MAX_CHARS).replace(/\.+$/, '');
+  return line.length > 0 ? line : 'the call threw without a message';
+}
+
+/**
+ * The step the line for a failed L2 call ends with: what to check for this adapter, and a
+ * command that checks it when the endpoint can be printed as one.
+ */
+function l2FailureNextStep(adapter: LLMAdapter): string {
+  const endpoint = adapter.endpoint !== undefined && PRINTABLE_URL.test(adapter.endpoint) ? adapter.endpoint : undefined;
+  switch (adapter.name) {
+    case 'ollama':
+      return endpoint
+        ? `Check that an Ollama server is listening there: curl -sS ${endpoint}/api/tags`
+        : 'Check that intelligence.adapterConfig.host is the URL of the Ollama server.';
+    case 'anthropic':
+    case 'openai': {
+      const keyVariable = adapter.name === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
+      const check = `Check that ${keyVariable} or intelligence.adapterConfig.apiKey holds a valid key, and that this host reaches the endpoint`;
+      return endpoint ? `${check}: curl -sSI ${endpoint}` : `${check}.`;
+    }
+    default:
+      return 'Check the adapter settings in intelligence.adapterConfig.';
   }
 }
 
