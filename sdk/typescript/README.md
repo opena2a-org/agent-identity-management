@@ -557,8 +557,9 @@ causal-denial channel above, the ARP engine shares nothing unless you turn it
 on. When enabled, and when a detection fires, the structural shape of the
 event sequence (technique identifier, event-type sequence, severity, and a
 one-way hash of structural tokens) is signed and reported to the OpenA2A
-registry (`https://api.oa2a.org`), so an attack shape first seen at one
-deployment can protect others. Prompts, model responses, tool arguments, file
+Registry (`https://api.oa2a.org`). A report is stored there; today nothing is
+sent back to any install from it, and the patterns ARP matches are the ones
+bundled in the package. Prompts, model responses, tool arguments, file
 contents or paths, command lines, environment values, secrets, IP addresses,
 hostnames, and account, tool, agent, and model names never appear in a report.
 A report does carry a random per-install sensor id and a monthly-rotating org
