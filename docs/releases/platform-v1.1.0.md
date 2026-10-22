@@ -223,6 +223,7 @@ this line when it is published.
 
 | `CHANGELOG.md` heading | Fixed in |
 |------------------------|----------|
+| Security: the agent alert, agent violation, admin alert and A2A violation routes cap limit and offset (#855) | 1.1.0 |
 | Security: a password change ends every session signed in before it, and the API enforces a required password change | 1.1.0 |
 | Security: an ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with `Retry-After` | 1.1.0 |
 | Security: the API server listens on 127.0.0.1 outside a container unless `HOST` is set (#757) | 1.1.0 |

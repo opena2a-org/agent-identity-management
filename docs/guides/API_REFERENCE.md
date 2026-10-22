@@ -777,7 +777,7 @@ There is no common list envelope. Each list answers with an array named for what
 |-------|----------|--------|
 | `GET /api/v1/agents` | `{"agents": [...], "total": 45}`, plus `limit` and `offset` when `limit` was sent; with a `status` or `agentType` filter, `total` counts the agents that pass it | `limit` (no default: every agent), `offset` |
 | `GET /api/v1/admin/audit-logs` | `{"logs": [...], "total": 1234, "limit": 100, "offset": 0}` | `limit` (default 100), `offset` |
-| `GET /api/v1/admin/alerts` | `{"alerts": [...], "total": 3, ...}` with per-state counts | `limit` (default 100), `offset` |
+| `GET /api/v1/admin/alerts` | `{"alerts": [...], "total": 3, ...}` with per-state counts | `limit` (default 100, at most 1000), `offset` (at most 10000) |
 | `GET /api/v1/api-keys` | `{"apiKeys": [...], "total": 2}` | none |
 
 ---

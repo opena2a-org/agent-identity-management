@@ -1853,24 +1853,9 @@ func (h *AgentHandler) GetAgentAlerts(c fiber.Ctx) error {
 		return nil
 	}
 
-	// Parse pagination params
-	limit := 50
-	if limitStr := c.Query("limit"); limitStr != "" {
-		// A limit below 1 keeps the default page size.
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit >= 1 {
-			limit = parsedLimit
-		}
-	}
-
-	offset := 0
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil {
-			offset = parsedOffset
-		}
-	}
-	if offset < 0 {
-		offset = 0 // read a negative offset as the first page
-	}
+	// Parse pagination params: limit 1-100 (default 50), offset 0-MaxOffset
+	p := ParsePaginationWithDefaults(c, 50, 100)
+	limit, offset := p.Limit, p.Offset
 
 	// Get alerts for this agent
 	alerts, err := h.alertService.GetAlertsByAgent(c.Context(), agentID, limit, offset)

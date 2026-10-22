@@ -922,27 +922,10 @@ func (h *AdminHandler) GetAlerts(c fiber.Ctx) error {
 		}
 	}
 
-	// Parse limit and offset with defaults (Fiber v3 compatibility)
-	limit := 100
-	if limitStr := c.Query("limit"); limitStr != "" {
-		// A negative limit keeps the default page size.
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit >= 0 {
-			limit = parsedLimit
-		}
-	}
-	if limit < 1 {
-		limit = 100 // read a limit below 1 as the default page size
-	}
-
-	offset := 0
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil {
-			offset = parsedOffset
-		}
-	}
-	if offset < 0 {
-		offset = 0 // read a negative offset as the first page
-	}
+	// Parse limit 1-1000 (default 100) and offset 0-MaxOffset. The dashboard's
+	// "All" rows-per-page option asks this route for 1000 alerts.
+	p := ParsePaginationWithDefaults(c, 100, 1000)
+	limit, offset := p.Limit, p.Offset
 
 	// Get alerts
 	alerts, total, err := h.getAlertService().GetAlerts(
