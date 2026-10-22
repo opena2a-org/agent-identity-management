@@ -11,6 +11,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a limit of 0 on the agent alert, agent violation and A2A violation routes is read as the route's default page size (#849)
+
+- `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations` and `GET /api/v1/a2a/security/violations`
+  read `limit=0` as the page size they use when the request names no limit: 50, 20 and 50, as
+  `GET /api/v1/admin/alerts` reads it as its default of 100 since #847. `limit=0` and `limit=0&offset=0` reach the
+  page query (`LIMIT $2 OFFSET $3`) as that size and are answered 200 with the first page; the first two routes echo
+  it as `"limit"`. `limit=1` and `limit=2` reach the query as sent.
+- Before, each of the three handlers sent `limit=0` to that query as a `LIMIT` of 0, and the first two echoed
+  `"limit": 0`. PostgreSQL answers a bound `LIMIT` of 0 with no rows (measured on PostgreSQL 14.21 and 18.3), and with
+  no rows from the page query the request was answered 200 with an empty page: `"alerts": []` on the agent alert
+  route, `"violations": []` beside the agent's violation count in `"total"` on the agent violation route and `[]` on
+  the A2A route. Measured with `limit=0` and with `limit=0&offset=0`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/list_routes_negative_limit_test.go`.
+
 ### Fixed — a limit below 1 on the admin alert route is read as the default page size of 100 (#847)
 
 - `GET /api/v1/admin/alerts` reads a `limit` below 1 as 100, the page size it uses when no `limit` is sent.

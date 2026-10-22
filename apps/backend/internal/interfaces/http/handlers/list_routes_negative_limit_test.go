@@ -11,16 +11,18 @@ import (
 
 // GET /api/v1/agents/:id/alerts, GET /api/v1/agents/:id/violations,
 // GET /api/v1/admin/alerts and GET /api/v1/a2a/security/violations read a
-// negative limit as the page size they read when the request names no limit.
+// limit below 1 as the page size they read when the request names no limit.
 // The routes run over the database of list_routes_negative_offset_test.go,
-// whose page query answers only the limit and offset it expects, so a
-// negative limit that reaches the query fails the request.
+// whose page query answers only the limit and offset it expects, so a limit
+// below 1 that reaches the query fails the request.
 
-// With no limit, or a negative one, the page query is sent the route's
+// With no limit, or a limit below 1, the page query is sent the route's
 // default page size, and the first page is answered 200.
-func TestListRoutes_NegativeLimitReadsAsDefaultPageSize(t *testing.T) {
+func TestListRoutes_LimitBelowOneReadsAsDefaultPageSize(t *testing.T) {
 	for _, route := range listOffsetRoutes {
-		for _, query := range []string{"offset=0", "limit=-1&offset=0", "limit=-100&offset=0"} {
+		for _, query := range []string{
+			"offset=0", "limit=0&offset=0", "limit=0", "limit=-1&offset=0", "limit=-100&offset=0",
+		} {
 			t.Run(route.name+" "+query, func(t *testing.T) {
 				status, body, recordID := listOffsetGet(t, route, query, route.defaultLimit, 0)
 				require.Equal(t, fiber.StatusOK, status, string(body))

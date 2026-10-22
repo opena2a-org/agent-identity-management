@@ -30,8 +30,8 @@ import (
 // Each route runs here on its service and its repository, over a database
 // that answers the page query only when it is sent the expected limit and
 // offset, so a negative offset that reaches the query fails the request.
-// list_routes_negative_limit_test.go runs the same routes with a negative
-// limit.
+// list_routes_negative_limit_test.go runs the same routes with a limit
+// below 1.
 
 // listOffsetRoute is one of the four routes, served over a database whose page
 // query expects limit wantLimit and offset wantOffset.
