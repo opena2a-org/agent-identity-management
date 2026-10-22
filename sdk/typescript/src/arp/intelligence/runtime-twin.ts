@@ -429,6 +429,16 @@ export class RuntimeTwin {
   // === Fleet Gradient Submission ===
 
   /**
+   * Whether a flush would send the fleet gradient now: this twin was built with
+   * fleet gradients on while `isOptedOut()` was false, and `isOptedOut()` is
+   * false now. Sends nothing and changes nothing. `flushGradient` makes this same
+   * call before it posts.
+   */
+  wouldSendFleetGradient(): boolean {
+    return this.fleetEnabled && !isOptedOut();
+  }
+
+  /**
    * Accumulate behavioral features into gradient vector.
    * Each event contributes to a running gradient that captures the
    * distribution of event types, timing anomalies, error rates,
@@ -478,8 +488,11 @@ export class RuntimeTwin {
     // Pre-send re-check of the master opt-out. This is the only point at which
     // fleet gradients leave the process, so it is the point that has to honor
     // "opting out disables all OpenA2A telemetry". Accumulators are reset on the
-    // way out so a refusal does not turn this into a per-event check.
-    if (isOptedOut()) {
+    // way out so a refusal does not turn this into a per-event check. Both
+    // callers reach this only with fleetEnabled set, so the check comes down to
+    // isOptedOut(); it goes through wouldSendFleetGradient so the status ARP
+    // reports is this check.
+    if (!this.wouldSendFleetGradient()) {
       this.gradientAccumulator = new Array(GRADIENT_DIMS).fill(0);
       this.gradientEventCount = 0;
       this.gradientLossSum = 0;

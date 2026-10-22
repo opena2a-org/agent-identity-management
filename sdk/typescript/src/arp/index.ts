@@ -44,6 +44,10 @@ export type {
   LLMAssessment,
   LLMResponse,
   IntelligenceConfig,
+  IntelligenceStatus,
+  L2AdapterKind,
+  L2NotRunningReason,
+  L2Status,
   BudgetState,
   AlertRule,
   AlertCondition,
@@ -183,7 +187,7 @@ export type {
 export type { SignatureTelemetryConfig } from './types';
 
 import * as path from 'path';
-import type { ARPConfig, ARPEvent, EnforcementResult, Monitor } from './types';
+import type { ARPConfig, ARPEvent, EnforcementResult, IntelligenceStatus, Monitor } from './types';
 import { EventEngine } from './engine/event-engine';
 import { IntelligenceCoordinator } from './intelligence/coordinator';
 import { RuntimeTwin } from './intelligence/runtime-twin';
@@ -492,18 +496,30 @@ export class AgentRuntimeProtection {
     return this.running;
   }
 
-  /** Get current status */
+  /**
+   * Get current status. `intelligence` says whether L2 and the runtime twin run,
+   * read from the coordinator's L2 decision and from the twin's own send check;
+   * see `IntelligenceStatus`.
+   */
   getStatus(): {
     running: boolean;
     monitors: Array<{ type: string; running: boolean }>;
     budget: ReturnType<IntelligenceCoordinator['getBudgetStatus']>;
     pausedPids: number[];
+    intelligence: IntelligenceStatus;
   } {
     return {
       running: this.running,
       monitors: this.monitors.map((m) => ({ type: m.type, running: m.isRunning() })),
       budget: this.intelligence.getBudgetStatus(),
       pausedPids: this.enforcement.getPausedPids(),
+      intelligence: {
+        l2: this.intelligence.getL2Status(),
+        twin: {
+          running: this.runtimeTwin !== null,
+          fleetGradient: this.runtimeTwin?.wouldSendFleetGradient() ?? false,
+        },
+      },
     };
   }
 

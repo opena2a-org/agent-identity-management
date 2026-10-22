@@ -7,6 +7,34 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — ARP's `getStatus()` says whether L2 and the runtime twin run (#857)
+
+- `AgentRuntimeProtection.getStatus()` carries an `intelligence` block. Measured on the code before this change,
+  `Object.keys(getStatus())` was `running, monitors, budget, pausedPids` with `intelligence: { enabled: false }` and
+  with `intelligence: { enabled: true, adapter: 'ollama' }`.
+- `intelligence.l2.running` says whether L2 runs. When it runs, `l2.adapter` is the kind of the adapter it built:
+  `anthropic`, `openai` or `ollama`. When it does not run, `l2.reason` is `not-enabled` (`intelligence.enabled` is
+  not `true`), `no-adapter` (`enabled` is `true` and no `intelligence.adapter` is set) or `adapter-failed` (the named
+  adapter could not be built), and with `adapter-failed`, `l2.adapter` is the kind of the configured name, `other`
+  for a name outside those three: `adapter: 'agent-proxy'` reports
+  `{ running: false, adapter: 'other', reason: 'adapter-failed' }`.
+- `intelligence.twin.running` says whether the runtime twin was built, and `intelligence.twin.fleetGradient` whether
+  the twin would send its fleet gradient at a flush now.
+- The block is read from the objects the instance built: `l2` from the L2 decision the intelligence coordinator
+  stores as codes when it is built (`IntelligenceCoordinator.getL2Status()`, which returns a copy), and
+  `twin.fleetGradient` from `RuntimeTwin.wouldSendFleetGradient()`, which the twin's send path calls before it posts,
+  so an opt-out marker written after the twin was built turns it to `false`. It holds booleans and codes from fixed
+  sets only, so it carries no `adapterConfig` value, model name, error message or environment variable's value.
+  `l2.running` and `twin.running` are settled when the instance is built, so `start()` does not change them.
+- `IntelligenceStatus`, `L2Status`, `L2AdapterKind` and `L2NotRunningReason` are exported from
+  `@opena2a/aim-sdk/arp`.
+- Test: `src/arp/get-status-intelligence.test.ts`. It plants marker values in `adapterConfig.host`,
+  `adapterConfig.model` and an unknown adapter name, and finds none of them in `JSON.stringify(getStatus())` while
+  the config holds each of them. It checks `l2.running` against `describeL2Status` in
+  `src/arp/intelligence/coordinator.ts`, and `twin.fleetGradient` against the gradient posts a flush makes: with
+  fleet gradients on, after an opt-out marker is written, with `OPENA2A_TELEMETRY_OPTOUT` set when the twin is built,
+  and with fleet gradients off.
+
 ### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
 
 - `getNamespace`, `deleteNamespace`, `storeCredential` and `rotateCredential` put the namespace ID into the request

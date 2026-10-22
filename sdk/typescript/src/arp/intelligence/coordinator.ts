@@ -4,6 +4,9 @@ import type {
   CapabilityManifest,
   ComplyOnViolation,
   IntelligenceConfig,
+  L2AdapterKind,
+  L2NotRunningReason,
+  L2Status,
   LLMAdapter,
   LLMAssessment,
   LLMResponse,
@@ -114,10 +117,14 @@ export function describeL2Status(
  * `asked` carries whether the operator switched L2 on, so a caller that needs to
  * distinguish "withheld from someone who wanted it" from "never requested" does
  * not have to re-test `enabled` and become a second copy of the gate.
+ *
+ * `code` is the reason as one of a fixed set, for `getL2Status`; `reason` is the
+ * sentence the startup warning and the CLI status line print, and can quote the
+ * configured adapter name.
  */
 type L2Resolution =
-  | { adapter: LLMAdapter; name: string; asked: true; reason?: undefined }
-  | { adapter: null; name?: string; asked: boolean; reason: string };
+  | { adapter: LLMAdapter; name: string; asked: true; code?: undefined; reason?: undefined }
+  | { adapter: null; name?: string; asked: boolean; code: L2NotRunningReason; reason: string };
 
 /**
  * Settle L2's state ONCE, for every caller that needs to know it.
@@ -134,10 +141,10 @@ type L2Resolution =
  */
 function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resolution {
   if (intelligence?.enabled !== true) {
-    return { adapter: null, asked: false, reason: 'intelligence.enabled is not true' };
+    return { adapter: null, asked: false, code: 'not-enabled', reason: 'intelligence.enabled is not true' };
   }
   if (!intelligence.adapter) {
-    return { adapter: null, asked: true, reason: "no 'intelligence.adapter' is configured" };
+    return { adapter: null, asked: true, code: 'no-adapter', reason: "no 'intelligence.adapter' is configured" };
   }
   try {
     return {
@@ -153,9 +160,32 @@ function resolveL2Adapter(intelligence: IntelligenceConfig | undefined): L2Resol
       adapter: null,
       name: intelligence.adapter,
       asked: true,
+      code: 'adapter-failed',
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+/**
+ * The kind of an adapter name, from a fixed set. A name outside the three adapters
+ * the SDK builds is `other`, so a status built from it does not repeat the name.
+ */
+function adapterKindOf(name: unknown): L2AdapterKind {
+  return name === 'anthropic' || name === 'openai' || name === 'ollama' ? name : 'other';
+}
+
+/**
+ * An L2 decision as codes. When L2 runs, the kind is read from the adapter object
+ * the decision built. The reason sentence, the configured name and `adapterConfig`
+ * are left out.
+ */
+function l2StatusOf(resolved: L2Resolution): L2Status {
+  if (resolved.adapter !== null) {
+    return { running: true, adapter: adapterKindOf(resolved.adapter.name) };
+  }
+  return resolved.name === undefined
+    ? { running: false, reason: resolved.code }
+    : { running: false, adapter: adapterKindOf(resolved.name), reason: resolved.code };
 }
 
 export class IntelligenceCoordinator {
@@ -164,6 +194,8 @@ export class IntelligenceCoordinator {
   private readonly budget: BudgetController;
   private readonly anomaly: AnomalyDetector;
   private adapter: LLMAdapter | null = null;
+  /** The L2 decision the constructor made, as codes. Read with getL2Status. */
+  private readonly l2Status: L2Status;
   private batchQueue: ARPEvent[] = [];
   private batchTimer?: ReturnType<typeof setTimeout>;
   /** Handlers registered with onBatchAssessed. */
@@ -233,6 +265,7 @@ export class IntelligenceCoordinator {
     // L0 and L1 are unaffected and still gate.
     const resolved = resolveL2Adapter(this.config);
     this.adapter = resolved.adapter;
+    this.l2Status = l2StatusOf(resolved);
     if (resolved.adapter === null && resolved.asked) {
       // L2 withheld, L0+L1 still work. Say so once, naming the precondition and the
       // fix, rather than degrading silently — but only to an operator who ASKED for
@@ -402,6 +435,15 @@ export class IntelligenceCoordinator {
   /** Get budget status */
   getBudgetStatus() {
     return this.budget.getStatus();
+  }
+
+  /**
+   * Whether L2 runs in this coordinator, as decided when it was built: the kind
+   * of the adapter when it runs, the reason code when it does not. Holds codes
+   * from fixed sets only. Returns a copy, so changing it changes nothing here.
+   */
+  getL2Status(): L2Status {
+    return { ...this.l2Status };
   }
 
   /** Stop the coordinator (flush batches, clean up) */
