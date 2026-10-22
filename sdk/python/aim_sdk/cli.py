@@ -34,6 +34,7 @@ Login design (RFC 8628, OAuth 2.0 Device Authorization Grant):
 """
 
 import argparse
+import errno
 import re
 import stat
 import sys
@@ -1366,7 +1367,11 @@ def _reported_dashboard_url(value, aim_url):
 
 def init(args):
     """Register a first agent with a bootstrap token from the onboarding screen."""
-    from .credentials import get_agent_credentials_path, save_agent_credentials
+    from .credentials import (
+        check_agent_credentials_dir,
+        get_agent_credentials_path,
+        save_agent_credentials,
+    )
 
     if getattr(args, 'token', None) is not None:
         # Refused whatever it holds, even when the environment has a token
@@ -1426,6 +1431,19 @@ def init(args):
         print("Pick another name, which leaves that agent's key in place:")
         print()
         print("  aim-sdk init --name <another-name>")
+        return 1
+
+    # An agents folder with no group or other permission bits keeps its mode,
+    # so one its owner cannot write to would refuse the key file only after
+    # the token was spent. A file is written and removed there first.
+    try:
+        check_agent_credentials_dir()
+    except OSError as e:
+        reason = errno.errorcode.get(e.errno) or str(e)
+        print(f"Error: cannot save the agent's key file in {creds_path.parent} ({reason}); "
+              f"the token has not been used.")
+        print("Set HOME to a directory this user can write to, or fix the permissions of that "
+              "directory, and run aim-sdk init again.")
         return 1
 
     private_key, public_key = _generate_agent_keypair()

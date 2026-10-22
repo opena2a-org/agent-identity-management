@@ -12,8 +12,10 @@
  *   3. exchanges the token for an agent (POST
  *      /api/v1/onboarding/bootstrap-tokens/exchange), sending the token only in
  *      the X-AIM-Bootstrap-Token header and only the public key in the body;
- *   4. writes the credentials to ~/.aim/agents/<name>.json (0600, directory
- *      0700) in the layout the Python SDK reads, so either SDK can load them;
+ *   4. writes the credentials to ~/.aim/agents/<name>.json (0600, ~/.aim and
+ *      ~/.aim/agents created 0700, and either one that exists with group or
+ *      other permissions has them removed, with a line on stderr) in the layout
+ *      the Python SDK reads, so either SDK can load them;
  *   5. prints the agent's dashboard URL, at the dashboard address the server
  *      reports (older servers report none, and it is derived from --url).
  *
@@ -29,9 +31,9 @@
  * comes in through `InitDeps`, which is what tests drive.
  */
 
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, renameSync, unlinkSync, writeSync } from 'fs';
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, renameSync, statSync, unlinkSync, writeSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { generateKeyPair, toBase64 } from '../crypto/ed25519';
 import { sanitizeTerminalLine } from '../arp/telemetry/signature/sanitize';
 
@@ -283,10 +285,41 @@ function requestFailureReason(e: unknown): string {
   return e.message || 'unknown error';
 }
 
-function prepareCredentialsDir(dir: string): void {
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  // mkdir's mode applies only to directories it creates; tighten an existing one.
-  chmodSync(dir, 0o700);
+function octalMode(mode: number): string {
+  return mode.toString(8).padStart(4, '0');
+}
+
+/**
+ * Create `dir` with mode 0700. A `dir` that exists keeps its mode when it has
+ * no group or other permission bits; otherwise those bits are removed and its
+ * owner bits kept, and when that changes its mode, `report` gets one line
+ * naming it with its old and new modes.
+ */
+function makeOwnerOnlyDir(dir: string, report: (line: string) => void): void {
+  try {
+    mkdirSync(dir, { mode: 0o700 });
+    return;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST' || !statSync(dir).isDirectory()) throw e;
+  }
+  const before = statSync(dir).mode & 0o7777;
+  if ((before & 0o077) === 0) return;
+  chmodSync(dir, before & ~0o077);
+  const after = statSync(dir).mode & 0o7777;
+  if (after !== before) {
+    report(
+      `Changed the mode of ${dir} from ${octalMode(before)} to ${octalMode(after)}, ` +
+        'removing its group and other permissions.',
+    );
+  }
+}
+
+/** Make `dir` (~/.aim/agents) and the ~/.aim folder above it owner-only, as makeOwnerOnlyDir does. */
+function prepareCredentialsDir(dir: string, report: (line: string) => void): void {
+  const aimDir = dirname(dir);
+  mkdirSync(dirname(aimDir), { recursive: true, mode: 0o700 });
+  makeOwnerOnlyDir(aimDir, report);
+  makeOwnerOnlyDir(dir, report);
 }
 
 /**
@@ -294,15 +327,15 @@ function prepareCredentialsDir(dir: string): void {
  * owner-only file in it, so a home directory that cannot hold the key file is
  * found before the single-use token is spent. Throws what the file system threw.
  */
-function checkCredentialsDirWritable(dir: string): void {
-  prepareCredentialsDir(dir);
+function checkCredentialsDirWritable(dir: string, report: (line: string) => void): void {
+  prepareCredentialsDir(dir, report);
   const probe = join(dir, `.${process.pid}.${Date.now()}.probe`);
   closeSync(openSync(probe, 'wx', 0o600));
   unlinkSync(probe);
 }
 
-function writeCredentialsFile(dir: string, file: string, content: string): void {
-  prepareCredentialsDir(dir);
+function writeCredentialsFile(dir: string, file: string, content: string, report: (line: string) => void): void {
+  prepareCredentialsDir(dir, report);
   const tmp = join(dir, `.${process.pid}.${Date.now()}.tmp`);
   // Created 0600 from the first byte, then moved into place.
   const fd = openSync(tmp, 'wx', 0o600);
@@ -400,7 +433,7 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     return 1;
   }
   try {
-    checkCredentialsDirWritable(agentsDir);
+    checkCredentialsDirWritable(agentsDir, err);
   } catch (e) {
     const code = (e as NodeJS.ErrnoException | undefined)?.code ?? (e instanceof Error ? e.message : String(e));
     err(`Error: cannot save the agent's key file in ${agentsDir} (${code}); the token has not been used.`);
@@ -523,7 +556,7 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   };
 
   try {
-    writeCredentialsFile(agentsDir, credentialsFile, `${JSON.stringify(credentials, null, 2)}\n`);
+    writeCredentialsFile(agentsDir, credentialsFile, `${JSON.stringify(credentials, null, 2)}\n`, err);
   } catch (e) {
     err(`Error: agent ${agentId} was registered, but its credentials could not be saved to ${credentialsFile}`);
     err(`(${e instanceof Error ? e.message : String(e)}).`);

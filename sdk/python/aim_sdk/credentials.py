@@ -301,7 +301,7 @@ def _lock_named_file(path: Path, deadline: float, wait: float) -> int:
     opened again, until ``deadline``.
     """
     while True:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(path.parent)
         fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
         try:
             while not _try_lock(fd):
@@ -507,14 +507,14 @@ def save_sdk_credentials(credentials: Dict[str, Any]) -> bool:
         True if saved successfully
     """
     try:
-        AIM_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_private_dir(AIM_DIR)
 
         # Add schema info
         credentials["schemaVersion"] = SCHEMA_VERSION
         credentials["type"] = CredentialType.SDK_OAUTH
 
         with sdk_credentials_lock():
-            SDK_CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _ensure_private_dir(SDK_CREDENTIALS_FILE.parent)
             _write_private_json(SDK_CREDENTIALS_FILE, credentials)
 
         security_logger.log_credential_event(
@@ -716,19 +716,59 @@ def load_agent_credentials(agent_name: str) -> Optional[Dict[str, Any]]:
 
 
 def _ensure_private_dir(path: Path) -> None:
-    """Create ``path`` with mode 0700, and narrow it to 0700 if it already exists wider."""
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
-    # A directory written by an earlier SDK version carries the default mode.
-    if stat.S_IMODE(path.stat().st_mode) & 0o077:
-        os.chmod(path, 0o700)
+    """Create ``path`` with mode 0700; a missing folder above it gets the default mode.
+
+    A ``path`` that exists keeps its mode when it has no group or other
+    permission bits. Otherwise those bits are removed and its owner bits kept,
+    and when that changes its mode, one line on stderr names it with its old
+    and new modes. A folder an earlier SDK version created has the default mode.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.mkdir(mode=0o700)
+        return
+    except FileExistsError:
+        if not path.is_dir():
+            raise
+    before = stat.S_IMODE(path.stat().st_mode)
+    if not before & 0o077:
+        return
+    os.chmod(path, before & ~0o077)
+    after = stat.S_IMODE(path.stat().st_mode)
+    if after != before:
+        print(f"Changed the mode of {path} from {before:04o} to {after:04o}, "
+              f"removing its group and other permissions.", file=sys.stderr)
+
+
+def _ensure_agents_dir() -> None:
+    """Make the agents folder and the ``.aim`` folder that holds it private (``_ensure_private_dir``)."""
+    _ensure_private_dir(AGENTS_DIR.parent)
+    _ensure_private_dir(AGENTS_DIR)
+
+
+def check_agent_credentials_dir() -> None:
+    """Prepare the agents folder as ``save_agent_credentials`` does, then create
+    and remove an owner-only file in it.
+
+    ``aim-sdk init`` runs this before it spends its single-use token, so a
+    folder that cannot hold the key file is found while the token is unused:
+    a folder with no group or other permission bits is left as it is, write
+    permission included. Raises the ``OSError`` the file system raised.
+    """
+    _ensure_agents_dir()
+    fd, probe = tempfile.mkstemp(dir=str(AGENTS_DIR), prefix=".", suffix=".probe")
+    os.close(fd)
+    os.unlink(probe)
 
 
 def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool:
     """
     Save credentials for a specific agent.
 
-    The agents directory is created with mode 0700 and the agent file with
-    mode 0600; neither is ever readable by other users, not even briefly.
+    The ``.aim`` and agents folders are created with mode 0700, and one that
+    exists with group or other permission bits loses them
+    (``_ensure_private_dir``). The agent file is created with mode 0600, so it
+    is never readable by other users, not even briefly.
 
     Args:
         agent_name: Name of the agent
@@ -738,7 +778,7 @@ def save_agent_credentials(agent_name: str, credentials: Dict[str, Any]) -> bool
         True if saved successfully
     """
     try:
-        _ensure_private_dir(AGENTS_DIR)
+        _ensure_agents_dir()
 
         # Add schema info
         credentials["schemaVersion"] = SCHEMA_VERSION
@@ -819,7 +859,7 @@ def list_agent_credentials() -> list:
 def _migrate_legacy_agent_credentials(data: Dict[str, Any]) -> None:
     """Migrate agent credentials from legacy format to new per-agent files."""
     try:
-        _ensure_private_dir(AGENTS_DIR)
+        _ensure_agents_dir()
 
         # Check for nested format: {"agent-name": {...}}
         for key, value in data.items():

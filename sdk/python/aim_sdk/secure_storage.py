@@ -70,6 +70,7 @@ class SecureCredentialStorage:
             self.credentials_path = Path(credentials_path)
         else:
             self.credentials_path = Path.home() / ".aim" / "credentials.json"
+        self._folder_is_aim_dir = not credentials_path
 
         self.encrypted_path = self.credentials_path.with_suffix('.encrypted')
         self.cipher = self._get_cipher()
@@ -111,7 +112,12 @@ class SecureCredentialStorage:
             credentials: Dictionary containing AIM credentials
         """
         # Create directory if it doesn't exist
-        self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
+        if self._folder_is_aim_dir:
+            # ~/.aim also holds the SDK's credentials: created 0700.
+            from .credentials import _ensure_private_dir
+            _ensure_private_dir(self.credentials_path.parent)
+        else:
+            self.credentials_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Serialize credentials
         credentials_json = json.dumps(credentials, indent=2)
