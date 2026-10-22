@@ -20,6 +20,10 @@ const (
 	// and names the key that signs every later record of its chain.
 	TypeKeyRotation = "opena2a.key_rotation"
 
+	// TypeCorrection is the type of a record that corrects an earlier record
+	// of its chain. Building it leaves the corrected record as it is.
+	TypeCorrection = "opena2a.correction"
+
 	// SaltSize is the length in bytes of the salt of an erasable part.
 	SaltSize = 32
 
@@ -45,10 +49,11 @@ type Draft struct {
 	// Retained holds the further members of the retained part. Members under
 	// "opena2a" sit in one map[string]any. The members this package sets
 	// (event_id, type, timestamp, and schema, chain, commitments, sig_algs,
-	// first_key, pre_genesis, next_key, rotation_reason and exposure_began_at
-	// under "opena2a") are refused here.
+	// first_key, pre_genesis, next_key, rotation_reason, exposure_began_at and
+	// corrected_event_id under "opena2a") are refused here.
 	Retained map[string]any
-	// Tenant and Personal are the erasable parts.
+	// Tenant and Personal are the erasable parts. opena2a.corrected_event_id,
+	// which only NewCorrection sets, is refused in either.
 	Tenant       map[string]any
 	TenantSalt   []byte
 	Personal     map[string]any
@@ -67,9 +72,9 @@ type Head struct {
 }
 
 // Body is a record with its place in a chain and its canonical bytes fixed,
-// not yet signed. Only NewGenesis, NewRecord and NewKeyRotation produce one,
-// so the bytes Sign hands to a key provider always come from this package's
-// serializer.
+// not yet signed. Only NewGenesis, NewRecord, NewKeyRotation and
+// NewCorrection produce one, so the bytes Sign hands to a key provider always
+// come from this package's serializer.
 type Body struct {
 	canonical    []byte
 	head         Head
@@ -120,10 +125,10 @@ func NewGenesis(g Genesis) (Body, error) {
 	if err != nil {
 		return Body{}, err
 	}
-	own := map[string]any{
+	own := owned{retained: map[string]any{
 		"first_key":   keyMember(g.FirstKey),
 		"pre_genesis": pre,
-	}
+	}}
 	b, err := seal(g.ChainID, 0, nil, d, own)
 	if err != nil {
 		return Body{}, err
@@ -144,7 +149,10 @@ func NewRecord(prev Head, d Draft) (Body, error) {
 	if d.Type == TypeKeyRotation {
 		return Body{}, fmt.Errorf("%w: a key rotation is built by NewKeyRotation", ErrInvalidRecord)
 	}
-	return seal(prev.ChainID, prev.Seq+1, prev.Hash, d, nil)
+	if d.Type == TypeCorrection {
+		return Body{}, fmt.Errorf("%w: a correction is built by NewCorrection", ErrInvalidRecord)
+	}
+	return seal(prev.ChainID, prev.Seq+1, prev.Hash, d, owned{})
 }
 
 // checkHead refuses a head that names no record a next record can link to.
@@ -171,9 +179,16 @@ func keyMember(k PublicKey) map[string]any {
 	}
 }
 
+// owned holds the "opena2a" members only this package may set on a record, by
+// the part they sit in.
+type owned struct {
+	retained map[string]any
+	tenant   map[string]any
+}
+
 // seal fixes a draft's place in a chain and serializes its retained part. own
 // holds the "opena2a" members only this package may set on this record.
-func seal(chainID string, seq int64, prevHash any, d Draft, own map[string]any) (Body, error) {
+func seal(chainID string, seq int64, prevHash any, d Draft, own owned) (Body, error) {
 	if !isCanonicalUUID(chainID) {
 		return Body{}, fmt.Errorf("%w: the chain id is not a lowercase hyphenated UUID", ErrInvalidRecord)
 	}
@@ -207,13 +222,28 @@ func seal(chainID string, seq int64, prevHash any, d Draft, own map[string]any) 
 			ext[k] = v
 		}
 	}
-	for _, name := range []string{"schema", "chain", "commitments", "sig_algs", "first_key", "pre_genesis", "next_key", "rotation_reason", "exposure_began_at"} {
+	for _, name := range []string{"schema", "chain", "commitments", "sig_algs", "first_key", "pre_genesis", "next_key", "rotation_reason", "exposure_began_at", memberCorrectedEventID} {
 		if _, set := ext[name]; set {
 			return Body{}, fmt.Errorf("%w: %s.%s is set by the record package, not by the caller", ErrInvalidRecord, extensionMember, name)
 		}
 	}
+	for _, p := range []struct {
+		name    string
+		members map[string]any
+	}{{"tenant", d.Tenant}, {"personal", d.Personal}} {
+		if given, ok := p.members[extensionMember].(map[string]any); ok {
+			if _, set := given[memberCorrectedEventID]; set {
+				return Body{}, fmt.Errorf("%w: %s.%s in the %s part is set by the record package, not by the caller",
+					ErrInvalidRecord, extensionMember, memberCorrectedEventID, p.name)
+			}
+		}
+	}
+	tenant, err := withOwned("tenant", d.Tenant, own.tenant)
+	if err != nil {
+		return Body{}, err
+	}
 
-	tenantPart, tenantCommitment, err := sealPart("tenant", d.Tenant, d.TenantSalt)
+	tenantPart, tenantCommitment, err := sealPart("tenant", tenant, d.TenantSalt)
 	if err != nil {
 		return Body{}, err
 	}
@@ -236,12 +266,12 @@ func seal(chainID string, seq int64, prevHash any, d Draft, own map[string]any) 
 	ext["chain"] = map[string]any{"id": chainID, "seq": seq, "prev_hash": prevHash}
 	ext["commitments"] = commitments
 	ext["sig_algs"] = []any{AlgEd25519}
-	for k, v := range own {
+	for k, v := range own.retained {
 		ext[k] = v
 	}
 	retained[extensionMember] = ext
 
-	if err := checkDisjoint(retained, d.Tenant, d.Personal); err != nil {
+	if err := checkDisjoint(retained, tenant, d.Personal); err != nil {
 		return Body{}, err
 	}
 	canonical, err := canonicalJSON(retained)
@@ -257,6 +287,33 @@ func seal(chainID string, seq int64, prevHash any, d Draft, own map[string]any) 
 		personalPart: personalPart,
 		personalSalt: append([]byte(nil), d.PersonalSalt...),
 	}, nil
+}
+
+// withOwned returns an erasable part with the members only this package sets
+// added under "opena2a". The caller's maps are left unchanged.
+func withOwned(name string, part, own map[string]any) (map[string]any, error) {
+	if len(own) == 0 {
+		return part, nil
+	}
+	out := make(map[string]any, len(part)+1)
+	for k, v := range part {
+		out[k] = v
+	}
+	ext := make(map[string]any, len(own))
+	if raw, present := part[extensionMember]; present {
+		given, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s in the %s part is not an object", ErrInvalidRecord, extensionMember, name)
+		}
+		for k, v := range given {
+			ext[k] = v
+		}
+	}
+	for k, v := range own {
+		ext[k] = v
+	}
+	out[extensionMember] = ext
+	return out, nil
 }
 
 // sealPart serializes one erasable part and computes its commitment. It

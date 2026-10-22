@@ -50,6 +50,12 @@ const (
 	// on a rotation on exposure, present on a scheduled or custody change
 	// rotation, or not a timestamp in canonical form.
 	FailureKeyRotation FailureKind = "key_rotation"
+	// FailureCorrection: a correction does not name a record before it in its
+	// chain. It commits to no tenant part, or its tenant part has no
+	// opena2a.corrected_event_id, or that member is not a lowercase hyphenated
+	// UUID, or no record before the correction carries that event_id. A
+	// correction whose tenant part is erased passes this check.
+	FailureCorrection FailureKind = "correction"
 )
 
 // Failure is the first point at which a sequence fails verification.
@@ -94,6 +100,10 @@ func (r Result) OK() bool { return r.Failure == nil && r.Verified > 0 }
 // rotation and is signed by the key the rotation retired fails, whatever its
 // timestamp says.
 //
+// A correction verifies only when it commits to a tenant part and that part,
+// while it exists, names by event_id a record that sits before the correction
+// in the chain.
+//
 // Verification reads the stored canonical bytes and never serializes a record
 // again. Records removed from the end of the sequence leave nothing to see
 // here; compare Result.Head with a head held elsewhere to find that.
@@ -103,8 +113,9 @@ func Verify(records []Record, key PublicKey) (Result, error) {
 	}
 	var res Result
 	ring := keyRing{current: key}
+	earlier := map[string]bool{}
 	for i := range records {
-		head, next, failure := verifyAt(records, i, res.Head, ring)
+		head, next, failure := verifyAt(records, i, res.Head, ring, earlier)
 		if failure != nil {
 			res.Failure = failure
 			return res, nil
@@ -120,8 +131,10 @@ func Verify(records []Record, key PublicKey) (Result, error) {
 
 // verifyAt checks the record at position i against the head of the verified
 // records before it and the keys of the chain at that position. It returns the
-// keys at the next position.
-func verifyAt(records []Record, i int, prev *Head, ring keyRing) (*Head, keyRing, *Failure) {
+// keys at the next position. earlier holds the event ids of the verified
+// records before position i; verifyAt adds the event id of a record it
+// accepts.
+func verifyAt(records []Record, i int, prev *Head, ring keyRing, earlier map[string]bool) (*Head, keyRing, *Failure) {
 	rec := records[i]
 	key := ring.current
 	fail := func(kind FailureKind, format string, args ...any) (*Head, keyRing, *Failure) {
@@ -220,6 +233,12 @@ func verifyAt(records []Record, i int, prev *Head, ring keyRing) (*Head, keyRing
 			return fail(FailureKeyRotation, "%s", reason)
 		}
 	}
+	if h.recordType == TypeCorrection {
+		if reason := checkCorrection(h, rec.TenantPart, earlier); reason != "" {
+			return fail(FailureCorrection, "%s", reason)
+		}
+	}
+	earlier[h.eventID] = true
 	return &Head{ChainID: h.chainID, Seq: h.seq, Hash: digest}, next, nil
 }
 
@@ -302,6 +321,7 @@ func authenticHeader(rec Record, key PublicKey) (header, bool) {
 
 // header is what the verifier reads from a record's canonical bytes.
 type header struct {
+	eventID         string
 	recordType      string
 	schema          string
 	chainID         string
@@ -338,6 +358,9 @@ func (d *keyDoc) named() *namedKey {
 
 func parseHeader(payload []byte) (header, error) {
 	var doc struct {
+		// EventID is read only to resolve a correction's reference, so a
+		// value that is not a string is read as no event id.
+		EventID any     `json:"event_id"`
 		Type    *string `json:"type"`
 		OpenA2A *struct {
 			Schema *string `json:"schema"`
@@ -369,7 +392,9 @@ func parseHeader(payload []byte) (header, error) {
 	case *doc.OpenA2A.Chain.Seq < 0:
 		return header{}, errors.New("the record's sequence number is negative")
 	}
+	eventID, _ := doc.EventID.(string)
 	return header{
+		eventID:         eventID,
 		recordType:      *doc.Type,
 		schema:          *doc.OpenA2A.Schema,
 		chainID:         *doc.OpenA2A.Chain.ID,

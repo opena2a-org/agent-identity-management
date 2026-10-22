@@ -1,0 +1,35 @@
+{
+  "description": "A genesis, an administrative record, then a correction that names the administrative record by its event_id in its tenant part.",
+  "payloadType": "application/vnd.opena2a.audit-record.v1+json",
+  "firstKey": {
+    "alg": "Ed25519",
+    "publicKey": "deabd9dc2185a9aa25916869e2f8fa93dfd1dfa7c2636fd6294abbee61edf31c",
+    "keyid": "08072a20b63edf383f0ed7592a581c1feb38cb1b0d955d5288f55f64dde49a7d"
+  },
+  "preGenesisSet": "[]",
+  "records": [
+    {
+      "canonical": "{\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000000\",\"opena2a\":{\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":null,\"seq\":0},\"commitments\":{\"tenant\":\"d8332cbed265be04bbe54296dd097dc3f4044d5e0f200cd076b847e136a1220a\"},\"first_key\":{\"alg\":\"Ed25519\",\"keyid\":\"08072a20b63edf383f0ed7592a581c1feb38cb1b0d955d5288f55f64dde49a7d\",\"public_key\":\"deabd9dc2185a9aa25916869e2f8fa93dfd1dfa7c2636fd6294abbee61edf31c\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"pre_genesis\":{\"newest_timestamp\":null,\"row_counts\":{\"audit_logs\":0,\"verification_events\":0},\"set_digest\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\"},\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"system\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:04:05.123456Z\",\"type\":\"opena2a.chain_genesis\"}",
+      "recordHash": "77cabcfd590b41780f043332f48fa74937098a318db417af9018535c4c6f9ac5",
+      "signingInput": "DSSEv1 44 application/vnd.opena2a.audit-record.v1+json 827 {\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000000\",\"opena2a\":{\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":null,\"seq\":0},\"commitments\":{\"tenant\":\"d8332cbed265be04bbe54296dd097dc3f4044d5e0f200cd076b847e136a1220a\"},\"first_key\":{\"alg\":\"Ed25519\",\"keyid\":\"08072a20b63edf383f0ed7592a581c1feb38cb1b0d955d5288f55f64dde49a7d\",\"public_key\":\"deabd9dc2185a9aa25916869e2f8fa93dfd1dfa7c2636fd6294abbee61edf31c\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"pre_genesis\":{\"newest_timestamp\":null,\"row_counts\":{\"audit_logs\":0,\"verification_events\":0},\"set_digest\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\"},\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"system\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:04:05.123456Z\",\"type\":\"opena2a.chain_genesis\"}",
+      "tenantPart": "{\"opena2a\":{\"organization_id\":\"3f2504e0-4f89-41d3-9a0c-0305e82c3301\"},\"trace_id\":\"4bf92f3577b34da6a3ce929d0e0e4736\"}",
+      "tenantSalt": "1010101010101010101010101010101010101010101010101010101010101010"
+    },
+    {
+      "canonical": "{\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000003\",\"opena2a\":{\"admin_action\":\"tag_created\",\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":\"77cabcfd590b41780f043332f48fa74937098a318db417af9018535c4c6f9ac5\",\"seq\":1},\"commitments\":{\"tenant\":\"8d9a57c5aa01f8e8a36146195c18e1401afc4a3ab126ef4aece49ca08d6673d0\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"resource_type\":\"tag\",\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"service\",\"trace_origin\":\"server\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:07:05.123456Z\",\"type\":\"opena2a.administrative\"}",
+      "recordHash": "998e9f7cee170d3d95ccb3e543e1f4c77c108e6971fb628d116ac1c489692516",
+      "signingInput": "DSSEv1 44 application/vnd.opena2a.audit-record.v1+json 607 {\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000003\",\"opena2a\":{\"admin_action\":\"tag_created\",\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":\"77cabcfd590b41780f043332f48fa74937098a318db417af9018535c4c6f9ac5\",\"seq\":1},\"commitments\":{\"tenant\":\"8d9a57c5aa01f8e8a36146195c18e1401afc4a3ab126ef4aece49ca08d6673d0\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"resource_type\":\"tag\",\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"service\",\"trace_origin\":\"server\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:07:05.123456Z\",\"type\":\"opena2a.administrative\"}",
+      "tenantPart": "{\"opena2a\":{\"organization_id\":\"3f2504e0-4f89-41d3-9a0c-0305e82c3301\"},\"resource_id\":\"d4d4d4d4-0000-4000-8000-000000000001\",\"trace_id\":\"00f067aa0ba902b7a3ce929d0e0e4736\"}",
+      "tenantSalt": "4141414141414141414141414141414141414141414141414141414141414141"
+    },
+    {
+      "canonical": "{\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000007\",\"opena2a\":{\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":\"998e9f7cee170d3d95ccb3e543e1f4c77c108e6971fb628d116ac1c489692516\",\"seq\":2},\"commitments\":{\"personal\":\"0bc9527fb9a7978e81eea915d197e756ff8ff76d1a0a1d15c185f8877af3790b\",\"tenant\":\"3490f091ade424948cb37945edcc8e1cd87196a14b83df41d770fefc3cbc108f\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"service\",\"trace_origin\":\"server\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:11:05.123456Z\",\"type\":\"opena2a.correction\"}",
+      "recordHash": "a9ffca36214e0b79cce639f35cb1740bfa9e49a07e952146e4d6b4b08d8e2e20",
+      "signingInput": "DSSEv1 44 application/vnd.opena2a.audit-record.v1+json 630 {\"event_id\":\"a1a1a1a1-0000-4000-8000-000000000007\",\"opena2a\":{\"chain\":{\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"prev_hash\":\"998e9f7cee170d3d95ccb3e543e1f4c77c108e6971fb628d116ac1c489692516\",\"seq\":2},\"commitments\":{\"personal\":\"0bc9527fb9a7978e81eea915d197e756ff8ff76d1a0a1d15c185f8877af3790b\",\"tenant\":\"3490f091ade424948cb37945edcc8e1cd87196a14b83df41d770fefc3cbc108f\"},\"issuer\":\"urn:uuid:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\"schema\":\"opena2a-audit-record/1\",\"sig_algs\":[\"Ed25519\"],\"source\":\"service\",\"trace_origin\":\"server\",\"writer_version\":\"vectors-1\"},\"timestamp\":\"2026-01-02T03:11:05.123456Z\",\"type\":\"opena2a.correction\"}",
+      "tenantPart": "{\"opena2a\":{\"corrected_event_id\":\"a1a1a1a1-0000-4000-8000-000000000003\",\"organization_id\":\"3f2504e0-4f89-41d3-9a0c-0305e82c3301\"},\"parent_id\":null,\"resource_id\":\"d4d4d4d4-0000-4000-8000-000000000002\",\"trace_id\":\"5b8aa5a2d2c872e8321cf37308d69df2\"}",
+      "tenantSalt": "7171717171717171717171717171717171717171717171717171717171717171",
+      "personalPart": "{\"actor\":\"user:5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a\"}",
+      "personalSalt": "7272727272727272727272727272727272727272727272727272727272727272"
+    }
+  ]
+}
