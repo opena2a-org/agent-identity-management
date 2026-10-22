@@ -127,12 +127,13 @@ def test_a_host_that_only_resembles_or_is_not_a_loopback_host_is_refused(recorde
     assert_nothing_sent_or_saved(recorder, agents_dir, capsys.readouterr())
 
 
-def test_the_refusal_names_the_host_without_the_address_user_part(recorder, agents_dir, capsys):
+def test_an_address_with_a_user_part_is_refused_without_repeating_it(recorder, agents_dir, capsys):
+    # #859: refused for the user part itself, before the http: host rule.
     assert run_init("http://FAKEUSER:FAKEPASS@aim.example.test", token=TOKEN) == 1
 
     out = capsys.readouterr()
     assert_nothing_sent_or_saved(recorder, agents_dir, out)
-    assert "aim.example.test" in out.out
+    assert "Error: --url has a user name or password." in out.out
     assert "FAKEPASS" not in out.out
     assert "FAKEUSER" not in out.out
 

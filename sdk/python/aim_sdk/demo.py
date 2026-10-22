@@ -248,7 +248,7 @@ def _setup(url_override: Optional[str], interactive: bool, delay: float,
     the demo agent.
     """
     from .client import _a_person_can_approve_a_sign_in
-    from .credentials import load_sdk_credentials
+    from .credentials import STORED_ADDRESS_HAS_USER_INFO, has_user_info, load_sdk_credentials
     from .strict_mode import strict_mode_override
 
     creds = load_sdk_credentials()
@@ -265,6 +265,9 @@ def _setup(url_override: Optional[str], interactive: bool, delay: float,
             return None
 
     aim_url = (url_override or creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
+    if has_user_info(aim_url):
+        print(STORED_ADDRESS_HAS_USER_INFO)
+        return None
     dashboard_url = dashboard_url_for(aim_url)
 
     # Nothing about the server is printed before it answers once.
@@ -927,7 +930,9 @@ def _cleanup(url_override: Optional[str]) -> int:
     """Delete the demo agent (server row + local credential file)."""
     import requests
 
-    from .credentials import delete_agent_credentials, load_sdk_credentials
+    from .credentials import (
+        STORED_ADDRESS_HAS_USER_INFO, delete_agent_credentials, has_user_info, load_sdk_credentials,
+    )
     from .oauth import OAuthTokenManager
 
     creds = load_sdk_credentials()
@@ -935,6 +940,9 @@ def _cleanup(url_override: Optional[str]) -> int:
         print("Not authenticated. Run: aim-sdk login")
         return 1
     aim_url = (url_override or creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
+    if has_user_info(aim_url):
+        print(STORED_ADDRESS_HAS_USER_INFO)
+        return 1
 
     token = OAuthTokenManager().get_access_token(suppress_errors=True)
     if not token:
@@ -986,6 +994,18 @@ def _cleanup(url_override: Optional[str]) -> int:
 
 def run(interactive: bool = False, ci: bool = False, cleanup: bool = False, url: Optional[str] = None) -> int:
     """Entry point used by the aim-sdk CLI."""
+    from .credentials import server_address_part_refusal
+
+    url_part = server_address_part_refusal(url)
+    if url_part:
+        # Before any request, whether or not this machine is signed in (#859).
+        from .cli import DEFAULT_AIM_URL
+
+        print(f"Error: --url {url_part}.")
+        print("Pass the server's http(s) address, for example:")
+        print("  aim-sdk demo --url https://aim.example.com")
+        print(f"or omit --url to use {DEFAULT_AIM_URL}.")
+        return 1
     if cleanup:
         return _cleanup(url)
     delay = 0.0 if ci else 0.3

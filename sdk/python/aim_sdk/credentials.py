@@ -83,6 +83,62 @@ class CredentialOrigin:
 _LOGIN_ONLY_KEYS = ("accessToken", "organizationId")
 
 
+# =============================================================================
+# SERVER ADDRESS PARTS
+# =============================================================================
+
+# What a command prints, in one line, instead of using or showing a stored
+# server address with a user name or password. `requests` sends that part as an
+# `Authorization: Basic` header in place of the bearer token, and the address
+# is never printed, so the user name and password stay off the screen.
+STORED_ADDRESS_HAS_USER_INFO = (
+    "The server address stored with the sign-in has a user name or password, so it is "
+    "not used for a request; sign in again with: "
+    "aim-sdk login --force --url <server address>"
+)
+
+
+def has_user_info(aim_url: Any) -> bool:
+    """Whether the address holds a user name or password (an '@' before the host)."""
+    if not isinstance(aim_url, str):
+        return False
+    rest = aim_url.strip().partition("//")[2] if "//" in aim_url else ""
+    authority = rest.split("/", 1)[0].split("?", 1)[0].split("#", 1)[0]
+    return "@" in authority
+
+
+def server_address_part_refusal(aim_url: Any) -> Optional[str]:
+    """
+    What a server address holds besides the scheme, host, port and path, as
+    "has a user name or password", "has a query string" or "has a fragment",
+    or None. The words do not repeat the address.
+    """
+    if not isinstance(aim_url, str):
+        return None
+    if has_user_info(aim_url):
+        return "has a user name or password"
+    url = aim_url.strip()
+    if "#" in url:
+        return "has a fragment"
+    if "?" in url:
+        return "has a query string"
+    return None
+
+
+def without_user_info(aim_url: str) -> str:
+    """The address with any user name or password part left out, for output."""
+    if not has_user_info(aim_url):
+        return aim_url
+    scheme, _, rest = aim_url.partition("//")
+    end = len(rest)
+    for mark in "/?#":
+        index = rest.find(mark)
+        if index != -1:
+            end = min(end, index)
+    authority, tail = rest[:end], rest[end:]
+    return f"{scheme}//{authority.rpartition('@')[2]}{tail}"
+
+
 def detect_credential_origin(data: Optional[Dict[str, Any]]) -> str:
     """Tell a credential written by ``aim-sdk login`` from an SDK-download one.
 
@@ -842,8 +898,11 @@ def login_recovery_command(aim_url: str) -> str:
     """The command that replaces a rejected credential by signing in again.
 
     --force skips the "Re-authenticate? [y/N]" prompt the stale file would
-    otherwise trigger, and save_sdk_credentials overwrites the file.
+    otherwise trigger, and save_sdk_credentials overwrites the file. An address
+    with a user name or password is named by a placeholder, not printed.
     """
+    if has_user_info(aim_url):
+        aim_url = "<server address>"
     return f"aim-sdk login --url {aim_url} --force"
 
 

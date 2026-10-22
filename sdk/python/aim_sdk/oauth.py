@@ -33,8 +33,14 @@ from .credentials import (
     print_token_expired_error,
     read_sdk_credentials_file,
     sdk_credentials_lock,
+    STORED_ADDRESS_HAS_USER_INFO,
+    has_user_info,
 )
 from .security_logging import security_logger, AuthnEventType, CredEventType
+
+
+class _StoredAddressHasUserInfo(Exception):
+    """The stored server address has a user name or password; nothing is sent to it."""
 
 # Try to import secure storage (optional dependency)
 try:
@@ -417,6 +423,19 @@ class OAuthTokenManager:
         refresh_token = self.credentials.get('refreshToken') or self.credentials.get('refresh_token')
         token_id = self.credentials.get('sdkTokenId', '')[:8] + "..." if self.credentials.get('sdkTokenId') else None
 
+        if has_user_info(aim_url):
+            # `requests` would send the user name and password as an
+            # Authorization: Basic header; no request is made (#859).
+            security_logger.log_authentication(
+                AuthnEventType.TOKEN_REFRESH_FAILED,
+                success=False,
+                error="Stored server address has a user name or password",
+                details={"token_id": token_id}
+            )
+            if not suppress_errors:
+                print(STORED_ADDRESS_HAS_USER_INFO)
+            return None
+
         try:
             # Call token refresh endpoint (with rotation support)
             refresh_url = f"{aim_url.rstrip('/')}/api/v1/auth/refresh"
@@ -579,6 +598,9 @@ class OAuthTokenManager:
         confirmed = False
         reason = None
         try:
+            if has_user_info(aim_url):
+                # No request is made to this address (#859).
+                raise _StoredAddressHasUserInfo()
             response = requests.post(
                 f"{aim_url.rstrip('/')}/api/v1/auth/logout",
                 json={"refreshToken": refresh_token},
@@ -604,6 +626,9 @@ class OAuthTokenManager:
             else:
                 detail = body.get('error') or body.get('message') or ''
                 reason = f"the server answered HTTP {response.status_code}" + (f" ({detail})" if detail else "")
+        except _StoredAddressHasUserInfo:
+            reason = ("the server address stored with the sign-in has a user name or password, "
+                      "so no request was sent")
         except requests.RequestException as e:
             reason = f"the server was unreachable ({type(e).__name__})"
         except Exception as e:  # noqa: BLE001 - logout must never raise

@@ -167,12 +167,15 @@ def test_http_to_another_host_exits_1_before_any_request(no_network, url, host, 
     assert UNENCRYPTED not in out
 
 
-def test_the_refusal_names_the_host_without_the_address_user_part(no_network):
-    rc, out = _login("http://FAKEUSER:FAKEPASS@aim.example.test")
+@pytest.mark.parametrize("flags", [{}, {"allow_http": True}], ids=["no-flag", "allow-http"])
+def test_an_address_with_a_user_part_is_refused_with_or_without_the_flag(no_network, flags):
+    # #859: refused for the user part itself, before the http: host rule, so
+    # --allow-http does not accept it.
+    rc, out = _login("http://FAKEUSER:FAKEPASS@aim.example.test", **flags)
 
     assert rc == 1, out
     assert no_network == []
-    assert f"aim.example.test {REFUSED}" in out
+    assert "Error: --url has a user name or password." in out
     assert "FAKEUSER" not in out
     assert "FAKEPASS" not in out
 
@@ -199,14 +202,17 @@ def test_allow_http_prints_the_warning_before_the_first_request_then_signs_in(st
     assert stack.saved["refreshToken"] == PAIR["refreshToken"]
 
 
-def test_the_warning_names_the_host_without_the_address_user_part(stack):
+def test_allow_http_prints_no_warning_for_an_address_with_a_user_part(stack):
+    # #859: the address is refused before the warning and before any request.
     rc, out = _login("http://FAKEUSER:FAKEPASS@aim.example.test", allow_http=True)
 
-    assert rc == 0, out
-    line = _warning_line(out)
-    assert line.startswith("Warning: http://aim.example.test is not this machine")
-    assert "FAKEUSER" not in line
-    assert "FAKEPASS" not in line
+    assert rc == 1, out
+    assert stack.calls == []
+    assert stack.saved == {}
+    assert stack.opened == []
+    assert WARNING not in out
+    assert "FAKEUSER" not in out
+    assert "FAKEPASS" not in out
 
 
 # --- an address urlsplit and requests could read different hosts from --------

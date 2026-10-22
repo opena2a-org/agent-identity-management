@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — a server address with a user name or password is refused before any request and never printed (#859)
+
+- `aim-sdk login --url`, `aim-sdk init --url`, `aim-sdk demo --url`, `secure(aim_url=...)` and
+  `AIMClient(aim_url=...)` refuse an address that has a user name or password before the host, a query string or a
+  fragment, before any request. The message names the part (`Error: --url has a user name or password.`, `aim_url
+  has a query string; ...`) and not the address. `aim-sdk login --allow-http` does not accept such an address. An
+  address with a backslash is still reported as the backslash.
+- With the previous `cli.py`, `aim-sdk login --force --url` given such an address on 127.0.0.1:8080, with no server
+  listening there, sent the reachability request and printed the address with the user name and password in its
+  "unavailable" line; `aim-sdk status` printed a stored `aimUrl` with them after `Server:` and as `"server"` in
+  `--json`. `requests` 2.34.2 sends a user name and password in a URL as an `Authorization: Basic` header, which
+  replaces an `Authorization: Bearer` header the request sets.
+- A stored `aimUrl` with a user name or password is not used for a request and not printed, and the file is left as
+  it is: `aim-sdk status` prints one line in its place after `Server:` that names
+  `aim-sdk login --force --url <server address>`, and `--json` reports `"server": null`; `aim-sdk login` without
+  `--force` prints that line in place of `Server: ...`; `secure()` raises `ConfigurationError` with it; a token
+  refresh sends nothing, and prints it unless errors are suppressed; `aim-sdk demo` and `aim-sdk demo --cleanup` print it and exit 1;
+  `aim-sdk logout` sends no revocation request, says so, and deletes the local credentials as before.
+- A connection failure message leaves a user name or password out of the address it names, and the recovery command
+  `aim-sdk login --url ... --force` names `<server address>` for such an address.
+- Tests: `tests/test_server_address_user_info.py`; `tests/test_cli_login_cleartext_url.py` and
+  `tests/test_cli_init_cleartext_url.py` now expect the refusal for such an address.
+
 ### Added — `get_user_feedback()` reads the summary of an agent's user ratings (#666)
 
 - `AIMClient.get_user_feedback(agent_id=None)` reads `GET /api/v1/agents/{id}/feedback` and returns the server's
