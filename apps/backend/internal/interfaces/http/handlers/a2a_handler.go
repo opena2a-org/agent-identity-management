@@ -2002,24 +2002,10 @@ func (h *A2AHandler) GetSecurityViolations(c fiber.Ctx) error {
 		return respondA2AFailure(c, a2aOrganizationRequired)
 	}
 
-	limit := 50
-	offset := 0
-	if limitStr := c.Query("limit"); limitStr != "" {
-		// A limit below 1 keeps the default page size.
-		if l, err := strconv.Atoi(limitStr); err == nil && l >= 1 {
-			limit = l
-		}
-	}
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil {
-			offset = o
-		}
-	}
-	if offset < 0 {
-		offset = 0 // read a negative offset as the first page
-	}
+	// limit 1-100 (default 50), offset 0-MaxOffset
+	p := ParsePaginationWithDefaults(c, 50, 100)
 
-	violations, err := h.a2aService.GetSecurityViolations(c.Context(), orgID, limit, offset)
+	violations, err := h.a2aService.GetSecurityViolations(c.Context(), orgID, p.Limit, p.Offset)
 	if err != nil {
 		return respondA2AFailureCause(c, a2aViolationsNotRead, err)
 	}

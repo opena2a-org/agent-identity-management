@@ -11,6 +11,25 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the agent alert, agent violation, admin alert and A2A violation routes cap limit and offset (#855)
+
+- `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations`, `GET /api/v1/admin/alerts` and
+  `GET /api/v1/a2a/security/violations` read `limit` and `offset` through `ParsePaginationWithDefaults`, the pagination
+  helper other list routes use. A `limit` above 100 is read as 100 on the agent alert, agent violation and A2A
+  violation routes, and a `limit` above 1000 as 1000 on the admin alert route; an `offset` above 10000 is read as
+  10000 on all four. `limit=1000000&offset=1000000000`, a limit one above the route's largest page size with
+  `offset=10001`, and the largest page size with `offset=10000` reach the page query (`LIMIT $2 OFFSET $3`) as that
+  page size and 10000, and are answered 200; the first three routes echo both values as `"limit"` and `"offset"`.
+- The page sizes read when no `limit` is sent stay 50, 20, 100 and 50, a `limit` below 1 is still read as that size
+  (#846, #847, #849), and a negative `offset` is still read as 0 (#844).
+- The admin alert route's largest page size is 1000 because the dashboard's admin alert page asks it for
+  `max(allCount, 1000)` alerts when "All" rows per page is selected. An organization with more than 1000 alerts is
+  now served 1000 on that request.
+- Before, each of the four handlers sent a `limit` above 0 and an `offset` of 0 or more to the page query as the
+  request named them, measured with `limit=1000000&offset=1000000000`, `limit=101&offset=10001` and
+  `limit=1001&offset=10001` on each route.
+- Tests: `apps/backend/internal/interfaces/http/handlers/list_routes_limit_offset_cap_test.go`.
+
 ### Fixed — a failed read of an agent's FGA policy or granted capabilities is answered with a fixed reason, not the database error (#854)
 
 - The verification handler, which serves `POST /api/v1/sdk-api/verifications` and `POST /api/v1/verifications`,

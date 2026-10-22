@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
@@ -641,23 +640,9 @@ func (h *CapabilityHandler) GetViolationsByAgent(c fiber.Ctx) error {
 		return nil
 	}
 
-	limit := 20
-	if limitStr := c.Query("limit"); limitStr != "" {
-		// A limit below 1 keeps the default page size.
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil && parsedLimit >= 1 {
-			limit = parsedLimit
-		}
-	}
-
-	offset := 0
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsedOffset, err := strconv.Atoi(offsetStr); err == nil {
-			offset = parsedOffset
-		}
-	}
-	if offset < 0 {
-		offset = 0 // read a negative offset as the first page
-	}
+	// limit 1-100 (default 20), offset 0-MaxOffset
+	p := ParsePaginationWithDefaults(c, 20, 100)
+	limit, offset := p.Limit, p.Offset
 
 	capSvc := h.getCapabilityService()
 	violations, total, err := capSvc.GetViolationsByAgent(
