@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed: `aim-sdk demo` links to the dashboard address the server states, as `aim-sdk init` does (#740)
+
+- `aim-sdk login`, and the sign-in that `secure()` and `aim-sdk demo` run when no sign-in is stored, store the
+  dashboard address with the sign-in as `dashboardUrl`: the device-code answer's `verificationUri`, which the server
+  builds as its `FRONTEND_URL` followed by `/device`, without that `/device` and with any path before it kept. A
+  `verificationUri` that does not end in `/device` stores no address (`dashboardUrl` is `null`).
+- `aim-sdk demo` and `aim-sdk demo --interactive` build every dashboard link they print (the banner's `Dashboard:`
+  line, the `Agent:` and `Activity:` lines, the menu line) on that address when they run against the server of the
+  stored sign-in, its `aimUrl` compared without a trailing `/`. With `--url` naming another server, a sign-in stored
+  before this change, or a stored address `aim-sdk init` would not print, they build them on the address derived
+  from the server address, as before. Measured with the previous `demo.py`, for a sign-in stored for
+  `http://127.0.0.1:18080` (a self-hosted API on a port other than 8080), with and without a `dashboardUrl` of
+  `http://localhost:3000`: the banner printed `Dashboard:   http://127.0.0.1:18080/dashboard`, on the API's address.
+- `aim-sdk init` and `aim-sdk demo` build the link with one helper, `dashboard_origin` in `aim_sdk/_dashboard.py`,
+  which applies the rule of the `aim-sdk init` entry for #740 below. The link `init` prints is unchanged.
+- Tests: `tests/test_cli_dashboard_links_use_the_server_dashboard.py`.
+
 ### Fixed — `~/.aim` is created with mode 0700, and the SDK prints each mode it changes on an existing `~/.aim` or `~/.aim/agents` (#860)
 
 - Measured with the previous code under umask 022, on a home with no `~/.aim`: `save_sdk_credentials()` (which
