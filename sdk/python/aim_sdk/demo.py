@@ -36,7 +36,7 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from ._dashboard import dashboard_url_for
+from ._dashboard import dashboard_origin
 
 DEMO_AGENT_NAME = "demo-agent"
 DEMO_CAPABILITIES = ["api:call", "user:read", "db:read"]
@@ -268,7 +268,10 @@ def _setup(url_override: Optional[str], interactive: bool, delay: float,
     if has_user_info(aim_url):
         print(STORED_ADDRESS_HAS_USER_INFO)
         return None
-    dashboard_url = dashboard_url_for(aim_url)
+    # The dashboard address the sign-in stored names the dashboard of the
+    # server it signed in to, so it is used only when the demo runs there.
+    signed_in_url = (creds.get("aimUrl") or creds.get("aim_url") or "").rstrip("/")
+    dashboard_url = dashboard_origin(aim_url, creds.get("dashboardUrl") if signed_in_url == aim_url else None)
 
     # Nothing about the server is printed before it answers once.
     unreachable = _unreachable_reason(aim_url)

@@ -642,6 +642,20 @@ def _verification_uri_problem(device):
     return None
 
 
+def _dashboard_url_from_verification_uri(verification_uri):
+    """
+    The dashboard address a device-code answer's verificationUri names, or
+    None. The server builds that URI as its FRONTEND_URL, the dashboard's
+    address, followed by '/device', so the address is the URI without that
+    '/device', with any path before it kept. A URI that does not end in
+    '/device' names none. `aim-sdk demo` builds its links on the stored
+    address with _dashboard.dashboard_origin, which checks it first.
+    """
+    if isinstance(verification_uri, str) and verification_uri.endswith('/device'):
+        return verification_uri[:-len('/device')]
+    return None
+
+
 def _sign_in_failure(reason, max_wait):
     """The sentence that ends a device grant that answered `reason` instead of a token pair."""
     if reason in ('expired_token', 'timeout'):
@@ -790,6 +804,7 @@ def login(args):
         'userId': claims.get('user_id'),
         'userEmail': claims.get('email'),
         'organizationId': claims.get('organization_id'),
+        'dashboardUrl': _dashboard_url_from_verification_uri(verification_uri),
     }
 
     if save_sdk_credentials(credentials):
@@ -959,6 +974,7 @@ def sign_in_inline(aim_url, agent_name, out=None):
         'userId': claims.get('user_id'),
         'userEmail': claims.get('email'),
         'organizationId': claims.get('organization_id'),
+        'dashboardUrl': _dashboard_url_from_verification_uri(verification_uri),
     }
     if not stored.save_sdk_credentials(credentials):
         raise ConfigurationError("Failed to save credentials.")
@@ -1335,9 +1351,10 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
 
 def _reported_dashboard_url(value, aim_url):
     """
-    The dashboard address the server reported in its exchange answer
-    (dashboardUrl), without surrounding whitespace and with no '/' at its end,
-    or None when it reported none or one `init` does not print. Not printed:
+    The dashboard address the server at `aim_url` stated (the dashboardUrl of
+    its exchange answer, or the one a sign-in stored from its device grant),
+    without surrounding whitespace and with no '/' at its end, or None when it
+    stated none or one `init` and `demo` do not print. Not printed:
     a value that is not a string or
     not an http(s) URL with a host; one with a user part, a port that is not
     a number from 0 to 65535, a query or a fragment; one that
@@ -1496,12 +1513,12 @@ def init(args):
         print("dashboard and run aim-sdk init again with a new token.")
         return 1
 
-    from ._dashboard import dashboard_url_for
+    from ._dashboard import dashboard_origin
 
     # The server's dashboard origin when its answer carries a usable one; the
     # API address does not name the dashboard of a deployment that serves the
     # two on hosts of their own.
-    dashboard_url = _reported_dashboard_url(result.get('dashboardUrl'), aim_url) or dashboard_url_for(aim_url)
+    dashboard_url = dashboard_origin(aim_url, result.get('dashboardUrl'))
     print()
     print("Agent registered.")
     print()
