@@ -123,10 +123,13 @@ npm ci
 npm test
 ```
 
-The TypeScript SDK's `npm test` also runs five of the repository's documentation lint scripts, from
+The TypeScript SDK's `npm test` also runs seven of the repository's lint scripts, from
 `tests/repo-doc-lints.test.ts`: `scripts/check-public-wording.py` with `python3`,
 `scripts/test-lint-docs-keyvault-master-key.sh` and `scripts/test-lint-docs-repo-links.sh` with `bash`, and
-`scripts/check-docs-prose.mjs` and its tests, `scripts/test-check-docs-prose.mjs`, with `node`. From
+`scripts/check-docs-prose.mjs` and its tests, `scripts/test-check-docs-prose.mjs`, and
+`scripts/lint-token-literals.mjs` and its tests, `scripts/test-lint-token-literals.mjs`, with `node`. The token
+literal lint refuses a tracked file with a token-shaped literal that `scripts/token-literal-allowlist.txt` does
+not name, so a pull request that commits one fails the suite. From
 `tests/repo-executable-blobs.test.ts` it runs `scripts/lint-no-executable-blobs.py` with `python3`, which
 refuses a file in the tree of `HEAD` that starts with a compiled executable's magic bytes, and that lint's
 tests, `scripts/test-lint-no-executable-blobs.sh` with `bash`. CI runs this suite on every pull request to
