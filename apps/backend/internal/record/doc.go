@@ -48,12 +48,14 @@
 // The package is pure: it reads and writes no database and serves no route.
 // Its subpackage store keeps chains in PostgreSQL: it starts a chain, appends
 // to it under the chain's append lock and reads a chain's state, which is one
-// of the three ChainState values. A reduction whose record cannot be appended
-// commits with a debt row instead, and the store's settler appends the late
-// record built from that row. At process start the store reads whether a
-// foreign key still removes audit rows by cascade: while one does and no
-// chain has started, the deployment is in the pre-chain state, no chain
-// starts and a write commits with no record. Not built here: checkpoints, the
-// placement table that decides which member sits in which part, and store
-// paths that append a key rotation or a correction to a chain.
+// of the three ChainState values. Its writer appends a key rotation, and the
+// statement that appends it moves the chain to the next key; it appends a
+// correction only of a record of the organization's chain. A reduction whose
+// record cannot be appended commits with a debt row instead, and the store's
+// settler appends the late record built from that row. At process start the
+// store reads whether a foreign key still removes audit rows by cascade:
+// while one does and no chain has started, the deployment is in the pre-chain
+// state, no chain starts and a write of an ordinary record commits with no
+// record. Not built here: checkpoints, and the placement table that decides
+// which member sits in which part.
 package record

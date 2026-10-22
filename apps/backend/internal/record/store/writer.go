@@ -10,8 +10,8 @@
 //     in a trace fails before anything waits.
 //  2. The write takes one of its chain's connection slots in this process,
 //     opens a transaction, checks that a record with a parent names a record
-//     of the organization's chain in its own trace, and runs the caller's
-//     state change.
+//     of the organization's chain in its own trace, checks a key rotation or
+//     a correction against the chain, and runs the caller's state change.
 //  3. It takes the append lock by locking the chain's record_chains row.
 //     From here every statement runs under StatementTimeout.
 //  4. It reads the chain state, runs the caller's guard and lead, signs the
@@ -22,6 +22,17 @@
 // organization never hold more of the pool than that, however fast they
 // arrive or however long its lock is held: the other organizations' writes
 // do not wait for a connection.
+//
+// A write's record is an ordinary record, a key rotation or a correction. A
+// key rotation is signed by the writer's key and names the next key, and the
+// statement that appends it moves the chain's key to the next key. A writer
+// appends to a chain only while the chain names the writer's key, so after
+// the rotation this writer's appends to the chain fail with reason signer
+// and a writer that holds the next key extends it. A correction names a
+// record of the organization's chain by its event id. The check in step 2
+// reads the chain once: for a correction, that the record it names is in the
+// organization's chain; for a key rotation, that the chain names the writer's
+// key and that the next key has signed none of its records.
 //
 // A write that fails is refused whole: the state change rolls back with the
 // record. The one exception is a reduction, which removes or narrows what
@@ -37,10 +48,12 @@
 //
 // A writer started in the pre-chain state (ReadStartState: no chain has
 // started in the deployment and a foreign key removes audit rows by cascade)
-// commits a write for an organization whose chain has not started with no
-// record and no debt, in every class, and counts it as no failure. An
-// organization whose chain has started is appended to as above. The writer
-// leaves the pre-chain state when it writes a genesis.
+// commits a write of an ordinary record for an organization whose chain has
+// not started with no record and no debt, in every class, and counts it as
+// no failure. A key rotation or a correction for such an organization fails
+// or is refused in step 2, as outside that state. An organization whose
+// chain has started is appended to as above. The writer leaves the pre-chain
+// state when it writes a genesis.
 package store
 
 import (
@@ -146,9 +159,13 @@ var reasons = []Reason{
 	ReasonGuard, ReasonChainGuardProbe, ReasonDatabase, ReasonOther,
 }
 
-// ErrInvalidWrite is wrapped by the error of a write the writer refuses
-// before it starts: an unknown class, a malformed organization id, or a lead
-// on a reduction that would commit with a debt.
+// ErrInvalidWrite is wrapped by the error of a write the writer refuses as a
+// request, before its state change runs: an unknown class, a malformed
+// organization id, a lead, key rotation or correction on a reduction that
+// would commit with a debt, a write that is both a key rotation and a
+// correction, a key rotation whose next key is the writer's own or has
+// signed a record of the chain, and a correction that names no record of the
+// organization's chain.
 var ErrInvalidWrite = errors.New("store: invalid write")
 
 // ErrChainStarted is returned by Start when the organization already has a
@@ -209,6 +226,76 @@ type Write struct {
 	// write by returning an error. A debt row holds one record, so a
 	// reduction that sets Lead must set NoDebt.
 	Lead Lead
+	// Rotation, when set, makes the record a key rotation. Signed by the
+	// writer's key, it names Rotation.NextKey as the key of every later
+	// record of the chain, and the statement that appends it moves the
+	// chain's key to that key. The draft's type is record.TypeKeyRotation, or
+	// empty and set to it. Before the state change, the write fails with
+	// reason chain_head when the organization's chain has not started, in
+	// the pre-chain state as well, and with reason signer when the chain's
+	// key is not the writer's; it is refused as a request when the next key
+	// is the writer's own or has signed a record of the chain. A debt row
+	// holds no next key, so a reduction that sets Rotation must set NoDebt.
+	Rotation *Rotation
+	// Corrects, when set, makes the record a correction of the record of the
+	// organization's chain whose event id it is: the record package names
+	// that event id in the correction's tenant part. The draft's type is
+	// record.TypeCorrection, or empty and set to it. Before the state change,
+	// the write is refused as a request when no record of the organization's
+	// chain has that event id. A debt row holds no corrected record, so a
+	// reduction that sets Corrects must set NoDebt.
+	Corrects string
+}
+
+// Rotation is what a key rotation states besides its draft.
+type Rotation struct {
+	// NextKey signs every record of the chain after the rotation. It is not
+	// the writer's key, and has signed no record of the chain.
+	NextKey record.PublicKey
+	// Reason is record.RotationScheduled, record.RotationCustodyChange or
+	// record.RotationExposure.
+	Reason string
+	// ExposureBegan is when the exposure of the writer's key is believed to
+	// have begun. It is set when Reason is record.RotationExposure, and only
+	// then.
+	ExposureBegan time.Time
+}
+
+// shape is what a write's record is besides its draft: a key rotation when
+// rotation is set, a correction when corrects is set, and an ordinary record
+// otherwise.
+type shape struct {
+	rotation *Rotation
+	corrects string
+}
+
+// recordType is the type a draft of this shape takes when it names none.
+func (s shape) recordType() string {
+	switch {
+	case s.rotation != nil:
+		return record.TypeKeyRotation
+	case s.corrects != "":
+		return record.TypeCorrection
+	default:
+		return ""
+	}
+}
+
+// build serializes d, in this shape, as the record after head.
+func (s shape) build(head record.Head, d record.Draft) (record.Body, error) {
+	switch {
+	case s.rotation != nil:
+		return record.NewKeyRotation(head, record.KeyRotation{
+			NextKey:       s.rotation.NextKey,
+			Reason:        s.rotation.Reason,
+			ExposureBegan: s.rotation.ExposureBegan,
+			Draft:         d,
+		})
+	case s.corrects != "":
+		return record.NewCorrection(head, record.Correction{CorrectedEventID: s.corrects, Draft: d})
+	default:
+		return record.NewRecord(head, d)
+	}
 }
 
 // Lead returns the record to append before a write's record, or nil for
@@ -360,10 +447,31 @@ const (
   FROM record_chains c
   JOIN audit_records r ON r.chain_id = c.id
  WHERE c.organization_id = $1 AND r.event_id = $2`
+	// correctedQuery finds the record a correction names in the
+	// organization's chain. It runs before the append lock, as parentQuery
+	// does.
+	correctedQuery = `SELECT 1
+  FROM record_chains c
+  JOIN audit_records r ON r.chain_id = c.id
+ WHERE c.organization_id = $1 AND r.event_id = $2`
+	// rotationQuery reads the key the organization's chain names and whether
+	// the next key ($2) has signed any record of the chain. No index of
+	// audit_records covers key_id: with many chains in the table the planner
+	// reads the chain's records through the primary key, and with few it may
+	// read the whole table. Either way it runs before the append lock, not
+	// holding it. No write moves a chain to a key that has signed one of its
+	// records, so a chain that names the writer's key both here and under the
+	// append lock was not signed by the next key in between.
+	rotationQuery = `SELECT c.key_id,
+       EXISTS (SELECT 1 FROM audit_records r WHERE r.chain_id = c.id AND r.key_id = $2)
+  FROM record_chains c
+ WHERE c.organization_id = $1`
 	startChainQuery = `INSERT INTO record_chains (id, organization_id, key_id, head_seq, head_hash)
 VALUES ($1, $2, $3, $4, $5)`
 	// appendQuery is the one statement that inserts a record. It moves the
-	// chain's head from the record's predecessor ($15) to the record.
+	// chain's head from the record's predecessor ($15) to the record. For a
+	// key rotation it also moves the chain's key to the next key ($16); for
+	// any other record $16 is NULL and the chain's key stays as it is.
 	appendQuery = `
 WITH appended AS (
     INSERT INTO audit_records (chain_id, seq, event_id, record_type, recorded_at, record_hash,
@@ -372,7 +480,7 @@ WITH appended AS (
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING chain_id, seq, record_hash)
 UPDATE record_chains c
-   SET head_seq = a.seq, head_hash = a.record_hash, updated_at = NOW()
+   SET head_seq = a.seq, head_hash = a.record_hash, key_id = COALESCE($16, c.key_id), updated_at = NOW()
   FROM appended a
  WHERE c.id = a.chain_id AND c.head_seq = $15`
 	// A reduction's record is tried in this savepoint, taken after its state
@@ -407,6 +515,16 @@ func (w *Writer) Write(ctx context.Context, req Write) (Appended, error) {
 	}
 	if req.Lead != nil && req.Class == ClassReduction && !req.NoDebt {
 		return Appended{}, fmt.Errorf("%w: a reduction with a lead must set NoDebt, as a debt row holds one record", ErrInvalidWrite)
+	}
+	if req.Rotation != nil && req.Corrects != "" {
+		return Appended{}, fmt.Errorf("%w: a record is a key rotation or a correction, not both", ErrInvalidWrite)
+	}
+	if req.Rotation != nil && req.Rotation.NextKey.KeyID() == w.key.KeyID() {
+		return Appended{}, fmt.Errorf("%w: a key rotation names the writer's own key as the next key", ErrInvalidWrite)
+	}
+	if (req.Rotation != nil || req.Corrects != "") && req.Class == ClassReduction && !req.NoDebt {
+		return Appended{}, fmt.Errorf("%w: a reduction that is a key rotation or a correction must set NoDebt, "+
+			"as a debt row holds neither a next key nor a corrected record", ErrInvalidWrite)
 	}
 	out, reason, err := w.write(ctx, req)
 	if reason != "" {
@@ -459,7 +577,11 @@ func (w *Writer) logFailure(class Class, reason Reason, owed string) {
 // reason when req.Apply did. A reduction that committed with a debt returns
 // its reason and an Appended whose Debt is set.
 func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error) {
+	s := shape{rotation: req.Rotation, corrects: req.Corrects}
 	d := cloneDraft(req.Draft)
+	if d.Type == "" {
+		d.Type = s.recordType()
+	}
 	if d.Timestamp.IsZero() {
 		d.Timestamp = w.now()
 	}
@@ -467,7 +589,15 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 	if err := addSalts(&d); err != nil {
 		return Appended{}, ReasonOther, err
 	}
-	if _, err := record.NewRecord(placeholderHead, d); err != nil {
+	if s.corrects != "" && len(d.TenantSalt) == 0 {
+		// The correction's reference sits in the tenant part, so that part
+		// exists even when the draft gives it no member of its own.
+		d.TenantSalt = make([]byte, record.SaltSize)
+		if _, err := rand.Read(d.TenantSalt); err != nil {
+			return Appended{}, ReasonOther, fmt.Errorf("store: salt: %w", err)
+		}
+	}
+	if _, err := s.build(placeholderHead, d); err != nil {
 		return Appended{}, ReasonCanonical, err
 	}
 	link, err := trace.Check(d)
@@ -514,6 +644,9 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 			return Appended{}, reason, err
 		}
 	}
+	if reason, err := w.checkShape(ctx, tx, req.OrganizationID, s); err != nil {
+		return Appended{}, reason, err
+	}
 	if req.Apply != nil {
 		if err := req.Apply(ctx, tx); err != nil {
 			return Appended{}, "", err
@@ -525,7 +658,7 @@ func (w *Writer) write(ctx context.Context, req Write) (Appended, Reason, error)
 		}
 	}
 
-	out, reason, err := w.appendLocked(ctx, tx, req.OrganizationID, &d, req.Guard, req.Lead, waitStart, deadline, req.Apply != nil)
+	out, reason, err := w.appendLocked(ctx, tx, req.OrganizationID, &d, s, req.Guard, req.Lead, waitStart, deadline, req.Apply != nil)
 	if reason == "" {
 		if err := tx.Commit(); err != nil {
 			return Appended{}, ReasonDatabase, err
@@ -627,12 +760,12 @@ func (w *Writer) debtCommitted(owed debt, debtID string) Appended {
 
 func debtSlotKey(organizationID string) string { return "debt/" + organizationID }
 
-// appendLocked takes the append lock in tx and appends d to the
+// appendLocked takes the append lock in tx and appends d, in shape s, to the
 // organization's chain. It does not commit. When applied is true, a state
 // change ran in tx first, and the lock wait is bounded by what remains of
 // the deadline. When lead is set and returns a draft, that draft is appended
-// first, under the same lock, and d after it.
-func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID string, d *record.Draft,
+// first, under the same lock, as an ordinary record, and d after it.
+func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID string, d *record.Draft, s shape,
 	guard Guard, lead Lead, waitStart, deadline time.Time, applied bool) (Appended, Reason, error) {
 	if applied {
 		remaining := time.Until(deadline)
@@ -700,14 +833,14 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 			return Appended{}, reason, err
 		}
 		if ld != nil {
-			if head, reason, err = w.appendOne(ctx, tx, head, *ld); reason != "" {
+			if head, reason, err = w.appendOne(ctx, tx, head, *ld, shape{}); reason != "" {
 				return Appended{}, reason, err
 			}
 			leadEventID = ld.EventID
 		}
 	}
 
-	next, reason, err := w.appendOne(ctx, tx, head, *d)
+	next, reason, err := w.appendOne(ctx, tx, head, *d, s)
 	if reason != "" {
 		return Appended{}, reason, err
 	}
@@ -715,10 +848,11 @@ func (w *Writer) appendLocked(ctx context.Context, tx *sql.Tx, organizationID st
 		LeadEventID: leadEventID}, "", nil
 }
 
-// appendOne signs d as the record after head, appends it and moves the
-// chain's head to it, in tx under the append lock. It returns the new head.
-func (w *Writer) appendOne(ctx context.Context, tx *sql.Tx, head record.Head, d record.Draft) (record.Head, Reason, error) {
-	body, err := record.NewRecord(head, d)
+// appendOne signs d, in shape s, as the record after head, appends it and
+// moves the chain's head to it, in tx under the append lock. A key rotation
+// also moves the chain's key to its next key. It returns the new head.
+func (w *Writer) appendOne(ctx context.Context, tx *sql.Tx, head record.Head, d record.Draft, s shape) (record.Head, Reason, error) {
+	body, err := s.build(head, d)
 	if err != nil {
 		return record.Head{}, ReasonCanonical, err
 	}
@@ -734,11 +868,15 @@ func (w *Writer) appendOne(ctx context.Context, tx *sql.Tx, head record.Head, d 
 		return record.Head{}, ReasonSigner, err
 	}
 	next := body.Head()
+	var nextKeyID any
+	if s.rotation != nil {
+		nextKeyID = s.rotation.NextKey.KeyID()
+	}
 	res, err := tx.ExecContext(ctx, appendQuery,
 		head.ChainID, next.Seq, d.EventID, d.Type, d.Timestamp, next.Hash,
 		rec.Envelope.PayloadType, body.Canonical(), rec.Envelope.Signatures[0].KeyID, signature,
 		nullable(rec.TenantPart), nullable(rec.TenantSalt), nullable(rec.PersonalPart), nullable(rec.PersonalSalt),
-		head.Seq)
+		head.Seq, nextKeyID)
 	if err != nil {
 		if code := pqCode(err); len(code) == 5 && code[:2] == "23" {
 			return record.Head{}, ReasonConstraint, err
@@ -810,6 +948,41 @@ func checkParent(ctx context.Context, tx *sql.Tx, organizationID string, link tr
 	}
 	if parentTrace != link.TraceID {
 		return ReasonTrace, errors.New("store: the record's trace_id is not its parent's")
+	}
+	return "", nil
+}
+
+// checkShape reads the chain, in tx before the state change, for what a key
+// rotation or a correction needs of it. It returns an error with no reason
+// for a refusal of the request, and an error with a reason for a failed
+// record write.
+func (w *Writer) checkShape(ctx context.Context, tx *sql.Tx, organizationID string, s shape) (Reason, error) {
+	switch {
+	case s.corrects != "":
+		var found int
+		err := tx.QueryRowContext(ctx, correctedQuery, organizationID, s.corrects).Scan(&found)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return "", fmt.Errorf("%w: the corrected event id names no record of the organization's chain", ErrInvalidWrite)
+		case err != nil:
+			return ReasonDatabase, err
+		}
+	case s.rotation != nil:
+		var (
+			keyID  string
+			signed bool
+		)
+		err := tx.QueryRowContext(ctx, rotationQuery, organizationID, s.rotation.NextKey.KeyID()).Scan(&keyID, &signed)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ReasonChainHead, errors.New("store: the organization's chain has not started, so it has no key to rotate")
+		case err != nil:
+			return ReasonDatabase, err
+		case keyID != w.key.KeyID():
+			return ReasonSigner, errors.New("store: the writer's key is not the key the chain names")
+		case signed:
+			return "", fmt.Errorf("%w: the next key has already signed a record of the chain", ErrInvalidWrite)
+		}
 	}
 	return "", nil
 }
@@ -999,12 +1172,13 @@ func (w *Writer) start(ctx context.Context, organizationID string) (Appended, er
 		return Appended{}, fmt.Errorf("store: start chain: %w", err)
 	}
 	// The chain row already names the genesis as its head, so the append
-	// moves the head from the genesis to itself.
+	// moves the head from the genesis to itself, and leaves the chain's key
+	// as the chain row names it.
 	res, err := tx.ExecContext(ctx, appendQuery,
 		chainID, head.Seq, eventID, record.TypeChainGenesis, timestamp, head.Hash,
 		rec.Envelope.PayloadType, body.Canonical(), rec.Envelope.Signatures[0].KeyID, signature,
 		nullable(rec.TenantPart), nullable(rec.TenantSalt), nullable(rec.PersonalPart), nullable(rec.PersonalSalt),
-		head.Seq)
+		head.Seq, nil)
 	if err != nil {
 		return Appended{}, fmt.Errorf("store: start chain: %w", err)
 	}
