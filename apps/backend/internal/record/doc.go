@@ -50,6 +50,15 @@
 // the checkpoint's sequence other than the one the checkpoint names. An
 // empty sequence is reported as no chain started, never as verified.
 //
+// A chain removed whole, its records and its chain row together, leaves no
+// sequence to walk. VerifyChainSet reports on a deployment's chains
+// together: the walks of the chains the deployment holds, the checkpoints
+// held outside it, and tombstones, each of which states that a chain was
+// removed whole at a final head. A chain a held checkpoint names that is
+// neither present and verifying nor accounted for by exactly one tombstone,
+// at or above every held checkpoint of the chain, is reported as removed
+// without record.
+//
 // The package is pure: it reads and writes no database and serves no route.
 // Its subpackage store keeps chains in PostgreSQL: it starts a chain, appends
 // to it under the chain's append lock and reads a chain's state, which is one
@@ -61,6 +70,7 @@
 // store reads whether a foreign key still removes audit rows by cascade:
 // while one does and no chain has started, the deployment is in the pre-chain
 // state, no chain starts and a write of an ordinary record commits with no
-// record. Not built here: the store writes no checkpoint yet, and the
-// placement table that decides which member sits in which part.
+// record. Not built here: the store writes no checkpoint yet, the placement
+// table that decides which member sits in which part, and the record that
+// states a chain's removal.
 package record
