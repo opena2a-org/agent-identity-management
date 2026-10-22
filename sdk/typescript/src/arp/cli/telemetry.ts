@@ -84,8 +84,9 @@ ${rows}
 
   Structural signatures are OFF unless you turn them on with AIM_TELEMETRY=1
   or signatureTelemetry.enabled: true. The shape of an anomalous behavior is
-  shared (plus a sensor id and org pseudonym), never payloads. Every byte
-  sent is recorded locally first; review it with: ${SHIPPED_INVOCATION} log
+  shared (plus a sensor id, the sensor's public key and an org pseudonym),
+  never payloads. Every byte sent is recorded locally first. Review it with:
+  ${SHIPPED_INVOCATION} log
 `;
 }
 
@@ -152,8 +153,8 @@ export async function telemetryLog(countArg?: string): Promise<number> {
   }
   console.log("\n  A sent record's payload is byte-for-byte what left this machine. No");
   console.log('  prompts, tool args, paths, file contents, or secrets are present by');
-  console.log('  design; the only identifiers are the sensor id and the rotating org');
-  console.log('  pseudonym in the payload.\n');
+  console.log('  design; the identifiers in the payload are the sensor id, the');
+  console.log("  sensor's public key and the rotating org pseudonym.\n");
   return 0;
 }
 

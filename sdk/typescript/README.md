@@ -576,8 +576,9 @@ sent back to any install from it, and the patterns ARP matches are the ones
 bundled in the package. Prompts, model responses, tool arguments, file
 contents or paths, command lines, environment values, secrets, IP addresses,
 hostnames, and account, tool, agent, and model names never appear in a report.
-A report does carry a random per-install sensor id and a monthly-rotating org
-pseudonym alongside the structural fields. A one-time disclosure is printed
+A report does carry a random per-install sensor id, the public key of the
+per-install sensor key that signs it, and a monthly-rotating org pseudonym
+alongside the structural fields. A one-time disclosure is printed
 before first collection, and every payload is appended to a local audit log
 (`~/.opena2a/telemetry-audit.log`, JSONL) before it is sent. Review it with
 `aim-arp telemetry log` (or `npx @opena2a/aim-sdk telemetry log`).

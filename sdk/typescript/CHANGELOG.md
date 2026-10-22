@@ -137,6 +137,27 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - Tests: `tests/arp/intelligence/coordinator-l2-failure.test.ts`, and the failed-call cases in
   `tests/arp/intelligence/budget.test.ts`.
 
+### Fixed: the README, the telemetry disclosure and the `aim-arp telemetry` help and log footers name the sensor's public key a report carries
+
+- Each signature telemetry report `buildSignedSubmission` builds carries the sensor's `publicKey` beside its `sensorId`
+  and `orgPseudonym`, and the emitter POSTs that body as built. Four texts that list what a report carries named the
+  sensor id and the org pseudonym and left out the public key: the README paragraph on structural signature
+  telemetry; `disclosureText()`, which the first-run notice and `aim-arp telemetry disclosure` print, and which named
+  "the sensor key signature" but not the key; the footer of `aim-arp telemetry --help` ("plus a sensor id and org
+  pseudonym"); and the footer `aim-arp telemetry log` prints under the audited payloads, which said "the only
+  identifiers are the sensor id and the rotating org pseudonym in the payload" under a payload that carried
+  `publicKey`.
+- The README now lists "the public key of the per-install sensor key that signs it", and the disclosure "the public
+  key of the per-install sensor key, and that key's signature". The help footer reads "plus a sensor id, the sensor's
+  public key and an org pseudonym", and its last sentence now ends before the `aim-arp telemetry log` command, which
+  has a line of its own. The log footer reads "the identifiers in the payload are the sensor id, the sensor's public
+  key and the rotating org pseudonym". Only these texts changed; no code that builds or sends a report changed.
+- Test: `src/arp/cli/telemetry-report-identifiers.test.ts` builds two reports in one install and one in a second
+  install, takes as the per-install identifiers the fields that hold one value across the first install's reports and
+  another in the second install's (`orgPseudonym`, `publicKey`, `sensorId`), and checks that each of the four texts
+  names each one. Against the texts before this change, 4 of its 14 tests failed (the public key check on each text);
+  after it, 14 of 14 pass.
+
 ### Fixed: the org pseudonym's doc comment names the `sensorId` and `publicKey` every report also carries
 
 - The comment at the top of `src/arp/telemetry/signature/org-pseudonym.ts` said the pseudonym "rotates ACROSS months
