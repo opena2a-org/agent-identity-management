@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed — a limit below 1 on the admin alert route is read as the default page size of 100 (#847)
+
+- `GET /api/v1/admin/alerts` reads a `limit` below 1 as 100, the page size it uses when no `limit` is sent.
+  `limit=0`, `limit=-1` and `limit=-100` reach the page query (`LIMIT $2 OFFSET $3`) as 100 and are answered 200
+  with the first page; the body echoes `"limit": 100`, and the view is written to the audit log with a `page_size`
+  of 100. `limit=1` and `limit=2` reach the query as sent.
+- Before, `limit=0` reached the page query as 0, and the handler then panicked with
+  `runtime error: integer divide by zero` where it computes the page number for the audit record; the request was
+  answered 500. `limit=-1` and `limit=-100` reached the page query unchanged. PostgreSQL refuses a negative `LIMIT`
+  (`ERROR: LIMIT must not be negative`, measured on PostgreSQL 14.21 with a bound limit of -1 and of -100), and with
+  the page query refused, the request was answered 500 `Failed to fetch alerts`. In each of these cases the view was
+  not written to the audit log. Measured from an admin's session, behind the recovery middleware the server mounts;
+  `limit=0` was sent alone and with `offset=200`.
+- Tests: `apps/backend/internal/interfaces/http/handlers/admin_alerts_limit_test.go`.
+
 ### Fixed — a negative limit on the agent alert, agent violation, admin alert and A2A violation routes is read as the route's default page size (#846)
 
 - `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations`, `GET /api/v1/admin/alerts` and
