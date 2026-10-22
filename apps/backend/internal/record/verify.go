@@ -56,11 +56,27 @@ const (
 	// UUID, or no record before the correction carries that event_id. A
 	// correction whose tenant part is erased passes this check.
 	FailureCorrection FailureKind = "correction"
+	// FailureTruncated: the records that verified end before the sequence a
+	// held checkpoint names. Records were removed from the end of the chain,
+	// or the walk ended at a failure before the checkpoint.
+	FailureTruncated FailureKind = "truncated_chain"
+	// FailureCheckpointMismatch: the record at a held checkpoint's sequence
+	// verified, and the checkpoint names a different hash for it. The chain
+	// verifies on its own, so from that record on it was replaced by one the
+	// chain's key signed.
+	FailureCheckpointMismatch FailureKind = "checkpoint_mismatch"
+	// FailureCheckpoint: a held checkpoint cannot be applied to the chain. It
+	// does not open under a key the walk saw, it names another chain, or it
+	// is signed by a key that was not in force after its sequence.
+	FailureCheckpoint FailureKind = "checkpoint"
 )
 
 // Failure is the first point at which a sequence fails verification.
 type Failure struct {
-	// Position is the zero-based index in the sequence given to Verify.
+	// Position is the zero-based index in the sequence given to Verify. For
+	// a failure VerifyCheckpoint reports, it is the sequence number the
+	// checkpoint names, or the number of verified records when the
+	// checkpoint could not be read.
 	Position int
 	Kind     FailureKind
 	Detail   string
@@ -82,6 +98,12 @@ type Result struct {
 	Key *PublicKey
 	// Failure is the first failure, nil when the walk reached the end.
 	Failure *Failure
+
+	// hashes holds the hash of each verified record, by position.
+	hashes []string
+	// ring holds the chain's keys where the walk ended: the key in force and
+	// each key a verified rotation retired, with the rotation's sequence.
+	ring keyRing
 }
 
 // OK reports whether at least one record verified and none failed. An empty
@@ -106,24 +128,25 @@ func (r Result) OK() bool { return r.Failure == nil && r.Verified > 0 }
 //
 // Verification reads the stored canonical bytes and never serializes a record
 // again. Records removed from the end of the sequence leave nothing to see
-// here; compare Result.Head with a head held elsewhere to find that.
+// here; Result.VerifyCheckpoint finds that with a checkpoint held outside the
+// sequence.
 func Verify(records []Record, key PublicKey) (Result, error) {
 	if err := key.validate(); err != nil {
 		return Result{}, fmt.Errorf("record: the verifier's key is unusable: %v", err)
 	}
-	var res Result
-	ring := keyRing{current: key}
+	res := Result{ring: keyRing{current: key}}
 	earlier := map[string]bool{}
 	for i := range records {
-		head, next, failure := verifyAt(records, i, res.Head, ring, earlier)
+		head, next, failure := verifyAt(records, i, res.Head, res.ring, earlier)
 		if failure != nil {
 			res.Failure = failure
 			return res, nil
 		}
-		ring = next
+		res.ring = next
 		res.Verified = i + 1
 		res.Head = head
-		inForce := ring.current
+		res.hashes = append(res.hashes, head.Hash)
+		inForce := res.ring.current
 		res.Key = &inForce
 	}
 	return res, nil
@@ -246,7 +269,7 @@ func verifyAt(records []Record, i int, prev *Head, ring keyRing, earlier map[str
 // chain's key, or "". The envelope must carry exactly one signature, by the
 // verifier's key, that verifies.
 func checkSignatures(env Envelope, key PublicKey) string {
-	if _, err := Open(env, ClassRecordV1, chainKey{key}); err != nil {
+	if _, err := Open(env, ClassRecordV1, key); err != nil {
 		var refusal *Refusal
 		if errors.As(err, &refusal) {
 			return refusal.detail
@@ -254,19 +277,6 @@ func checkSignatures(env Envelope, key PublicKey) string {
 		return err.Error()
 	}
 	return ""
-}
-
-// chainKey is the SignatureVerifier of a chain's one key.
-type chainKey struct{ key PublicKey }
-
-func (c chainKey) VerifySignature(keyID string, message, signature []byte) error {
-	if keyID != c.key.KeyID() {
-		return ErrUnknownKey
-	}
-	if !c.key.verify(message, signature) {
-		return errors.New("record: the signature does not verify")
-	}
-	return nil
 }
 
 // checkPart returns why an erasable part does not match its commitment, or "".

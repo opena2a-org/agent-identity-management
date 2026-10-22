@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 )
 
 // chainVectorFile is one golden vector file of the chain. Vectors pin the bytes a record is made
@@ -277,4 +278,160 @@ type vectorNamedKey struct {
 	Alg       string `json:"alg"`
 	KeyID     string `json:"keyid"`
 	PublicKey string `json:"public_key"`
+}
+
+// checkpointVectorFile is the golden vector file of the checkpoint: the
+// canonical bytes and the signing input of checkpoints of the chain vector it
+// names. It carries no signature, for the reason the chain vectors carry
+// none.
+type checkpointVectorFile struct {
+	Description string             `json:"description"`
+	PayloadType string             `json:"payloadType"`
+	Chain       string             `json:"chain"`
+	Checkpoints []vectorCheckpoint `json:"checkpoints"`
+}
+
+// vectorCheckpoint holds one checkpoint: canonical and signingInput are the
+// exact bytes as text.
+type vectorCheckpoint struct {
+	Canonical    string `json:"canonical"`
+	SigningInput string `json:"signingInput"`
+}
+
+// TestCheckpointGoldenVectors regenerates the checkpoint vector: a checkpoint
+// at the genesis of chain.json and one at its head. update rewrites it under
+// the rule of TestChainGoldenVectors.
+func TestCheckpointGoldenVectors(t *testing.T) {
+	bodies := buildChain(t, keylessKey())
+	file := checkpointVectorFile{
+		Description: "Checkpoints of chain.json: one at its genesis, taken one second after it, and one at its head, taken thirty seconds after its last record. The key in force after each head signs it.",
+		PayloadType: PayloadTypeCheckpointV1,
+		Chain:       "chain.json",
+	}
+	for _, c := range []struct {
+		body Body
+		at   time.Time
+	}{
+		{bodies[0], fixtureStart.Add(time.Second)},
+		{bodies[len(bodies)-1], fixtureCheckpointAt},
+	} {
+		cp, err := NewCheckpoint(c.body.Head(), c.at)
+		if err != nil {
+			t.Fatalf("NewCheckpoint: %v", err)
+		}
+		signingInput, err := SigningInput(ClassCheckpointV1, Payload{canonical: cp.canonical})
+		if err != nil {
+			t.Fatalf("signing input: %v", err)
+		}
+		file.Checkpoints = append(file.Checkpoints, vectorCheckpoint{Canonical: string(cp.canonical), SigningInput: string(signingInput)})
+	}
+	var out bytes.Buffer
+	encoder := json.NewEncoder(&out)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(file); err != nil {
+		t.Fatalf("encode vector: %v", err)
+	}
+	got := out.Bytes()
+	path := filepath.Join("testdata", "checkpoint.json")
+	if *update {
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("%s: the bytes regenerated from the fixed inputs differ from the committed vector.\n"+
+			"The same input must give the same bytes unless the schema version changes.\n"+
+			"regenerated: %d bytes\ncommitted:   %d bytes", path, len(got), len(want))
+	}
+	checkCheckpointVectorFile(t, want)
+}
+
+// checkCheckpointVectorFile reads a committed checkpoint vector with nothing
+// but a JSON decoder, and checks what it claims against the chain vector it
+// names: each checkpoint names that chain, its hash is the recorded hash of
+// the record at its sequence, it is taken after that record, and its signing
+// input is the pre-authentication encoding of its bytes under the checkpoint
+// payload type.
+func checkCheckpointVectorFile(t *testing.T, raw []byte) {
+	t.Helper()
+	var file checkpointVectorFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatalf("the vector is not JSON: %v", err)
+	}
+	if len(file.Checkpoints) == 0 {
+		t.Fatalf("the vector holds no checkpoint")
+	}
+	chainRaw, err := os.ReadFile(filepath.Join("testdata", file.Chain))
+	if err != nil {
+		t.Fatalf("read the chain vector: %v", err)
+	}
+	var chain chainVectorFile
+	if err := json.Unmarshal(chainRaw, &chain); err != nil {
+		t.Fatalf("the chain vector is not JSON: %v", err)
+	}
+	type recordBody struct {
+		Timestamp string `json:"timestamp"`
+		OpenA2A   struct {
+			Chain struct {
+				ID string `json:"id"`
+			} `json:"chain"`
+		} `json:"opena2a"`
+	}
+	records := make([]recordBody, len(chain.Records))
+	for i, r := range chain.Records {
+		if err := json.Unmarshal([]byte(r.Canonical), &records[i]); err != nil {
+			t.Fatalf("chain record %d: canonical is not JSON: %v", i, err)
+		}
+	}
+	const layout = "2006-01-02T15:04:05.000000Z"
+	for i, c := range file.Checkpoints {
+		wantInput := "DSSEv1 " + strconv.Itoa(len(file.PayloadType)) + " " + file.PayloadType + " " +
+			strconv.Itoa(len(c.Canonical)) + " " + c.Canonical
+		if c.SigningInput != wantInput {
+			t.Fatalf("checkpoint %d: signingInput is not the pre-authentication encoding of canonical", i)
+		}
+		var b struct {
+			Timestamp string `json:"timestamp"`
+			OpenA2A   struct {
+				Schema string `json:"schema"`
+				Chain  struct {
+					ID   string `json:"id"`
+					Seq  int    `json:"seq"`
+					Hash string `json:"hash"`
+				} `json:"chain"`
+			} `json:"opena2a"`
+		}
+		if err := json.Unmarshal([]byte(c.Canonical), &b); err != nil {
+			t.Fatalf("checkpoint %d: canonical is not JSON: %v", i, err)
+		}
+		if b.OpenA2A.Schema != "opena2a-audit-checkpoint/1" {
+			t.Fatalf("checkpoint %d: schema %q", i, b.OpenA2A.Schema)
+		}
+		if b.OpenA2A.Chain.Seq < 0 || b.OpenA2A.Chain.Seq >= len(chain.Records) {
+			t.Fatalf("checkpoint %d: sequence number %d is not a record of the chain vector", i, b.OpenA2A.Chain.Seq)
+		}
+		pinned := chain.Records[b.OpenA2A.Chain.Seq]
+		if b.OpenA2A.Chain.ID != records[b.OpenA2A.Chain.Seq].OpenA2A.Chain.ID {
+			t.Fatalf("checkpoint %d does not name the chain of the chain vector", i)
+		}
+		if b.OpenA2A.Chain.Hash != pinned.RecordHash {
+			t.Fatalf("checkpoint %d: hash is not the recorded hash of record %d", i, b.OpenA2A.Chain.Seq)
+		}
+		taken, err := time.Parse(layout, b.Timestamp)
+		if err != nil {
+			t.Fatalf("checkpoint %d: timestamp is not RFC 3339 UTC to the microsecond: %v", i, err)
+		}
+		recorded, err := time.Parse(layout, records[b.OpenA2A.Chain.Seq].Timestamp)
+		if err != nil {
+			t.Fatalf("chain record %d: timestamp: %v", b.OpenA2A.Chain.Seq, err)
+		}
+		if !taken.After(recorded) {
+			t.Fatalf("checkpoint %d is not taken after the record it pins", i)
+		}
+	}
 }

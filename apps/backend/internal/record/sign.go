@@ -49,6 +49,19 @@ func (k PublicKey) verify(message, sig []byte) bool {
 	return ed25519.Verify(ed25519.PublicKey(k.Key), message, sig)
 }
 
+// VerifySignature makes a PublicKey the SignatureVerifier of its own
+// signatures. It returns ErrUnknownKey for a key identifier other than its
+// own.
+func (k PublicKey) VerifySignature(keyID string, message, signature []byte) error {
+	if keyID != k.KeyID() {
+		return ErrUnknownKey
+	}
+	if !k.verify(message, signature) {
+		return errors.New("record: the signature does not verify")
+	}
+	return nil
+}
+
 // SigningKeyProvider is a KeyProvider that also returns the public half of the
 // key it signs with. The key still signs through SignPayload alone, so the
 // provider never signs a type or bytes a caller chose.
@@ -80,15 +93,9 @@ func Sign(ctx context.Context, b Body, kp SigningKeyProvider) (Record, error) {
 	if len(b.canonical) == 0 {
 		return Record{}, fmt.Errorf("%w: the body was not built by NewGenesis, NewRecord, NewKeyRotation or NewCorrection", ErrSigning)
 	}
-	if kp == nil {
-		return Record{}, fmt.Errorf("%w: no key provider", ErrSigning)
-	}
-	key, err := kp.PublicKey(ctx)
+	key, err := providerKey(ctx, kp)
 	if err != nil {
-		return Record{}, fmt.Errorf("%w: public key: %v", ErrSigning, err)
-	}
-	if err := key.validate(); err != nil {
-		return Record{}, fmt.Errorf("%w: public key: %v", ErrSigning, err)
+		return Record{}, err
 	}
 	if b.recordType == TypeChainGenesis && b.firstKeyID != key.KeyID() {
 		return Record{}, fmt.Errorf("%w: the genesis names a first key other than the provider's", ErrSigning)
@@ -96,21 +103,9 @@ func Sign(ctx context.Context, b Body, kp SigningKeyProvider) (Record, error) {
 	if b.recordType == TypeKeyRotation && b.nextKeyID == key.KeyID() {
 		return Record{}, fmt.Errorf("%w: a key rotation is signed by the key it retires, not by the next key it names", ErrSigning)
 	}
-	payload := Payload{canonical: b.canonical}
-	message, err := SigningInput(ClassRecordV1, payload)
+	env, err := sealUnder(ctx, ClassRecordV1, Payload{canonical: b.canonical}, kp, key)
 	if err != nil {
-		return Record{}, fmt.Errorf("%w: %v", ErrSigning, err)
-	}
-	env, err := Seal(ctx, kp, ClassRecordV1, payload)
-	if err != nil {
-		return Record{}, fmt.Errorf("%w: %v", ErrSigning, err)
-	}
-	if env.Signatures[0].KeyID != key.KeyID() {
-		return Record{}, fmt.Errorf("%w: the provider names a key other than its public key", ErrSigning)
-	}
-	sig, err := base64.StdEncoding.DecodeString(env.Signatures[0].Sig)
-	if err != nil || !key.verify(message, sig) {
-		return Record{}, fmt.Errorf("%w: the provider's signature does not verify under its public key", ErrSigning)
+		return Record{}, err
 	}
 	return Record{
 		Envelope:     env,
@@ -120,4 +115,41 @@ func Sign(ctx context.Context, b Body, kp SigningKeyProvider) (Record, error) {
 		PersonalPart: append([]byte(nil), b.personalPart...),
 		PersonalSalt: append([]byte(nil), b.personalSalt...),
 	}, nil
+}
+
+// providerKey returns the provider's public key, checked to be usable.
+func providerKey(ctx context.Context, kp SigningKeyProvider) (PublicKey, error) {
+	if kp == nil {
+		return PublicKey{}, fmt.Errorf("%w: no key provider", ErrSigning)
+	}
+	key, err := kp.PublicKey(ctx)
+	if err != nil {
+		return PublicKey{}, fmt.Errorf("%w: public key: %v", ErrSigning, err)
+	}
+	if err := key.validate(); err != nil {
+		return PublicKey{}, fmt.Errorf("%w: public key: %v", ErrSigning, err)
+	}
+	return key, nil
+}
+
+// sealUnder seals payload as class through kp and checks what comes back
+// against key, the provider's public key: the envelope names that key, and
+// its signature verifies under it over the signing input of class.
+func sealUnder(ctx context.Context, class PayloadClass, payload Payload, kp SigningKeyProvider, key PublicKey) (Envelope, error) {
+	message, err := SigningInput(class, payload)
+	if err != nil {
+		return Envelope{}, fmt.Errorf("%w: %v", ErrSigning, err)
+	}
+	env, err := Seal(ctx, kp, class, payload)
+	if err != nil {
+		return Envelope{}, fmt.Errorf("%w: %v", ErrSigning, err)
+	}
+	if env.Signatures[0].KeyID != key.KeyID() {
+		return Envelope{}, fmt.Errorf("%w: the provider names a key other than its public key", ErrSigning)
+	}
+	sig, err := base64.StdEncoding.DecodeString(env.Signatures[0].Sig)
+	if err != nil || !key.verify(message, sig) {
+		return Envelope{}, fmt.Errorf("%w: the provider's signature does not verify under its public key", ErrSigning)
+	}
+	return env, nil
 }

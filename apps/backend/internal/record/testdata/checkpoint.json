@@ -1,0 +1,15 @@
+{
+  "description": "Checkpoints of chain.json: one at its genesis, taken one second after it, and one at its head, taken thirty seconds after its last record. The key in force after each head signs it.",
+  "payloadType": "application/vnd.opena2a.audit-checkpoint.v1+json",
+  "chain": "chain.json",
+  "checkpoints": [
+    {
+      "canonical": "{\"opena2a\":{\"chain\":{\"hash\":\"6d097124f79d7e4e269d0ff7d3f054349bd0ea996a5817e1f54f6625cbd3277c\",\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"seq\":0},\"schema\":\"opena2a-audit-checkpoint/1\"},\"timestamp\":\"2026-01-02T03:04:06.123456Z\"}",
+      "signingInput": "DSSEv1 48 application/vnd.opena2a.audit-checkpoint.v1+json 229 {\"opena2a\":{\"chain\":{\"hash\":\"6d097124f79d7e4e269d0ff7d3f054349bd0ea996a5817e1f54f6625cbd3277c\",\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"seq\":0},\"schema\":\"opena2a-audit-checkpoint/1\"},\"timestamp\":\"2026-01-02T03:04:06.123456Z\"}"
+    },
+    {
+      "canonical": "{\"opena2a\":{\"chain\":{\"hash\":\"ea7f14e3156a3c1b358df251042f264a4c82b07ab1a1d694e107870a453146e8\",\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"seq\":3},\"schema\":\"opena2a-audit-checkpoint/1\"},\"timestamp\":\"2026-01-02T03:07:35.123456Z\"}",
+      "signingInput": "DSSEv1 48 application/vnd.opena2a.audit-checkpoint.v1+json 229 {\"opena2a\":{\"chain\":{\"hash\":\"ea7f14e3156a3c1b358df251042f264a4c82b07ab1a1d694e107870a453146e8\",\"id\":\"0b0e7a52-5d0c-4c1e-9d55-2f6a3c1b7e10\",\"seq\":3},\"schema\":\"opena2a-audit-checkpoint/1\"},\"timestamp\":\"2026-01-02T03:07:35.123456Z\"}"
+    }
+  ]
+}

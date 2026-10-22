@@ -107,6 +107,20 @@ func (r keyRing) retiredSigner(env Envelope) (retiredKey, bool) {
 	return retiredKey{}, false
 }
 
+// VerifySignature makes a keyRing the SignatureVerifier of the keys the chain
+// named: the key in force and each retired key, found by identifier.
+func (r keyRing) VerifySignature(keyID string, message, signature []byte) error {
+	if r.current.KeyID() == keyID {
+		return r.current.VerifySignature(keyID, message, signature)
+	}
+	for _, old := range r.retired {
+		if old.key.KeyID() == keyID {
+			return old.key.VerifySignature(keyID, message, signature)
+		}
+	}
+	return ErrUnknownKey
+}
+
 // used reports whether the chain has signed with the key keyID names.
 func (r keyRing) used(keyID string) bool {
 	if r.current.KeyID() == keyID {
