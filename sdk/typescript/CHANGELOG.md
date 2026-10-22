@@ -137,6 +137,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - Tests: `tests/arp/intelligence/coordinator-l2-failure.test.ts`, and the failed-call cases in
   `tests/arp/intelligence/budget.test.ts`.
 
+### Fixed: `aim-arp telemetry status` shows the sensor's public key a report carries
+
+- Each signature telemetry report `buildSignedSubmission` builds carries the sensor's `publicKey` beside its `sensorId`
+  and `orgPseudonym`. `aim-arp telemetry status` printed a `Sensor id:` line and an `Org pseudonym:` line with the
+  values a report carries, and no line for the public key. Measured on the code before this change, with `aim-arp`
+  bundled from source and run under a temporary HOME after one report was built there: status printed the report's
+  sensor id and org pseudonym, and the report's 64-hex `publicKey` appeared nowhere in its output.
+- Status now prints a `Public key:` line under `Sensor id:`. After one report was built, the line showed that report's
+  `publicKey`. On a clean home, where no OpenA2A state exists yet, it reads `none yet (created on first send)`, and
+  status created no file. The key comes from `peekSensorPublicKey`, a read-only counterpart of `peekSensorId`: it
+  returns null when the key file's content does not decode to 32 bytes of hex (in the test, a file holding
+  `not-a-key`), and leaves that file as it was. No code that builds or sends a report changed.
+- Test: `src/arp/cli/telemetry-status-identifiers.test.ts`. Against the code before this change, 4 of its 4 tests
+  failed; after it, 4 of 4 pass.
+
 ### Fixed: the README, the telemetry disclosure and the `aim-arp telemetry` help and log footers name the sensor's public key a report carries
 
 - Each signature telemetry report `buildSignedSubmission` builds carries the sensor's `publicKey` beside its `sensorId`

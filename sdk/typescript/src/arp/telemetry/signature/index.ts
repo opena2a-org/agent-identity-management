@@ -43,6 +43,7 @@ export {
   loadSensorPrivateKey,
   loadSensorId,
   peekSensorId,
+  peekSensorPublicKey,
   publicKeyHex,
   signCanonicalHex,
 } from './sensor-identity';
