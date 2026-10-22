@@ -214,7 +214,7 @@ import { A2AProtocolInterceptor } from './interceptors/a2a-protocol';
 import { loadConfig } from './config/loader';
 import { validateARPConfig } from './config/validate';
 import { GTINForwarder } from './telemetry/forwarder';
-import { generateSensorToken } from './telemetry/gtin';
+import { generateSensorToken, GTIN_UNATTRIBUTED_PACKAGE_NAME } from './telemetry/gtin';
 import { SignatureEmitter } from './telemetry/signature/emitter';
 import {
   signatureTelemetryEnabled,
@@ -395,7 +395,9 @@ export class AgentRuntimeProtection {
         enabled: true,
         sensorToken,
         registryUrl: this.config.gtin.registryUrl,
-        packageName: this.config.agentName,
+        // Not `agentName`: that is the operator's own label for the agent, not
+        // a public package name, so this channel does not send it.
+        packageName: GTIN_UNATTRIBUTED_PACKAGE_NAME,
       });
 
       // Subscribe forwarder to all events (it filters internally)
