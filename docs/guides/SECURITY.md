@@ -119,8 +119,10 @@ def write_data():
 
 SDK credentials are stored as JSON at `~/.aim/sdk_credentials.json`, and each
 registered agent's credentials at `~/.aim/agents/<agent-name>.json`. Each file is
-readable only by the owner (`0600`), and the SDK creates `~/.aim/agents/` as `0700`.
-These files are the single source of truth. There is **no** encrypted shadow file.
+readable only by the owner (`0600`), and the SDK creates `~/.aim/` and `~/.aim/agents/`
+as `0700`. When it writes to either folder and finds group or other permissions on it,
+it removes those, keeps the owner's, and prints a line naming the folder with its old
+and new modes. The two credential files are the single source of truth. There is **no** encrypted shadow file.
 An earlier `~/.aim/credentials.encrypted` scheme was removed; the SDK migrates
 away from any leftover encrypted file.
 

@@ -743,3 +743,117 @@ describe('the exchange answer: fields are checked and server text is printed as 
     expect(allOutput()).toContain(`/dashboard/agents/${UUID}`);
   });
 });
+
+describe('~/.aim and ~/.aim/agents are owner-only, and a mode init changes is printed (#860)', () => {
+  const aimDir = () => join(home, '.aim');
+  const agentsDir = () => join(home, '.aim', 'agents');
+  const modeOf = (dir: string) => statSync(dir).mode & 0o7777;
+  const modeLines = () => allOutput().split('\n').filter((line) => line.startsWith('Changed the mode of '));
+  const asRoot = process.getuid?.() === 0;
+
+  /** A folder left by an earlier run or another tool, with `mode`; any folder above it in ~/.aim is 0700. */
+  function existingDir(dir: string, mode: number) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, mode);
+  }
+
+  it('a home without ~/.aim gets both folders created 0700, and no mode change is printed', async () => {
+    expect(await runInit(['--url', baseUrl], deps()), allOutput()).toBe(0);
+
+    expect(modeOf(aimDir())).toBe(0o700);
+    expect(modeOf(agentsDir())).toBe(0o700);
+    expect(modeLines()).toEqual([]);
+  });
+
+  it('an existing ~/.aim at 0755 becomes 0700, and one line on stderr names it with both modes', async () => {
+    existingDir(aimDir(), 0o755);
+
+    expect(await runInit(['--url', baseUrl], deps()), allOutput()).toBe(0);
+
+    expect(modeOf(aimDir())).toBe(0o700);
+    expect(modeOf(agentsDir())).toBe(0o700);
+    const line = `Changed the mode of ${aimDir()} from 0755 to 0700, removing its group and other permissions.`;
+    expect(modeLines()).toEqual([line]);
+    expect(errLines).toContain(line);
+    expect(existsSync(credentialsPath())).toBe(true);
+  });
+
+  it('an existing ~/.aim/agents at 0755 becomes 0700, and one line names it with both modes', async () => {
+    existingDir(agentsDir(), 0o755);
+
+    expect(await runInit(['--url', baseUrl], deps()), allOutput()).toBe(0);
+
+    expect(modeOf(aimDir())).toBe(0o700);
+    expect(modeOf(agentsDir())).toBe(0o700);
+    expect(modeLines()).toEqual([
+      `Changed the mode of ${agentsDir()} from 0755 to 0700, removing its group and other permissions.`,
+    ]);
+    expect(existsSync(credentialsPath())).toBe(true);
+  });
+
+  it('existing folders at 0700 are left as they are, and no mode change is printed', async () => {
+    existingDir(agentsDir(), 0o700);
+
+    expect(await runInit(['--url', baseUrl], deps()), allOutput()).toBe(0);
+
+    expect(modeOf(aimDir())).toBe(0o700);
+    expect(modeOf(agentsDir())).toBe(0o700);
+    expect(modeLines()).toEqual([]);
+  });
+
+  it.skipIf(asRoot)('an existing ~/.aim/agents at 0500 is left as it is, and the token is not spent', async () => {
+    existingDir(agentsDir(), 0o500);
+    let code: number;
+    let mode: number;
+    try {
+      code = await runInit(['--url', baseUrl], deps());
+      mode = modeOf(agentsDir());
+    } finally {
+      chmodSync(agentsDir(), 0o700);
+    }
+
+    expect(code, allOutput()).toBe(1);
+    expect(mode).toBe(0o500);
+    expect(seen).toHaveLength(0);
+    expect(errLines).toContain(
+      `Error: cannot save the agent's key file in ${agentsDir()} (EACCES); the token has not been used.`,
+    );
+    expect(modeLines()).toEqual([]);
+  });
+
+  it.skipIf(asRoot)('an existing ~/.aim/agents at 0555 loses only its group and other bits: it becomes 0500', async () => {
+    existingDir(agentsDir(), 0o555);
+    let code: number;
+    let mode: number;
+    try {
+      code = await runInit(['--url', baseUrl], deps());
+      mode = modeOf(agentsDir());
+    } finally {
+      chmodSync(agentsDir(), 0o700);
+    }
+
+    expect(code, allOutput()).toBe(1);
+    expect(mode).toBe(0o500);
+    expect(modeLines()).toEqual([
+      `Changed the mode of ${agentsDir()} from 0555 to 0500, removing its group and other permissions.`,
+    ]);
+    expect(seen).toHaveLength(0);
+    expect(errLines).toContain(
+      `Error: cannot save the agent's key file in ${agentsDir()} (EACCES); the token has not been used.`,
+    );
+  });
+
+  it('a regular file named ~/.aim keeps its mode, and the token is not spent', async () => {
+    writeFileSync(aimDir(), '');
+    chmodSync(aimDir(), 0o644);
+
+    expect(await runInit(['--url', baseUrl], deps())).toBe(1);
+
+    expect(modeOf(aimDir())).toBe(0o644);
+    expect(seen).toHaveLength(0);
+    expect(errLines).toContain(
+      `Error: cannot save the agent's key file in ${agentsDir()} (EEXIST); the token has not been used.`,
+    );
+    expect(modeLines()).toEqual([]);
+  });
+});

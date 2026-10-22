@@ -489,9 +489,12 @@ def save_capabilities_config(capabilities: List[str]) -> None:
             "access_database"
         ])
     """
+    from .credentials import _ensure_private_dir
+
     home = pathlib.Path.home()
     aim_dir = home / ".aim"
-    aim_dir.mkdir(exist_ok=True)
+    # ~/.aim also holds the SDK's credentials: created 0700.
+    _ensure_private_dir(aim_dir)
 
     config_path = aim_dir / "capabilities.json"
 

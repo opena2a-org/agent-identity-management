@@ -59,7 +59,9 @@ class AttestationCache:
 
         Args:
             agent_id: The agent ID this cache belongs to
-            cache_dir: Directory to store cache file (default: ~/.aim)
+            cache_dir: Directory to store cache file (default: ~/.aim, created
+                with mode 0700; an existing ~/.aim loses any group or other
+                permission bits, as when the SDK saves its credentials)
             ttl_hours: Hours before attestation is considered stale
         """
         self.agent_id = agent_id
@@ -69,6 +71,7 @@ class AttestationCache:
             self._cache_dir = Path(cache_dir)
         else:
             self._cache_dir = Path.home() / ".aim"
+        self._cache_dir_is_aim_dir = not cache_dir
 
         self._cache_file = self._cache_dir / self.CACHE_FILENAME
         self._cache: Dict[str, Any] = self._load_cache()
@@ -94,8 +97,12 @@ class AttestationCache:
     def _save_cache(self) -> None:
         """Persist cache to disk."""
         try:
-            # Ensure directory exists with secure permissions
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            if self._cache_dir_is_aim_dir:
+                # ~/.aim also holds the SDK's credentials: created 0700.
+                from aim_sdk.credentials import _ensure_private_dir
+                _ensure_private_dir(self._cache_dir)
+            else:
+                self._cache_dir.mkdir(parents=True, exist_ok=True)
 
             # Load all agent caches
             all_caches = {}

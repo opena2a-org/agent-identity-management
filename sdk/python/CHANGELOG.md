@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — `~/.aim` is created with mode 0700, and the SDK prints each mode it changes on an existing `~/.aim` or `~/.aim/agents` (#860)
+
+- Measured with the previous code under umask 022, on a home with no `~/.aim`: `save_sdk_credentials()` (which
+  `aim-sdk login` calls), the lock-file opener (`sdk_credentials_lock()`), `save_agent_credentials()` (which
+  `aim-sdk init` calls), the legacy agent migration, `AttestationCache`, `save_capabilities_config()` and
+  `SecureCredentialStorage.save_credentials()` each created `~/.aim` with mode 0755. Each now creates `~/.aim`, and
+  `~/.aim/agents` where it creates that, with mode 0700. A `cache_dir` passed to `AttestationCache` and a
+  `credentials_path` passed to `SecureCredentialStorage` are created as before.
+- An existing `~/.aim` or `~/.aim/agents` with group or other permission bits loses those bits and keeps its owner
+  bits, and one line on stderr names it with its old and new modes:
+  `Changed the mode of /home/user/.aim from 0755 to 0700, removing its group and other permissions.` A folder with no
+  group or other permission bits keeps its mode. Measured with the previous code: an existing `~/.aim` at 0755 stayed
+  0755, and an existing `~/.aim/agents` at 0555 became 0700 with no line printed. It now becomes 0500.
+- `aim-sdk init` writes and removes a file in `~/.aim/agents` before it sends the token, and refuses a folder that
+  cannot hold the key file while the token is unused:
+  `Error: cannot save the agent's key file in <folder> (EACCES); the token has not been used.` Measured with the
+  previous code and the folder at 0500: `aim-sdk init` sent the token, then could not save the key file.
+- Tests: `tests/test_aim_folder_created_owner_only.py`.
+
 ### Fixed — a server address with a user name or password is refused before any request and never printed (#859)
 
 - `aim-sdk login --url`, `aim-sdk init --url`, `aim-sdk demo --url`, `secure(aim_url=...)` and

@@ -7,6 +7,20 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — `init` removes only group and other permissions from an existing `~/.aim` or `~/.aim/agents`, and prints each mode it changes (#860)
+
+- Measured with the previous code: `init` set an existing `~/.aim/agents` at 0755, 0555 or 0500 to 0700 and printed
+  no line about it, so at 0555 or 0500 it added the owner's write permission and registered the agent. An existing
+  `~/.aim` at 0755 stayed 0755.
+- An existing `~/.aim` or `~/.aim/agents` with group or other permission bits now loses those bits and keeps its owner
+  bits, and one line on stderr names it with its old and new modes:
+  `Changed the mode of /home/user/.aim from 0755 to 0700, removing its group and other permissions.` A folder with no
+  group or other permission bits keeps its mode. A folder `init` creates has mode 0700, as before.
+- `init` still writes and removes a file in `~/.aim/agents` before it sends the token, so a folder at 0500, or at 0555,
+  which becomes 0500, is refused with `Error: cannot save the agent's key file in <folder> (EACCES); the token has not
+  been used.` and no request is sent.
+- Tests: `src/cli/init.test.ts`.
+
 ### Added — ARP's `getStatus()` says whether L2 and the runtime twin run (#857)
 
 - `AgentRuntimeProtection.getStatus()` carries an `intelligence` block. Measured on the code before this change,
