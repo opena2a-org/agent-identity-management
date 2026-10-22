@@ -1416,6 +1416,12 @@ func IsNoGrantedCapabilitiesDenial(reason string) bool {
 // enforcement mode of the agent's organization cannot be read.
 const enforcementModeUnreadableReason = "Action denied: the enforcement mode of the agent's organization could not be read"
 
+// capabilitiesUnreadableReason is VerifyCapability's denial when the
+// capabilities granted to the agent cannot be read. The read's error is
+// returned beside it and is not part of it: the verification route writes the
+// reason into its response body.
+const capabilitiesUnreadableReason = "Action denied: the capabilities granted to the agent could not be read"
+
 // verificationEnforcementMode is the enforcement mode VerifyCapability applies
 // to an agent of orgID. A read that fails, or finds no organization, is an
 // error: the caller denies the request rather than applying MONITORING, which
@@ -1566,7 +1572,7 @@ func (s *AgentService) VerifyCapability(
 	// Reuses the slice fetched above for honeytoken detection to avoid a second
 	// query on the hot verification path.
 	if capFetchErr != nil {
-		return false, fmt.Sprintf("Failed to fetch agent capabilities: %v", capFetchErr), auditID, capFetchErr
+		return false, capabilitiesUnreadableReason, auditID, capFetchErr
 	}
 
 	// Build list of granted capability types for error messages

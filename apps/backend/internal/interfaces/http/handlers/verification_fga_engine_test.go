@@ -6,7 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -61,6 +61,9 @@ const (
 	fgaAllowReason    = "Action matches registered capabilities and passes all security policies"
 	fgaNotVerified    = "Agent not verified - all actions denied"
 	fgaMonitoringNote = "Action allowed by MONITORING mode (no capabilities registered yet) - logged for review. Policy: none"
+
+	fgaPolicyUnreadable  = "Action denied: the agent's FGA policy for this capability could not be read"
+	fgaVerificationError = "Action denied: the verification could not be completed"
 )
 
 // fgaVerificationCase configures one route: the organization's enforcement
@@ -72,6 +75,7 @@ type fgaVerificationCase struct {
 	policyErr error
 	allowed   bool
 	reason    string
+	verifyErr error
 }
 
 // fgaVerificationApp mounts CreateVerification bare, as cmd/server does on
@@ -126,7 +130,7 @@ func newFGAVerificationApp(t *testing.T, agent *domain.Agent, tc fgaVerification
 	svc.GetAgentFunc = func(_ context.Context, id uuid.UUID) (*domain.Agent, error) { return lookup(id) }
 	svc.VerifyCapabilityFunc = func(context.Context, uuid.UUID, string, string, map[string]interface{}, string) (bool, string, uuid.UUID, error) {
 		fa.verified++
-		return tc.allowed, tc.reason, uuid.New(), nil
+		return tc.allowed, tc.reason, uuid.New(), tc.verifyErr
 	}
 	audit := &MockAuditServiceForVerificationImpl{LogFunc: func(_ context.Context, entry *domain.AuditLog) error {
 		fa.audits = append(fa.audits, entry)
@@ -375,25 +379,74 @@ func TestCreateVerification_AStep1DenialKeepsVerifyCapabilitysReason(t *testing.
 	assert.Equal(t, "capability_check", entry.Metadata["fgaDeniedBy"])
 }
 
+// driverError is a database driver's error for a read of table: the driver's
+// prefix, the table and the host it was reading from.
+func driverError(table string) error {
+	return fmt.Errorf("pq: relation %s does not exist (host policy-store.internal)", table)
+}
+
+// assertCarriesNoDriverText fails when the response body raw carries the
+// message of err, a driverError for table, or any part of it.
+func assertCarriesNoDriverText(t *testing.T, raw string, err error, table string) {
+	t.Helper()
+	for _, fragment := range []string{err.Error(), "pq:", table, "does not exist", "policy-store.internal"} {
+		assert.NotContains(t, raw, fragment, "the response body carries the driver's words")
+	}
+}
+
+func encodedBody(t *testing.T, body map[string]interface{}) string {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	return string(raw)
+}
+
 func TestCreateVerification_AnUnreadablePolicyDeniesBeforeStep1(t *testing.T) {
 	pub, priv := mustKeypair(t)
 	agent := refusalAgent(domain.AgentStatusVerified, pub)
+	readErr := driverError("fga_policies")
 	fa := newFGAVerificationApp(t, agent, fgaVerificationCase{
-		mode: domain.EnforcementModeMonitoring, policyErr: errors.New("connection reset"), allowed: true, reason: fgaAllowReason,
+		mode: domain.EnforcementModeMonitoring, policyErr: readErr, allowed: true, reason: fgaAllowReason,
 	})
 
 	code, body := fa.post(t, agent, pub, priv, "db:read", map[string]interface{}{})
 	require.Equal(t, fiber.StatusForbidden, code, body)
 	assert.Equal(t, "denied", body["status"])
-	assert.Equal(t, "Verification error: failed to load FGA policy: connection reset", body["denialReason"])
+	assert.Equal(t, fgaPolicyUnreadable, body["denialReason"])
+	assertCarriesNoDriverText(t, encodedBody(t, body), readErr, "fga_policies")
 	assert.Equal(t, 0, fa.verified, "step 1 does not run when the policy cannot be read")
 
-	_, attrs, children := fa.spanTree(t)
+	parent, attrs, children := fa.spanTree(t)
 	assert.Equal(t, "ERROR", attrs["fga.outcome"].AsString())
+	assert.Contains(t, parent.Status().Description, readErr.Error(), "the span records the driver's error")
 	assert.Empty(t, children)
 
 	entry := fa.decisionAudit(t)
 	assert.Equal(t, "ERROR", entry.Metadata["fgaOutcome"])
+	assert.Equal(t, fgaPolicyUnreadable, entry.Metadata["denialReason"])
+	require.Len(t, fa.events, 1)
+	require.NotNil(t, fa.events[0].ErrorReason)
+	assert.Equal(t, fgaPolicyUnreadable, *fa.events[0].ErrorReason)
+}
+
+// Step 1 failing with no reason of its own is denied with a fixed reason, and
+// the error it returned reaches neither the response body nor the audit entry.
+func TestCreateVerification_AStep1ErrorWithoutAReasonIsDeniedWithAFixedReason(t *testing.T) {
+	pub, priv := mustKeypair(t)
+	agent := refusalAgent(domain.AgentStatusVerified, pub)
+	readErr := driverError("agent_capabilities")
+	fa := newFGAVerificationApp(t, agent, fgaVerificationCase{mode: domain.EnforcementModeStrict, verifyErr: readErr})
+
+	code, body := fa.post(t, agent, pub, priv, "db:read", map[string]interface{}{})
+	require.Equal(t, fiber.StatusForbidden, code, body)
+	assert.Equal(t, "denied", body["status"])
+	assert.Equal(t, fgaVerificationError, body["denialReason"])
+	assertCarriesNoDriverText(t, encodedBody(t, body), readErr, "agent_capabilities")
+	assert.Equal(t, 1, fa.verified)
+
+	entry := fa.decisionAudit(t)
+	assert.Equal(t, "ERROR", entry.Metadata["fgaOutcome"])
+	assert.Equal(t, fgaVerificationError, entry.Metadata["denialReason"])
 }
 
 func TestFGARequestForVerification_ReadsWhatTheCallTouchesFromTheContext(t *testing.T) {

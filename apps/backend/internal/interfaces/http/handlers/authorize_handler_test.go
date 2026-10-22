@@ -4,16 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
@@ -198,14 +204,17 @@ func TestAuthorize_InvalidJSON_Returns400(t *testing.T) {
 func TestAuthorize_EngineError_Returns500WithErrorResultBody(t *testing.T) {
 	agentID := uuid.New()
 	// FGAEngine's deferred span finalizer synthesizes an ERROR result on infra
-	// failure paths -- replicate that contract.
+	// failure paths, with the error's text as its DeniedReason -- replicate
+	// that contract.
+	readErr := fmt.Errorf("failed to load FGA policy: %w", driverError("fga_policies"))
 	fake := &fakeAuthorizer{
 		result: &application.FGAResult{
-			Outcome:      "ERROR",
-			DeniedReason: "failed to load FGA policy: connection refused",
-			LatencyMs:    3,
+			Outcome:        "ERROR",
+			StepsTriggered: []string{},
+			DeniedReason:   readErr.Error(),
+			LatencyMs:      3,
 		},
-		err: errors.New("failed to load FGA policy: connection refused"),
+		err: readErr,
 	}
 	orgID := uuid.New()
 	h := NewAuthorizeHandlerWithInterface(fake, &permissiveAuthorizeAgentRepo{orgID: orgID})
@@ -225,7 +234,68 @@ func TestAuthorize_EngineError_Returns500WithErrorResultBody(t *testing.T) {
 	var got application.FGAResult
 	require.NoError(t, json.Unmarshal(raw, &got))
 	assert.Equal(t, "ERROR", got.Outcome)
-	assert.Contains(t, got.DeniedReason, "connection refused")
+	assert.Equal(t, int64(3), got.LatencyMs)
+	assert.Equal(t, authorizeEngineErrorReason, got.DeniedReason)
+	assertCarriesNoDriverText(t, string(raw), readErr, "fga_policies")
+}
+
+const authorizeEngineErrorReason = "Authorization error: the agent's FGA policy or granted capabilities could not be read"
+
+// The route over the real engine: the agent's FGA policy cannot be read. The
+// body is the engine's ERROR result with the fixed reason; the driver's error
+// is on the engine's fga.authorize span, not in the body.
+func TestAuthorize_AnUnreadablePolicyAnswersAFixedReason(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	prevTP := otel.GetTracerProvider()
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(prevTP)
+		_ = tp.Shutdown(context.Background())
+	})
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+	readErr := driverError("fga_policies")
+	mock.ExpectQuery("FROM fga_policies").WillReturnError(readErr)
+
+	engine := application.NewFGAEngine(db, nil, slog.Default())
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = engine.Shutdown(ctx)
+	})
+
+	agentID := uuid.New()
+	orgID := uuid.New()
+	h := NewAuthorizeHandler(engine, &permissiveAuthorizeAgentRepo{orgID: orgID})
+	app := newAuthorizeTestApp(h, orgID)
+
+	req := httptest.NewRequest("POST", "/api/v1/agents/"+agentID.String()+"/authorize", strings.NewReader(`{"capability":"file:read"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	var got application.FGAResult
+	require.NoError(t, json.Unmarshal(raw, &got), string(raw))
+	assert.Equal(t, "ERROR", got.Outcome)
+	assert.False(t, got.Allowed)
+	assert.Equal(t, authorizeEngineErrorReason, got.DeniedReason)
+	assertCarriesNoDriverText(t, string(raw), readErr, "fga_policies")
+
+	var parent sdktrace.ReadOnlySpan
+	for _, s := range recorder.Ended() {
+		if s.Name() == "fga.authorize" {
+			parent = s
+		}
+	}
+	require.NotNil(t, parent, "expected an fga.authorize span")
+	assert.Contains(t, parent.Status().Description, readErr.Error(), "the span records the driver's error")
 }
 
 func TestAuthorize_EngineErrorWithNilResult_Returns500WithErrorResponse(t *testing.T) {
