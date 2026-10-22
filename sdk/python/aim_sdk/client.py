@@ -225,7 +225,9 @@ def _transport_target(aim_url: str) -> str:
             return f"{parts.hostname}:{parts.port}" if parts.port else parts.hostname
     except Exception:
         pass
-    return aim_url
+    from .credentials import without_user_info
+
+    return without_user_info(aim_url)
 
 
 def _transport_failure_class(exc: BaseException) -> str:
@@ -260,11 +262,24 @@ def _is_usable_aim_url(aim_url: Any) -> bool:
 
 
 def _validate_aim_url(aim_url: str) -> None:
-    """An aim_url the SDK cannot send a request to is a configuration error."""
+    """
+    An aim_url the SDK cannot send a request to is a configuration error, and
+    so is one with a user name or password, a query string or a fragment: the
+    message then does not repeat the address (#859).
+    """
+    from .credentials import has_user_info, server_address_part_refusal
+
+    part = server_address_part_refusal(aim_url)
+    if part:
+        raise ConfigurationError(
+            f"aim_url {part}; pass the server's address alone, e.g. "
+            f"https://aim.example.com"
+        )
     if not _is_usable_aim_url(aim_url):
+        got = "" if has_user_info(aim_url) else f" -- got {aim_url!r}"
         raise ConfigurationError(
             f"aim_url must be an http or https URL with a host, e.g. "
-            f"https://aim.example.com -- got {aim_url!r}"
+            f"https://aim.example.com{got}"
         )
 
 
@@ -307,13 +322,16 @@ def _transport_failure_message(exc: BaseException, aim_url: str) -> str:
     "Request timeout" and "Connection failed" -- neither naming the server --
     while the verification path forwarded requests' own text verbatim, so the
     same unreachable AIM produced three unrelated messages depending on which
-    method the caller happened to be in.
+    method the caller happened to be in. A user name or password in `aim_url`
+    is left out of the message (#859).
     """
+    from .credentials import without_user_info
+
     return (
         f"Could not reach AIM at {_transport_target(aim_url)}: "
         f"{_transport_failure_class(exc)} ({type(exc).__name__}). "
         f"Check that the AIM server is running and that the aim_url "
-        f"{aim_url} is correct and reachable from this host."
+        f"{without_user_info(aim_url)} is correct and reachable from this host."
     )
 
 
@@ -5123,6 +5141,18 @@ def register_agent(
         )
     del organization_domain
 
+    # Before any request: an address with a user name or password, a query
+    # string or a fragment is refused, without repeating it (#859).
+    if aim_url:
+        from .credentials import server_address_part_refusal
+
+        url_part = server_address_part_refusal(aim_url)
+        if url_part:
+            raise ConfigurationError(
+                f"aim_url {url_part}; pass the server's address alone, e.g. "
+                f"aim_url=\"https://aim.example.com\"."
+            )
+
     # 1. Check for existing credentials (unless force_new)
     if not force_new:
         existing_creds = _load_credentials(name)
@@ -5287,6 +5317,11 @@ def register_agent(
         # Support both camelCase and snake_case for backward compatibility
         aim_url = aim_url or sdk_creds.get("aimUrl") or sdk_creds.get("aim_url")
         sdk_token_id = sdk_token_id or sdk_creds.get("sdkTokenId") or sdk_creds.get("sdk_token_id")
+
+        from .credentials import STORED_ADDRESS_HAS_USER_INFO, has_user_info
+
+        if has_user_info(aim_url):
+            raise ConfigurationError(STORED_ADDRESS_HAS_USER_INFO)
 
         if not aim_url:
             raise ConfigurationError("aim_url not found in SDK credentials")

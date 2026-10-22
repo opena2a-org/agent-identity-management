@@ -161,18 +161,29 @@ def invalid_server_url_reason(aim_url, option="--url"):
     that is not an http(s) URL used to reach the probe, which reported "could
     not reach the AIM server ... no HTTP response within 5s" -- the wrong
     problem, since no request was ever sent.
+
+    An address with a user name or password, a query string or a fragment is
+    refused (#859), and a reason never quotes an address that has an '@'. An
+    address _url_text_refusal refuses is left to it: a backslash before an '@'
+    is reported as the backslash.
     """
+    from .credentials import server_address_part_refusal
+
     url = (aim_url or "").strip()
     if not url:
         return f"{option} is empty"
+    part = None if _url_text_refusal(url) else server_address_part_refusal(url)
+    if part:
+        return f"{option} {part}"
+    shown = option if "@" in url else f"{option} {url!r}"
     try:
         parts = urlsplit(url)
     except ValueError:
-        return f"{option} {url!r} is not a URL"
+        return f"{shown} is not a URL"
     if parts.scheme not in ("http", "https"):
-        return f"{option} {url!r} is not an http(s) URL"
+        return f"{shown} is not an http(s) URL"
     if not parts.hostname:
-        return f"{option} {url!r} has no host"
+        return f"{shown} has no host"
     return None
 
 
@@ -642,7 +653,9 @@ def _sign_in_failure(reason, max_wait):
 
 def login(args):
     """Login to an AIM server with the OAuth 2.0 device grant (RFC 8628)."""
-    from .credentials import save_sdk_credentials, load_sdk_credentials
+    from .credentials import (
+        STORED_ADDRESS_HAS_USER_INFO, has_user_info, save_sdk_credentials, load_sdk_credentials,
+    )
 
     url_problem = invalid_server_url_reason(args.url)
     if url_problem:
@@ -671,7 +684,10 @@ def login(args):
         user_email = existing_creds.get('userEmail', 'Unknown')
         if existing_url:
             print(f"Already authenticated as: {user_email}")
-            print(f"Server: {existing_url}")
+            if has_user_info(existing_url):
+                print(STORED_ADDRESS_HAS_USER_INFO)
+            else:
+                print(f"Server: {existing_url}")
             print()
             try:
                 response = input("Re-authenticate? [y/N]: ").strip().lower()
@@ -1133,7 +1149,7 @@ def _print_saved_agents(signed_in):
 
 def status(args):
     """Check the SDK sign-in and list the agents saved on this machine."""
-    from .credentials import load_sdk_credentials, AIM_DIR
+    from .credentials import STORED_ADDRESS_HAS_USER_INFO, has_user_info, load_sdk_credentials, AIM_DIR
 
     creds = load_sdk_credentials()
 
@@ -1167,6 +1183,11 @@ def status(args):
     # Legacy files use snake_case keys; read both so an upgraded install does
     # not show "User: Unknown" for a user the file names.
     aim_url = creds.get('aimUrl') or creds.get('aim_url')
+    # A stored address with a user name or password is not shown (#859):
+    # "server" is null in --json and one line says why in the text output.
+    stored_user_info = has_user_info(aim_url)
+    if stored_user_info:
+        aim_url = None
     user_email = creds.get('userEmail') or creds.get('user_email') or 'Unknown'
     token_state = _token_state(creds.get('accessToken') or creds.get('access_token'))
     authenticated, verdict = _status_verdict(creds, token_state)
@@ -1186,7 +1207,10 @@ def status(args):
 
     print("Checking authentication status...")
     print()
-    print(f"   Server: {aim_url or f'not recorded (login uses {DEFAULT_AIM_URL} by default)'}")
+    if stored_user_info:
+        print(f"   Server: {STORED_ADDRESS_HAS_USER_INFO}")
+    else:
+        print(f"   Server: {aim_url or f'not recorded (login uses {DEFAULT_AIM_URL} by default)'}")
     print(f"   User: {user_email}")
     print(f"   Credentials: {source if source else f'none saved under {AIM_DIR}'}")
     print()
