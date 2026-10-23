@@ -72,7 +72,17 @@ function parseConfigFile(filePath: string): ARPConfig {
   } catch (err) {
     throw new Error(`Failed to parse config: ${filePath}. Install js-yaml for YAML support.`, { cause: err });
   }
-  return { ...defaultConfig(), ...parseOrThrow(filePath, () => yaml.load(content)) };
+  try {
+    return { ...defaultConfig(), ...(yaml.load(content) as Partial<ARPConfig>) };
+  } catch (err) {
+    // js-yaml's message ends with an excerpt of the file and its `mark` holds
+    // the whole file, and the lines around a syntax error can hold a value
+    // such as `intelligence.adapterConfig.apiKey`. The error's text reaches
+    // stderr through the aim-arp bin, logs, and whatever a caller prints, so
+    // it keeps the reason and the position only, and the js-yaml error is not
+    // attached as its cause.
+    throw new Error(`Failed to parse config: ${filePath}: ${yamlReason(err)}`);
+  }
 }
 
 /** Run a parser; a failure names the file and keeps the parser's message. */
@@ -83,6 +93,26 @@ function parseOrThrow(filePath: string, parse: () => unknown): Partial<ARPConfig
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to parse config: ${filePath}: ${reason}`, { cause: err });
   }
+}
+
+/** The fields of js-yaml's YAMLException that this loader reads. */
+interface YamlException extends Error {
+  reason: string;
+  mark?: { line?: unknown; column?: unknown };
+}
+
+function isYamlException(err: unknown): err is YamlException {
+  return err instanceof Error && err.name === 'YAMLException' && typeof (err as Partial<YamlException>).reason === 'string';
+}
+
+/** js-yaml's reason and 1-based line and column for a YAML error, without its excerpt of the file. */
+function yamlReason(err: unknown): string {
+  if (!isYamlException(err)) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const reason = err.reason || '(unknown reason)';
+  const { line, column } = err.mark ?? {};
+  return typeof line === 'number' && typeof column === 'number' ? `${reason} (${line + 1}:${column + 1})` : reason;
 }
 
 export function defaultConfig(): ARPConfig {
