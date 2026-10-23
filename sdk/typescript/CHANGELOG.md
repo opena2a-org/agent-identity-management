@@ -108,6 +108,17 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 - Tests: `src/secrets/SecretsClient.namespace-id.test.ts`. The namespace and credential storage tests in
   `src/secrets/SecretsClient.test.ts` pass a UUID.
 
+### Security — ARP's proxy listens on 127.0.0.1 unless its config sets a host (#853)
+
+- `ARPProxy.start()` called `listen` with the port and a callback and no host argument, as a spy on
+  `http.Server.prototype.listen` recorded it.
+- `ProxyConfig` gains an optional `host`, the address the proxy listens on, which `start()` passes to `listen`.
+  When it is unset or an empty string, `start()` passes `127.0.0.1`, exported as `DEFAULT_PROXY_HOST`; a proxy
+  started with no host and port 0 reports `127.0.0.1` as its listening address.
+- An operator whose clients reach the proxy from another host sets `proxy.host` (for example `0.0.0.0`) in the
+  config file.
+- Tests: `tests/arp/proxy/listen-address.test.ts`.
+
 ### Security
 
 - **Breaking change for code that sets `requireSignedRequests` or `maxTimestampAge`.** `A2ASecuritySettings`

@@ -463,6 +463,11 @@ export interface AILayerConfig {
 export interface ProxyConfig {
   /** Port to listen on */
   port: number;
+  /**
+   * The address the proxy listens on, 127.0.0.1 when unset; set it to 0.0.0.0
+   * or :: to accept connections from other hosts.
+   */
+  host?: string;
   /** Upstream targets */
   upstreams: ProxyUpstream[];
   /** Block requests on detection (default: false, alert only) */

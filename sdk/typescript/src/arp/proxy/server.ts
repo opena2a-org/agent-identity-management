@@ -100,6 +100,9 @@ export interface ARPProxyDeps {
 const MANIFEST_DENY_CLIENT_REASON =
   'Request blocked by ARP: agent registration denied';
 
+/** The address the proxy listens on when `ProxyConfig.host` is unset or empty. */
+export const DEFAULT_PROXY_HOST = '127.0.0.1';
+
 /**
  * Decode a configured Guard public key into an `EncodedHybridPublicKey`.
  *
@@ -216,7 +219,9 @@ export class ARPProxy {
         });
       });
 
-      this.server.listen(this.config.port, () => {
+      // `||`, not `??`: an empty host falls back to the loopback default too.
+      const host = this.config.host || DEFAULT_PROXY_HOST;
+      this.server.listen(this.config.port, host, () => {
         resolve();
       });
     });
