@@ -90,7 +90,7 @@ def test_init_links_to_the_dashboard_address_the_exchange_answer_states(fake_ser
     assert f"{server.url}/dashboard" not in out
 
 
-@pytest.mark.parametrize("stated", ["http://u:pw@localhost:3000", "javascript:alert(1)"],
+@pytest.mark.parametrize("stated", ["http://FAKE-user:FAKE-password@localhost:3000", "javascript:alert(1)"],
                          ids=["user-and-password", "javascript"])
 def test_init_links_to_the_server_address_when_the_stated_one_is_not_a_dashboard_address(
         fake_server, capsys, stated):
@@ -100,7 +100,7 @@ def test_init_links_to_the_server_address_when_the_stated_one_is_not_a_dashboard
 
     out = capsys.readouterr().out
     assert f"   Dashboard:   {server.url}/dashboard/agents/{AGENT_ID}" in out.splitlines()
-    assert "u:pw@" not in out and "javascript:" not in out
+    assert "FAKE-user:FAKE-password@" not in out and "javascript:" not in out
 
 
 # --- the sign-in stores the dashboard address its device grant names ---------------
@@ -203,7 +203,7 @@ def test_the_scripted_pass_links_the_agent_and_its_activity_on_that_dashboard(ca
 @pytest.mark.parametrize("creds, url_override, server", [
     (SIGN_IN, "http://127.0.0.1:9", "http://127.0.0.1:9"),
     ({"aimUrl": SELF_HOSTED_API, "refreshToken": "rt", "accessToken": "at"}, None, SELF_HOSTED_API),
-    (dict(SIGN_IN, dashboardUrl="http://u:pw@localhost:3000"), None, SELF_HOSTED_API),
+    (dict(SIGN_IN, dashboardUrl="http://FAKE-user:FAKE-password@localhost:3000"), None, SELF_HOSTED_API),
     (dict(SIGN_IN, dashboardUrl="javascript:alert(1)"), None, SELF_HOSTED_API),
     (dict(SIGN_IN, aimUrl="https://aim-api.example.com"), None, "https://aim-api.example.com"),
 ], ids=["url-names-another-server", "sign-in-stored-without-the-key", "user-and-password", "javascript",
