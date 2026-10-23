@@ -49,7 +49,7 @@ describe('--help on a subcommand prints help and executes nothing', () => {
     expect(code).toBe(0);
     expect(existsSync(marker())).toBe(false);
     expect(existsSync(home)).toBe(false);
-    expect(logLines.join('\n')).not.toContain('DISABLED');
+    expect(logLines.join('\n')).not.toContain('OpenA2A telemetry disabled');
     // Help must actually be PRINTED, not just nothing executed: a guard that
     // silently returned 0 would pass every negative assertion in this file.
     // It is opt-out's own usage (#412), not the whole group's.

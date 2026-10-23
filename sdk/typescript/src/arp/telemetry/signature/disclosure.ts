@@ -8,7 +8,7 @@
  * demand via `disclosureText()` or `aim-arp telemetry disclosure`.
  *
  * Every command this text cites must be registered by the shipped `aim-arp`
- * bin — enforced by cli/cited-commands.test.ts (#400).
+ * bin. Enforced by cli/cited-commands.test.ts (#400).
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
@@ -16,7 +16,7 @@ import { opena2aHome, homePath, DISCLOSURE_MARKER_FILE } from './paths';
 import { auditLogPath } from './audit-log';
 import { isOptedOut, signatureTelemetryEnabled, type SignatureTelemetryConfig } from './config';
 
-/** Build the disclosure text. Reflects the CURRENT channel state for honesty. */
+/** Build the disclosure text. Reflects the current channel state for honesty. */
 export function disclosureText(config?: SignatureTelemetryConfig): string {
   const optedOut = isOptedOut(config);
   const enabled = signatureTelemetryEnabled(config);
@@ -31,21 +31,21 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     '----------------------------------------',
     status,
     '',
-    'What is shared: the STRUCTURAL SHAPE of an anomalous behavior the runtime',
-    'observed — a technique class, a severity, an outcome, an event count, and a',
+    'What is shared: the structural shape of an anomalous behavior the runtime',
+    'observed: a technique class, a severity, an outcome, an event count, and a',
     'one-way hash of allowlisted structural tokens (action/target categories',
     'among them). Each report also carries a random per-install sensor id, a',
     'monthly-rotating org pseudonym, and the sensor key signature, so the',
     'registry can tell one sensor seeing an attack shape twice from the same',
     'shape appearing at many deployments.',
     '',
-    'What a report NEVER contains: prompts, model responses, tool arguments, file',
+    'What a report never contains: prompts, model responses, tool arguments, file',
     'contents or paths, command lines, environment values, secrets, IP addresses,',
     'hostnames, account ids, or the names of your tools, agents, or models.',
     '',
     'Why: shared structural signatures let an attack first seen at one deployment',
     'protect every other deployment. Nothing is sent until you have visibility:',
-    'every payload is written to a local audit log BEFORE it is sent, so you can',
+    'every payload is written to a local audit log before it is sent, so you can',
     'verify exactly what left your machine.',
     '',
     `Audit log:  ${auditLogPath()}`,
@@ -66,7 +66,7 @@ export function disclosureText(config?: SignatureTelemetryConfig): string {
     'channel, and fleet behavioral gradients. The `aim-arp telemetry opt-out`',
     'command additionally asks the registry to delete signatures this sensor',
     'already sent (right-to-delete); the env and config opt-outs stop sending but',
-    'do not delete — run `aim-arp telemetry purge` for that. Fleet gradients',
+    'do not delete; run `aim-arp telemetry purge` for that. Fleet gradients',
     'carry no identifier, so there is nothing about them to purge.',
     'The AIM client has a separate causal-denial relay with its own switch,',
     'off unless you enabled it; this opt-out does not govern it.',

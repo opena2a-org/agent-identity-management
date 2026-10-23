@@ -157,3 +157,74 @@ describe('`telemetry log` validates its count argument instead of silently defau
     expect(logLines.join('\n')).toContain('Telemetry audit log');
   });
 });
+
+describe('an argument aim-arp does not know is named on stderr with a pointer to --help (#852)', () => {
+  it('an unknown option is called an option, and nothing is printed on stdout', async () => {
+    expect(await runAimArp(['--frob'])).toBe(1);
+    expect(errLines).toEqual(['Unknown option: --frob', 'Run: aim-arp --help']);
+    expect(logLines).toEqual([]);
+  });
+
+  it('an unknown bare word is called a command, and nothing is printed on stdout', async () => {
+    expect(await runAimArp(['frobnicate'])).toBe(1);
+    expect(errLines).toEqual(['Unknown command: frobnicate', 'Run: aim-arp --help']);
+    expect(logLines).toEqual([]);
+  });
+
+  it('a bootstrap token given as the argument is echoed redacted', async () => {
+    const fake = 'aim_ob_FAKE';
+    expect(await runAimArp([fake])).toBe(1);
+    expect(await runAimArp([`--paste=${fake}`])).toBe(1);
+    expect(errLines).toEqual([
+      'Unknown command: aim_ob_[REDACTED]',
+      'Run: aim-arp --help',
+      'Unknown option: --paste=aim_ob_[REDACTED]',
+      'Run: aim-arp --help',
+    ]);
+    expect(errLines.join('\n')).not.toContain(fake);
+    expect(logLines).toEqual([]);
+  });
+});
+
+describe('the telemetry text has no capitals for emphasis and no em dash (#852)', () => {
+  // Words in capitals that are not emphasis: the channel state, and names.
+  const NOT_EMPHASIS = new Set(['ON', 'OFF', 'AIM', 'ARP', 'GTIN', 'IP']);
+
+  /** Everything printed so far, with the random test home replaced: its path is not copy. */
+  function printed(): string {
+    return [...logLines, ...errLines].join('\n').split(home).join('<home>');
+  }
+
+  function expectPlainCopy(text: string): void {
+    const emphasis = [...text.matchAll(/\b[A-Z]{2,}\b/g)].map((m) => m[0]).filter((w) => !NOT_EMPHASIS.has(w));
+    const emDashes = text.split('—').length - 1;
+    expect({ emphasis, emDashes }).toEqual({ emphasis: [], emDashes: 0 });
+  }
+
+  it('telemetry --help, telemetry disclosure and telemetry opt-out', async () => {
+    for (const sub of ['--help', 'disclosure', 'opt-out']) {
+      expect(await runAimArp(['telemetry', sub]), sub).toBe(0);
+    }
+    const text = printed();
+    expectPlainCopy(text);
+    // Each of the three was printed: an empty capture would pass the check above.
+    expect(text).toContain('opt-out       Disable all OpenA2A telemetry');
+    expect(text).toContain('The shape of an anomalous behavior');
+    expect(text).toContain('What is shared: the structural shape of an anomalous behavior');
+    expect(text).toContain('OpenA2A telemetry disabled (signature, GTIN and fleet-gradient channels).');
+  });
+
+  it('telemetry opt-in while an environment variable keeps telemetry off', async () => {
+    const saved = process.env.OPENA2A_TELEMETRY_OPTOUT;
+    process.env.OPENA2A_TELEMETRY_OPTOUT = '1';
+    try {
+      expect(await runAimArp(['telemetry', 'opt-in'])).toBe(0);
+    } finally {
+      if (saved === undefined) delete process.env.OPENA2A_TELEMETRY_OPTOUT;
+      else process.env.OPENA2A_TELEMETRY_OPTOUT = saved;
+    }
+    const text = printed();
+    expectPlainCopy(text);
+    expect(text).toContain('Note: telemetry is still disabled by an env var or config');
+  });
+});
