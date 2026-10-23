@@ -207,3 +207,37 @@ func TestEndpointSummaryReadinessRowNamesTheReportedDependencies(t *testing.T) {
 			name, deps[name], name)
 	}
 }
+
+// TestEndpointSummaryReadinessRowNamesTheBodysKeys pins the API endpoint
+// summary's GET /health/ready row to the top-level keys of the readiness body:
+// the row names, in backquotes, each key the body carries in a build stamped
+// with syncedFrom, run in a Container Apps revision.
+func TestEndpointSummaryReadinessRowNamesTheBodysKeys(t *testing.T) {
+	requirePublicRepositoryFiles(t)
+
+	const summary = "docs/guides/API_ENDPOINT_SUMMARY.md"
+	var rows []string
+	for _, line := range strings.Split(aim03ReadRepoFile(t, summary), "\n") {
+		if m := summaryReadinessRow.FindStringSubmatch(line); m != nil {
+			rows = append(rows, m[1])
+		}
+	}
+	require.Len(t, rows, 1, "%s lists GET /health/ready in one table row", summary)
+
+	prev := buildSyncedFrom
+	t.Cleanup(func() { buildSyncedFrom = prev })
+	buildSyncedFrom = syncedFromTestCommit
+	setServingRevision(t, revisionTestName)
+	_, _, body := aim07Get(t, aim07App(aim07CheckOK, nil))
+
+	var keys []string
+	for key := range aim07TopLevel(t, body) {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	require.Contains(t, keys, "revision", "the body carries no revision; the body read is broken, not the summary")
+	require.Contains(t, keys, "syncedFrom", "the body carries no syncedFrom; the body read is broken, not the summary")
+	for _, key := range keys {
+		assert.Contains(t, rows[0], "`"+key+"`", "the %s row names the %s key the body carries", summary, key)
+	}
+}

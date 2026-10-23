@@ -105,6 +105,11 @@ type ServerConfig struct {
 	// lowercase it or check its form. The middleware refuses every statement
 	// when it is given "".
 	PublicOrigin string
+	// Revision is CONTAINER_APP_REVISION as set, "" when it is unset or empty:
+	// the variable Azure Container Apps sets in each container of a revision
+	// to that revision's name. GET /health/ready reports it as revision. Load
+	// keeps it as written.
+	Revision string
 }
 
 // DefaultMetricsListenAddr is loopback on the port the OpenTelemetry
@@ -534,6 +539,7 @@ func LoadServer() ServerConfig {
 		MetricsListenAddr: getEnv("METRICS_LISTEN_ADDR", DefaultMetricsListenAddr),
 		AllowedOrigins:    allowedOrigins,
 		PublicOrigin:      getEnv("AIM_PUBLIC_ORIGIN", ""),
+		Revision:          getEnv("CONTAINER_APP_REVISION", ""),
 	}
 }
 

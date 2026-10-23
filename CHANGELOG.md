@@ -11,6 +11,24 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: `GET /health/ready` reports the Azure Container Apps revision the server runs in
+
+- The readiness body carries `revision`: the value of `CONTAINER_APP_REVISION`, the variable Azure Container Apps
+  sets to the name of the revision a container runs in, and `""` where that variable is unset or empty. A revision
+  that changes only a secret binding serves the same `commit` as the revision it replaces; its `revision` tells the
+  two apart. The body's other keys are unchanged.
+- The server reads `CONTAINER_APP_REVISION` once at startup, with the other variables its configuration holds, and
+  uses a value as written.
+- `apps/backend/contracts/health-ready.schema.json` declares `revision` as an optional string; it is not added to
+  the required keys.
+- The `GET /health/ready` row of `docs/guides/API_ENDPOINT_SUMMARY.md` lists the keys of the body.
+- Tests: `apps/backend/cmd/server/health_ready_revision_test.go` reads the body with the variable set and with it
+  unset, and checks that apart from `revision` the two bodies are the same; run against the handler before this
+  change it failed, as the body carried no `revision`. The same file checks that the server sets the revision from
+  its configuration before it registers the route. `apps/backend/internal/config/testdata/environment_table.json`
+  records the setting for the variable unset, empty, whitespace only, a revision name and another value.
+  `apps/backend/cmd/server/health_docs_paths_test.go` checks that the summary row names each key the body carries.
+
 ### Security — the agent alert, agent violation, admin alert and A2A violation routes cap limit and offset (#855)
 
 - `GET /api/v1/agents/:id/alerts`, `GET /api/v1/agents/:id/violations`, `GET /api/v1/admin/alerts` and

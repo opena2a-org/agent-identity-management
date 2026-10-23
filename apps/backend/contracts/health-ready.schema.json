@@ -32,6 +32,10 @@
     "version": {
       "type": ["string", "null"]
     },
+    "revision": {
+      "type": "string",
+      "description": "The name of the Azure Container Apps revision the service runs in, read from CONTAINER_APP_REVISION, and the empty string where that variable is unset. A revision that changes only a secret binding serves the same commit as the revision it replaces; its name tells the two apart."
+    },
     "syncedFrom": {
       "type": "string",
       "pattern": "^[0-9a-f]{40}$",
