@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed: `aim-sdk demo --cleanup` sends the stored sign-in's token only to the server that sign-in is for
+
+- `aim-sdk demo --cleanup` looks the demo agent up and deletes it with the access token of the sign-in stored on this
+  machine. That token is obtained and refreshed at the server the sign-in is for, its `aimUrl`. A `--url` naming
+  another server, compared with the stored `aimUrl` without a trailing `/`, is refused before any request, and nothing
+  is deleted: `The sign-in stored on this machine is for another server, so its token is not sent to <server>.` and
+  `To clean up there, sign in to it first: aim-sdk login --force --url <server>`. The stored address is not printed.
+  A `--url` naming the sign-in's server, and no `--url`, clean up as before.
+- Measured with the previous `demo.py`, for a sign-in stored for one loopback server and `--url` naming another, with
+  the token manager answering a fixed token: the `--url` server received `GET /api/v1/sdk-api/agents/demo-agent` with
+  that token in its `Authorization` header, the sign-in's server received no request, and the command exited 0.
+- Tests: `tests/test_demo_cleanup_sends_the_token_to_the_signed_in_server_only.py`.
+
 ### Fixed: `aim-sdk demo` links to the dashboard address the server states, as `aim-sdk init` does (#740)
 
 - `aim-sdk login`, and the sign-in that `secure()` and `aim-sdk demo` run when no sign-in is stored, store the

@@ -930,7 +930,12 @@ def _interactive_loop(ctx: "_DemoContext") -> int:
 
 
 def _cleanup(url_override: Optional[str]) -> int:
-    """Delete the demo agent (server row + local credential file)."""
+    """
+    Delete the demo agent (server row + local credential file) on the server
+    the stored sign-in is for. A `url_override` naming another server is
+    refused before any request: the sign-in's access token was issued by the
+    server it signed in to, and is sent to that server only.
+    """
     import requests
 
     from .credentials import (
@@ -945,6 +950,15 @@ def _cleanup(url_override: Optional[str]) -> int:
     aim_url = (url_override or creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
     if has_user_info(aim_url):
         print(STORED_ADDRESS_HAS_USER_INFO)
+        return 1
+    # OAuthTokenManager obtains and refreshes the token at the stored sign-in's
+    # server (the same default when the sign-in stores none), so the stored
+    # address, which may hold a user name or password, is compared and not
+    # printed.
+    signed_in_url = (creds.get("aimUrl") or creds.get("aim_url") or "http://localhost:8080").rstrip("/")
+    if aim_url != signed_in_url:
+        print(f"The sign-in stored on this machine is for another server, so its token is not sent to {aim_url}.")
+        print(f"To clean up there, sign in to it first: aim-sdk login --force --url {aim_url}")
         return 1
 
     token = OAuthTokenManager().get_access_token(suppress_errors=True)
