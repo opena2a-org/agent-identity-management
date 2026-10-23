@@ -12,7 +12,7 @@
 import { cliVersion } from '../../build-version';
 import { loadConfig } from '../index';
 import { runTelemetrySubcommand, TELEMETRY_SUBCOMMANDS } from './telemetry';
-import { runInit } from '../../cli/init';
+import { runInit, scrubToken } from '../../cli/init';
 
 function showHelp(): void {
   console.log(`
@@ -61,8 +61,9 @@ export async function runAimArp(argv: string[]): Promise<number> {
       showHelp();
       return 0;
     default:
-      console.error(`Unknown command: ${command}`);
-      showHelp();
+      // A bootstrap token pasted as the argument is printed redacted.
+      console.error(`${command.startsWith('-') ? 'Unknown option' : 'Unknown command'}: ${scrubToken(command)}`);
+      console.error('Run: aim-arp --help');
       return 1;
   }
 }

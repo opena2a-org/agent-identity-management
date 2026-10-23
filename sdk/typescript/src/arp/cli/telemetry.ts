@@ -3,11 +3,11 @@
  * internal arp-guard CLI (src/arp/cli/index.ts). One implementation, two
  * registrations, so the shipped commands and the internal ones cannot drift.
  *
- * `register` (sensor enrollment) is deliberately NOT here and NOT in the shipped
+ * `register` (sensor enrollment) is deliberately not here and not in the shipped
  * bin: whether the verified-sensor program continues is an open question, and a
  * published npm surface pre-commits the answer. It stays internal-only until
  * that is decided (CPO ruling, 2026-08-22). No string in this module may cite
- * it — enforced by cited-commands.test.ts.
+ * it (enforced by cited-commands.test.ts).
  */
 
 import {
@@ -56,7 +56,7 @@ const SUBCOMMAND_HELP: Record<TelemetrySubcommand, { usage: string; lines: strin
   'opt-out': {
     usage: 'opt-out',
     lines: [
-      'Disable ALL OpenA2A telemetry (also asks the registry to',
+      'Disable all OpenA2A telemetry (also asks the registry to',
       'delete already-sent signatures; use --no-purge to skip that)',
     ],
   },
@@ -83,9 +83,9 @@ export function telemetryHelpText(): string {
 ${rows}
 
   Structural signatures are OFF unless you turn them on with AIM_TELEMETRY=1
-  or signatureTelemetry.enabled: true. The SHAPE of an anomalous behavior is
+  or signatureTelemetry.enabled: true. The shape of an anomalous behavior is
   shared (plus a sensor id and org pseudonym), never payloads. Every byte
-  sent is recorded locally first — review it with: ${SHIPPED_INVOCATION} log
+  sent is recorded locally first; review it with: ${SHIPPED_INVOCATION} log
 `;
 }
 
@@ -181,7 +181,7 @@ export async function telemetryStatus(tcfg?: SignatureTelemetryConfig): Promise<
     console.log('  Turn on with: AIM_TELEMETRY=1 (or signatureTelemetry.enabled: true)');
   }
   console.log(`  Registry:     ${resolveRegistryUrl(tcfg)}`);
-  // Read-only: status must never CREATE identity state. Peeks return null until
+  // Read-only: status must never create identity state. Peeks return null until
   // the first send mints an identity. Peeked values pass the terminal strip as
   // defence in depth -- an on-disk id predating enroll's shape validation, or
   // one written by another tool, must not drive the terminal.
@@ -250,11 +250,11 @@ export async function telemetryOptOut(
   tcfg: SignatureTelemetryConfig | undefined,
   opts: { noPurge?: boolean } = {},
 ): Promise<void> {
-  // Write the local marker FIRST — it is what actually stops transmission. The
+  // Write the local marker first; it is what actually stops transmission. The
   // remote purge below is best-effort cleanup of already-sent data and must
-  // never block or undo the opt-out (fail OPEN).
+  // never block or undo the opt-out (fail open).
   const p = writeOptOutMarker();
-  console.log('\n  OpenA2A telemetry DISABLED (signature, GTIN and fleet-gradient channels).');
+  console.log('\n  OpenA2A telemetry disabled (signature, GTIN and fleet-gradient channels).');
   console.log(`  Marker: ${p}`);
 
   if (opts.noPurge) {
@@ -283,7 +283,7 @@ export function telemetryOptIn(tcfg?: SignatureTelemetryConfig): void {
   const stillOff = isOptedOut(tcfg);
   console.log(hadMarker ? '\n  Opt-out marker removed.' : '\n  No opt-out marker was present.');
   if (stillOff) {
-    console.log('  NOTE: telemetry is still disabled by an env var or config');
+    console.log('  Note: telemetry is still disabled by an env var or config');
     console.log('  (OPENA2A_TELEMETRY=off, OPENA2A_TELEMETRY_OPTOUT, ARP_TELEMETRY_DISABLED,');
     console.log('  or signatureTelemetry.enabled: false). Clear those to re-enable.\n');
   } else if (signatureTelemetryEnabled(tcfg)) {
@@ -297,12 +297,12 @@ export function telemetryOptIn(tcfg?: SignatureTelemetryConfig): void {
 }
 
 // runRemotePurge requests the registry delete this sensor's already-sent
-// signatures (G6 right-to-delete). Fails OPEN: any network/registry failure is
-// reported with a manual retry command but never throws — the caller's opt-out
+// signatures (G6 right-to-delete). Fails open: any network/registry failure is
+// reported with a manual retry command but never throws; the caller's opt-out
 // (or standalone purge intent) completes regardless.
 //
 // A machine with no sensor identity has never sent anything, so there is
-// nothing to purge — and building the purge proof would MINT the identity it
+// nothing to purge, and building the purge proof would mint the identity it
 // is about to purge, which falsifies status's 'created on first send'. Peek
 // first; skip the remote call when no identity exists.
 async function runRemotePurge(
@@ -407,7 +407,7 @@ export async function runTelemetrySubcommand(
   // Positional arguments are held to the same standard as options. Before
   // this, `log abc` silently showed 20 records (parseInt || 20 swallowed the
   // garbage) and `log 5 5` silently ignored the extra argument, while `log -1`
-  // was refused above — garbage left of the dash errored, garbage right of it
+  // was refused above: garbage left of the dash errored, garbage right of it
   // was swallowed. `log` takes at most one positional, a positive integer
   // count; no other subcommand takes any.
   const positionals = rest.filter((a) => !a.startsWith('-'));
@@ -452,7 +452,7 @@ export async function runTelemetrySubcommand(
       // neither what failed nor what to do about it.
       console.error(`  ${sub} could not write ${fsPath} (${fsCode}); nothing further was changed.`);
       if (sub === 'opt-out') {
-        console.error('  The opt-out did NOT take effect. To opt out without this directory: set OPENA2A_TELEMETRY=off');
+        console.error('  The opt-out did not take effect. To opt out without this directory: set OPENA2A_TELEMETRY=off');
       }
       console.error(`  Check its permissions: ls -ld ${opena2aHome()}`);
       console.error('  (or point OPENA2A_HOME at a directory you can read and write)');

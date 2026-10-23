@@ -237,6 +237,13 @@ export function agentCredentialsFileName(name: string): string {
   return `${name.replace(/[^\p{L}\p{N}_-]/gu, '_')}.json`;
 }
 
+/**
+ * Longest credentials file name `init` writes, in UTF-8 bytes: the file name
+ * limit of Linux file systems such as ext4. It is counted in bytes, not
+ * characters, as the server counts the agent name.
+ */
+const MAX_CREDENTIALS_FILE_NAME_BYTES = 255;
+
 interface ServerAnswer {
   code?: string;
   message?: string;
@@ -421,9 +428,21 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     err("Pick another name with --name <name>; it is the agent's name on the dashboard.");
     return 1;
   }
+  // The credentials file is written after the server has registered the agent,
+  // so a file name too long to write is refused here, before the token is sent.
+  const credentialsFileName = agentCredentialsFileName(name);
+  const fileNameBytes = Buffer.byteLength(credentialsFileName, 'utf8');
+  if (fileNameBytes > MAX_CREDENTIALS_FILE_NAME_BYTES) {
+    err(
+      `Error: the agent name is too long: its credentials file name would be ${fileNameBytes} bytes in UTF-8, ` +
+        `over the ${MAX_CREDENTIALS_FILE_NAME_BYTES}-byte limit. Nothing was sent.`,
+    );
+    err("Pick a shorter name with --name <name>; it is the agent's name on the dashboard.");
+    return 1;
+  }
 
   const agentsDir = join(home, '.aim', 'agents');
-  const credentialsFile = join(agentsDir, agentCredentialsFileName(name));
+  const credentialsFile = join(agentsDir, credentialsFileName);
   // Checked before the exchange so an existing agent's keys are never
   // overwritten and the single-use token is not spent on a run that cannot
   // save its result.

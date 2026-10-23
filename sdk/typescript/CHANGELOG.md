@@ -66,6 +66,33 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   fleet gradients on, after an opt-out marker is written, with `OPENA2A_TELEMETRY_OPTOUT` set when the twin is built,
   and with fleet gradients off.
 
+### Fixed — `aim-arp` answers an argument it does not know with a pointer to `--help`, `init` refuses a name whose credentials file name is over 255 bytes before it sends the token, and the telemetry text drops emphasis capitals and em dashes (#852)
+
+- `aim-arp` with an argument it does not know printed `Unknown command: <argument>` on stderr and the full help on
+  stdout, and exited 1: `--frob` was called a command, and a bootstrap token given as the argument (`aim_ob_FAKE`,
+  `--paste=aim_ob_FAKE`) was printed back as typed. Measured before this change with the built bin and the dispatch
+  tests. Now an unknown argument that starts with `-` prints `Unknown option: <argument>`, one that does not prints
+  `Unknown command: <argument>`, and each is followed by `Run: aim-arp --help`. Both lines go to stderr, nothing goes
+  to stdout, and the exit status is still 1. A bootstrap token in the echoed argument is printed as
+  `aim_ob_[REDACTED]`, as `init` prints one.
+- `aim-arp init` refuses a name whose credentials file name (`<name>.json` under `~/.aim/agents`) is over 255 bytes in
+  UTF-8, before it sends the token and before it writes anything under the home directory: an `Error:` line ending
+  `Nothing was sent.` and a line naming `--name`, both on stderr, and exit status 1. Measured before this change
+  against a stand-in server on 127.0.0.1, on macOS: `--name` with 251 ASCII letters (a 256-byte file name) sent the
+  token, the stand-in answered 201, and saving the key file then failed with `ENAMETOOLONG`. A name of 126 two-byte
+  letters (a 257-byte file name of 131 characters) was sent and saved there; it is refused now, as the limit is
+  counted in bytes. A name whose file name is exactly 255 bytes is still sent, tested with 250 ASCII letters and with
+  125 two-byte letters.
+- The telemetry text is lower case where it used capitals for emphasis, and uses plain punctuation where it used an em
+  dash; no word is added, removed or moved. Measured before this change: `aim-arp telemetry --help`,
+  `aim-arp telemetry disclosure` and `aim-arp telemetry opt-out` printed `ALL`, `SHAPE`, `STRUCTURAL SHAPE`, `NEVER`,
+  `BEFORE` and `DISABLED`, and three em dashes, and `aim-arp telemetry opt-in` under an environment opt-out printed
+  `NOTE:`. The opt-out error for a telemetry home it cannot write now says `did not take effect`. `ON` and `OFF` as a
+  state, and environment variable names, keep their capitals.
+- Tests: `src/arp/cli/aim-arp-argv.test.ts` and `src/cli/init.test.ts`. `src/arp/cli/telemetry-polish-412.test.ts`
+  pins `did not take effect`, and `src/arp/cli/telemetry-help-noexec.test.ts` checks that `opt-out --help` does not
+  print the opt-out's `OpenA2A telemetry disabled` line.
+
 ### Fixed — `SecretsClient` refuses a namespace ID that is not a UUID before it sends a request (#832)
 
 - `getNamespace`, `deleteNamespace`, `storeCredential` and `rotateCredential` put the namespace ID into the request

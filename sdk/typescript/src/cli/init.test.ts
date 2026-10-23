@@ -279,6 +279,41 @@ describe('flags', () => {
     expect(initHelpText()).toContain('--name <name>    Agent name, without "/" or "\\" (default: my-first-agent)');
   });
 
+  describe('a name whose credentials file name is over 255 bytes is refused before the token is sent (#852)', () => {
+    // The file name is the sanitized name and `.json`, counted in UTF-8 bytes:
+    // 251 ASCII letters are the shortest refused ASCII name (256 bytes), and 126
+    // two-byte letters (U+0434) make 257 bytes in 131 characters.
+    const refused: Array<[string, string, number]> = [
+      ['251 ASCII letters', 'a'.repeat(251), 256],
+      ['126 two-byte letters', 'д'.repeat(126), 257],
+    ];
+    for (const [label, name, bytes] of refused) {
+      it(label, async () => {
+        expect(Buffer.byteLength(agentCredentialsFileName(name), 'utf8')).toBe(bytes);
+        expect(await runInit(['--url', baseUrl, '--name', name], deps()), allOutput()).toBe(1);
+        expect(seen, allOutput()).toHaveLength(0);
+        expect(readdirSync(home)).toEqual([]);
+        expect(errLines).toEqual([
+          `Error: the agent name is too long: its credentials file name would be ${bytes} bytes in UTF-8, ` +
+            'over the 255-byte limit. Nothing was sent.',
+          "Pick a shorter name with --name <name>; it is the agent's name on the dashboard.",
+        ]);
+        expect(outLines).toEqual([]);
+      });
+    }
+
+    it('a name whose file name is exactly 255 bytes is still sent', async () => {
+      for (const name of ['a'.repeat(250), 'д'.repeat(125)]) {
+        expect(Buffer.byteLength(agentCredentialsFileName(name), 'utf8')).toBe(255);
+        const before = seen.length;
+        expect(await runInit(['--url', baseUrl, '--name', name], deps()), allOutput()).toBe(0);
+        expect(seen).toHaveLength(before + 1);
+        expect(JSON.parse(seen[before].body).name).toBe(name);
+        expect(existsSync(credentialsPath(name))).toBe(true);
+      }
+    });
+  });
+
   it('a name with dots that is not a path is registered (#755)', async () => {
     for (const [name, file] of [['bot.v2', 'bot_v2.json'], ['...x', '___x.json']]) {
       expect(await runInit(['--url', baseUrl, '--name', name], deps()), allOutput()).toBe(0);

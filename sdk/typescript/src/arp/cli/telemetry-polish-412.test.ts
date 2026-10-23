@@ -109,7 +109,7 @@ describe.skipIf(!canDropPermissions)('an unreadable state directory is reported,
     expect(code).toBe(1);
     expect(err()).toContain('could not write');
     expect(err()).toContain('EACCES');
-    expect(err()).toContain('did NOT take effect');
+    expect(err()).toContain('did not take effect');
     expect(err()).toContain('OPENA2A_TELEMETRY=off');
     expect(err()).not.toMatch(/^Error: /m);
   });
