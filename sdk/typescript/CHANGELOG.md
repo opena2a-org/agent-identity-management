@@ -14,11 +14,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   `.yaml` file holding `monitors: [unclosed` and for a `.yml` file holding `agentName: [a`, with js-yaml installed.
   A `.json` file holding `{,}` failed with a `SyntaxError` whose message,
   `Expected property name or '}' in JSON at position 1 (line 1 column 2)`, does not name the file.
-- A YAML or JSON config that does not parse now fails with `Failed to parse config: <path>: <parser message>`, and
-  the error's `cause` is the parser's error. On Node.js 26.12.0 the `.yaml` file above gives
-  `unexpected end of the stream within a flow collection (2:1)` followed by js-yaml's excerpt of the file, and the
-  `.json` file gives the message quoted above. The install hint appears when js-yaml cannot be loaded; a JSON config
-  still loads then.
+- A YAML or JSON config that does not parse now fails with `Failed to parse config: <path>: <parser message>`. For a
+  YAML config the parser message is js-yaml's reason with the line and column, and the error has no `cause`: the
+  `.yaml` file above gives `unexpected end of the stream within a flow collection (2:1)`. js-yaml's own message ends
+  with an excerpt of the file, and the lines around a syntax error can hold a value such as
+  `intelligence.adapterConfig.apiKey`, so neither that message nor the js-yaml error is kept. For a JSON config the
+  parser message is the `SyntaxError`'s, and that error is the `cause`: on Node.js 26.12.0 the `.json` file above
+  gives the message quoted above. The install hint appears when js-yaml cannot be loaded; a JSON config still loads
+  then.
 - Tests: `src/arp/config/loader.parse-errors.test.ts`.
 
 ### Fixed — `init` removes only group and other permissions from an existing `~/.aim` or `~/.aim/agents`, and prints each mode it changes (#860)
