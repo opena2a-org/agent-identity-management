@@ -38,6 +38,14 @@ var buildVersion string
 // sha, leaves "syncedFrom" out of the readiness body.
 var buildSyncedFrom string
 
+// servingRevision is the name of the Azure Container Apps revision the process
+// runs in, "" where CONTAINER_APP_REVISION is unset or empty: config.Load
+// reads that variable into Server.Revision, and main sets servingRevision from
+// it before it registers GET /health/ready. A revision that changes only a
+// secret binding serves the same commit as the revision it replaces; its name
+// tells the two apart.
+var servingRevision string
+
 const (
 	healthReadyService = "agent-identity-management"
 
@@ -79,6 +87,7 @@ type healthReadyBody struct {
 	Service      string                           `json:"service"`
 	Commit       *string                          `json:"commit"`
 	Version      *string                          `json:"version"`
+	Revision     string                           `json:"revision"`
 	SyncedFrom   *string                          `json:"syncedFrom,omitempty"`
 	CheckedAt    string                           `json:"checkedAt"`
 	Degraded     bool                             `json:"degraded"`
@@ -202,6 +211,7 @@ func newHealthReadyHandler(checkDB, checkRedis func(context.Context) error, chec
 			Service:      healthReadyService,
 			Commit:       stampedCommit(),
 			Version:      stampedVersion(),
+			Revision:     servingRevision,
 			SyncedFrom:   stampedSyncedFrom(),
 			CheckedAt:    time.Now().UTC().Format(time.RFC3339),
 			Degraded:     degraded,

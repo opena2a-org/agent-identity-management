@@ -299,7 +299,9 @@ func main() {
 	defer revocationList.Stop()
 
 	// Readiness probe (no auth required). Body contract:
-	// apps/backend/contracts/health-ready.schema.json.
+	// apps/backend/contracts/health-ready.schema.json. Its revision is the
+	// Container Apps revision the server runs in.
+	servingRevision = cfg.Server.Revision
 	app.Get("/health/ready", newHealthReadyHandler(db.PingContext, redisReadyCheck(cfg.Redis.Configured, redisClient),
 		revocationReadyCheck(revocationList)))
 

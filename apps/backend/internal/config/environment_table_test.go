@@ -130,6 +130,8 @@ func renderSetting(cfg *Config, name string) (string, bool) {
 		return q(cfg.Server.MetricsListenAddr), true
 	case "AIM_PUBLIC_ORIGIN":
 		return q(cfg.Server.PublicOrigin), true
+	case "CONTAINER_APP_REVISION":
+		return q(cfg.Server.Revision), true
 	case "ALLOWED_ORIGINS":
 		return fmt.Sprintf("%q", cfg.Server.AllowedOrigins), true
 	case "REDIS_HOST":

@@ -2715,6 +2715,41 @@
       "line": "Agent requests signed as agent-request-v2: no route accepts them yet (AIM_PUBLIC_ORIGIN, the audience they must name, is \"https://AIM.example.com/\")"
     },
     {
+      "variable": "CONTAINER_APP_REVISION",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CONTAINER_APP_REVISION",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "CONTAINER_APP_REVISION",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"   \"",
+      "line": ""
+    },
+    {
+      "variable": "CONTAINER_APP_REVISION",
+      "input": "valid",
+      "value": "ca-aim-backend-test--0000001",
+      "setting": "\"ca-aim-backend-test--0000001\"",
+      "line": ""
+    },
+    {
+      "variable": "CONTAINER_APP_REVISION",
+      "input": "invalid",
+      "value": "not a revision name",
+      "setting": "\"not a revision name\"",
+      "line": ""
+    },
+    {
       "variable": "POSTGRES_APP_USER",
       "input": "unset",
       "value": null,
