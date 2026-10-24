@@ -60,6 +60,79 @@ jobs:
           # does not become a shell-style gate by accident.
           ./actionlint -shellcheck= -color
 
+  # Every `uses:` in every workflow names a 40-hex commit sha
+  # (scripts/lint-action-pins.py). A tag or a branch is a pointer the action's
+  # repository can move, and the next run of a job holding a write scope executes
+  # whatever it points at. Unconditional (no `if:`, no path filter) and needed by
+  # the gate: a path-filtered check would skip the very workflow edit it exists to
+  # read. Any non-zero exit fails the job: 1 is a finding, 2 a named refusal (the
+  # check could not run), and neither is a pass. The cells in
+  # scripts/test_ci_gate_pin_jobs.py assert over THIS file that the gate keeps
+  # needing this job and the two below.
+  action-pin-lint:
+    name: Action pin lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML, refusing any file whose hash is not listed
+        run: |
+          python -m pip install --require-hashes --only-binary :all: --no-deps -r scripts/requirements-ci-lint.txt
+      - name: CI Gate needs the pin and toolchain jobs and fails when one does not succeed
+        run: python3 -m unittest scripts/test_ci_gate_pin_jobs.py
+      - name: Every uses is pinned to a commit sha
+        run: python3 scripts/lint-action-pins.py
+
+  # Every image a write-scoped job runs, and every Dockerfile base, is pinned by
+  # @sha256 digest (scripts/lint-runtime-image-pins.py). A tag is resolved by the
+  # registry when the job runs or the image is built, so whoever can push that tag
+  # chooses the bytes that run beside a write-scoped token or end up inside a
+  # published image. Unconditional and needed by the gate; exit 2 (PyYAML missing,
+  # a file that cannot be read) fails the job like exit 1.
+  runtime-image-pin-lint:
+    name: Runtime image pin lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML, refusing any file whose hash is not listed
+        run: |
+          python -m pip install --require-hashes --only-binary :all: --no-deps -r scripts/requirements-ci-lint.txt
+      - name: Every runtime image and Dockerfile base is pinned by digest
+        run: python3 scripts/lint-runtime-image-pins.py
+
+  # The backend's Go release is declared once, in the `toolchain` directive of
+  # apps/backend/go.mod. scripts/check-go-toolchain.sh asserts that `go env
+  # GOVERSION` in apps/backend reports exactly that release under setup-go reading
+  # the same go.mod, that the golang builder stage of
+  # infrastructure/docker/Dockerfile.backend names it, and that no workflow sets a
+  # `go-version:` literal. Its fixture suite runs first with a stub `go`, so a check
+  # that stopped detecting drift fails here before it can pass the tree.
+  # Unconditional and needed by the gate.
+  go-toolchain-check:
+    name: Go toolchain check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache: false
+      - name: The check fails on each kind of drift it exists to catch
+        run: bash scripts/test-check-go-toolchain.sh
+      - name: go env GOVERSION, the builder tag and every setup-go step name the toolchain directive
+        run: sh scripts/check-go-toolchain.sh
+
   # AST lint that catches HTTP handlers reading c.Params("id"|"agent_id")
   # without invoking the tenant-scoping helper (LoadOwned or
   # LoadOwnedViaAgent). The structural guarantee for the defect #18-25
@@ -647,6 +720,9 @@ jobs:
         secrets-lint,
         tenant-scoping-lint,
         workflow-lint,
+        action-pin-lint,
+        runtime-image-pin-lint,
+        go-toolchain-check,
         sync-protect-guard,
         docker-paths-filter,
         sdk-dependency-audit,
@@ -668,6 +744,9 @@ jobs:
           sl='${{ needs.secrets-lint.result }}'
           tl='${{ needs.tenant-scoping-lint.result }}'
           wl='${{ needs.workflow-lint.result }}'
+          ap='${{ needs.action-pin-lint.result }}'
+          ri='${{ needs.runtime-image-pin-lint.result }}'
+          gt='${{ needs.go-toolchain-check.result }}'
           sp='${{ needs.sync-protect-guard.result }}'
           dp='${{ needs.docker-paths-filter.result }}'
           sa='${{ needs.sdk-dependency-audit.result }}'
@@ -680,11 +759,11 @@ jobs:
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl action-pin-lint=$ap runtime-image-pin-lint=$ri go-toolchain-check=$gt sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "action-pin-lint:$ap" "runtime-image-pin-lint:$ri" "go-toolchain-check:$gt" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
