@@ -105,6 +105,37 @@ fixture
 rm "$d/infrastructure/docker/Dockerfile.backend"
 expect "the backend Dockerfile is missing" 2 "cannot read infrastructure/docker/Dockerfile.backend" "$d"
 
+# The repository's own files from here on. REPO_GOMOD and REPO_DOCKERFILE are
+# copied into each fixture, so the cases follow the tree as it is.
+REPO_GOMOD="$SCRIPT_DIR/../apps/backend/go.mod"
+REPO_DOCKERFILE="$SCRIPT_DIR/../infrastructure/docker/Dockerfile.backend"
+REPO_WANT="$(awk '$1 == "toolchain" { print $2 }' "$REPO_GOMOD")"
+
+# A copy of go.mod whose directive says go1.26.7 while the go command reports
+# go1.26.8. The builder tag moves with the directive, so the release the go
+# command runs is the only disagreement, and the check must still go red.
+fixture
+sed 's/^toolchain .*/toolchain go1.26.7/' "$REPO_GOMOD" > "$d/apps/backend/go.mod"
+sed -i.bak 's/golang:[0-9.]*-alpine/golang:1.26.7-alpine/' "$d/infrastructure/docker/Dockerfile.backend"
+expect "go.mod copy says go1.26.7, go env GOVERSION says go1.26.8" 1 \
+  "go env GOVERSION in apps/backend reports go1.26.8; the toolchain directive says go1.26.7" "$d" go1.26.8
+
+# The repository's go.mod and Dockerfile.backend as they are: the builder stage
+# (golang:<release>-alpine@sha256:<digest>) names the release the directive declares.
+fixture
+cp "$REPO_GOMOD" "$d/apps/backend/go.mod"
+cp "$REPO_DOCKERFILE" "$d/infrastructure/docker/Dockerfile.backend"
+expect "the repository's go.mod and Dockerfile.backend name one release" 0 \
+  "$REPO_WANT everywhere (go.mod toolchain directive, go env GOVERSION, 1 Dockerfile builder stages" "$d" "$REPO_WANT"
+
+# The repository's Dockerfile.backend against a go.mod copy whose directive moved
+# to go1.26.7: the builder tag no longer names the directive's release.
+fixture
+sed 's/^toolchain .*/toolchain go1.26.7/' "$REPO_GOMOD" > "$d/apps/backend/go.mod"
+cp "$REPO_DOCKERFILE" "$d/infrastructure/docker/Dockerfile.backend"
+expect "the repository's builder tag against a go.mod copy saying go1.26.7" 1 \
+  "the toolchain directive says go1.26.7 (expected golang:1.26.7-alpine)" "$d" go1.26.7
+
 echo
 if [ "$FAILURES" -ne 0 ]; then
   echo "$FAILURES of $CASE cases failed"
