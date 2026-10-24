@@ -60,18 +60,25 @@ jobs:
           # does not become a shell-style gate by accident.
           ./actionlint -shellcheck= -color
 
-  # Every `uses:` in every workflow names a 40-hex commit sha
+  # Every `uses:` in every workflow names a 40-hex commit sha, and that commit is
+  # reachable from the action repository's default branch or, for an owner/repo at
+  # a major the script's ALLOWLIST names, from that entry's releases/vM branch
   # (scripts/lint-action-pins.py). A tag or a branch is a pointer the action's
-  # repository can move, and the next run of a job holding a write scope executes
-  # whatever it points at. Unconditional (no `if:`, no path filter) and needed by
-  # the gate: a path-filtered check would skip the very workflow edit it exists to
-  # read. Any non-zero exit fails the job: 1 is a finding, 2 a named refusal (the
-  # check could not run), and neither is a pass. The cells in
+  # repository can move; a sha alone can name a commit that exists only in a fork,
+  # because the host serves a fork network's objects under the parent's name. The
+  # script fetches each upstream branch itself and decides with `git merge-base
+  # --is-ancestor`. Unconditional (no `if:`, no path filter) and needed by the
+  # gate: a path-filtered check would skip the very workflow edit it exists to
+  # read. Any non-zero exit fails the job: 1 is a finding, 2 a named refusal (no
+  # YAML parser, no git, a fetch that failed), and neither is a pass. The cells in
   # scripts/test_ci_gate_pin_jobs.py assert over THIS file that the gate keeps
   # needing this job and the two below.
   action-pin-lint:
     name: Action pin lint
     runs-on: ubuntu-latest
+    # Each git command is bounded inside the script; this bounds a host that
+    # stalls every request. A cancelled job fails the gate like a failed one.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -84,7 +91,9 @@ jobs:
           python -m pip install --require-hashes --only-binary :all: --no-deps -r scripts/requirements-ci-lint.txt
       - name: CI Gate needs the pin and toolchain jobs and fails when one does not succeed
         run: python3 -m unittest scripts/test_ci_gate_pin_jobs.py
-      - name: Every uses is pinned to a commit sha
+      - name: The pin and reachability rules hold on fixtures (no network)
+        run: python3 -m unittest scripts/test_lint_action_pins.py
+      - name: Every uses is a commit sha reachable from a branch its action's repository permits
         run: python3 scripts/lint-action-pins.py
 
   # Every image a write-scoped job runs, and every Dockerfile base, is pinned by
