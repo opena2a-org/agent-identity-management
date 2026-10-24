@@ -52,6 +52,8 @@ var javaSDKVersionStatements = []*regexp.Regexp{
 	regexp.MustCompile(`org\.opena2a/aim-sdk@` + javaSDKVersion),
 	regexp.MustCompile(`org\.opena2a:aim-sdk:` + javaSDKVersion),
 	regexp.MustCompile(`"sdkVersion",\s*"` + javaSDKVersion + `"`),
+	// The MCP initialize request's clientInfo, which names the client aim-java-sdk.
+	regexp.MustCompile(`clientInfo\.put\("version",\s*"` + javaSDKVersion + `"\)`),
 	regexp.MustCompile(`sdkComponent\.version\s*=\s*"` + javaSDKVersion + `"`),
 	regexp.MustCompile(`<artifactId>aim-sdk</artifactId>[\s*]*<version>` + javaSDKVersion + `</version>`),
 	regexp.MustCompile(`target/aim-sdk-` + javaSDKVersion + `\.jar`),
@@ -169,12 +171,14 @@ func TestJavaSDKVersionStatementsIn_ReportsEachStatementWithItsLine(t *testing.T
 	text := "User-Agent: AIM-Java-SDK/1.2.0\n" +
 		" *     <artifactId>aim-sdk</artifactId>\n" +
 		" *     <version>1.1.0</version>\n" +
-		"payload.put(\"version\", \"1.0.0\");\n"
+		"payload.put(\"version\", \"1.0.0\");\n" +
+		"clientInfo.put(\"version\", \"1.3.0\");\n" +
+		"mcpData.put(\"version\", \"1.0.0\");\n"
 
 	var got []string
 	for _, statement := range javaSDKVersionStatementsIn("doc.md", text) {
 		got = append(got, statement.String())
 	}
-	assert.Equal(t, []string{"doc.md:1 states 1.2.0", "doc.md:2 states 1.1.0"}, got,
+	assert.Equal(t, []string{"doc.md:1 states 1.2.0", "doc.md:2 states 1.1.0", "doc.md:5 states 1.3.0"}, got,
 		"an agent's or an MCP server's own version is not the SDK's")
 }
