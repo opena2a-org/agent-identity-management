@@ -223,6 +223,8 @@ this line when it is published.
 
 | `CHANGELOG.md` heading | Fixed in |
 |------------------------|----------|
+| Security: the dashboard uses Next.js 16.4.2 and sharp 0.35.5, and its image installs exactly what its committed lockfile pins (#493, #568) | 1.1.0 |
+| Security: the TypeScript SDK resolves js-yaml 4.3.2 (#374) | `sdk/typescript` source at `platform-v1.1.0` |
 | Security: the agent alert, agent violation, admin alert and A2A violation routes cap limit and offset (#855) | 1.1.0 |
 | Security: a password change ends every session signed in before it, and the API enforces a required password change | 1.1.0 |
 | Security: an ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with `Retry-After` | 1.1.0 |

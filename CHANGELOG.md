@@ -11,6 +11,118 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the dashboard uses Next.js 16.4.2 and sharp 0.35.5, and its image installs exactly what its committed lockfile pins (#493, #568)
+
+- `apps/web/package.json` pins `next` at exactly 16.4.2; platform 1.0.0 asked for `^16.2.3`. The version moved to
+  16.3.5 (#491), was pinned exactly (#493), and moved to 16.3.6 (#568) and then to 16.4.2. The root `package.json`
+  overrides `sharp` to 0.35.5. `apps/web/package-lock.json` resolves `next` 16.4.2 and `sharp` 0.35.5.
+- `apps/web/package-lock.json` is committed (#493). The dashboard Dockerfiles copy it by name and install with
+  `npm ci --ignore-scripts`, which refuses a lockfile that disagrees with `package.json` and runs no dependency's
+  install script (#568).
+
+### Security — the TypeScript SDK resolves js-yaml 4.3.2 (#374)
+
+- `sdk/typescript/package.json` raises its `js-yaml` dependency from `^4.1.1` to `^4.3.1` (#374), and
+  `sdk/typescript/package-lock.json` resolves 4.3.2; platform 1.0.0's lockfile resolved 4.1.1. The TypeScript SDK
+  releases under its own `sdk-ts-v<version>` tags.
+
+### Fixed — `aim-bootstrap` names the dashboard's sign-in page, `/auth/login` (#568)
+
+- At the end of a bootstrap, `aim-bootstrap` prints `You can now log in at: http://localhost:3000/auth/login`, with no
+  emoji. It printed `http://localhost:3000/login`.
+
+### Added — a dashboard user can mint a 15-minute single-use bootstrap token that registers one agent in their organization
+
+- Migration 115 adds `bootstrap_tokens`, which keeps a SHA-256 hash of each token and an 8-character display prefix,
+  never the token, with its organization, creator and expiry and whether it was used or revoked. One unused token per
+  user per organization is open at a time.
+- `POST /api/v1/onboarding/bootstrap-tokens` mints a token for the signed-in member, rate limited per user, and revokes
+  the caller's earlier unused one. `POST /api/v1/onboarding/bootstrap-tokens/revoke` revokes the caller's unused
+  tokens.
+- `POST /api/v1/onboarding/bootstrap-tokens/exchange` takes the token from the `X-AIM-Bootstrap-Token` header or the
+  JSON body, claims it once, and registers an agent in the token's organization, owned by the token's creator; nothing
+  in the request chooses either. A token sent in a query string is revoked and the request refused. A failed
+  registration releases the claim, so the token can be used again.
+- The request log, the analytics endpoint column and the error handler's log line redact a bootstrap token in a path.
+
+### Added — the platform records onboarding steps per organization and shows platform admins the time to a first agent
+
+- Migration 116 adds `onboarding_events`: the organization, the event, the SDK tab of a `tab_selected` event, and a
+  time. The schema checks the event and the tab against closed lists, and no user, email address, client address, user
+  agent or free text is stored. `first_agent_registered` is one row per organization, stamped with the `created_at` of
+  its earliest agent, and the migration writes it for every organization that already has an agent.
+- The server records `token_minted` and `token_exchanged` from the bootstrap token routes and `first_agent_registered`
+  after an agent registration, outside the request, so a failed write never fails the request.
+  `POST /api/v1/onboarding/events` takes `onboarding_viewed`, `tab_selected`, `onboarding_completed` and
+  `onboarding_skipped` from the dashboard for the session's organization, and refuses the events the server records.
+- `GET /api/v1/platform-admin/onboarding-metrics` answers an organization admin whose email is in
+  `AIM_PLATFORM_ADMINS` with the time from an organization's creation to its first agent (median, 75th and 90th
+  percentile, fastest, conversion and duration buckets, over all time and the last 30 days) and the event counts of
+  the window. The dashboard shows them at `/dashboard/platform/onboarding`. The first-agent card reports
+  `onboarding_viewed` once per browser session and `tab_selected` on each switch of SDK tab, without waiting for the
+  answer.
+
+### Changed — the dashboard's Java SDK tab says the SDK is not on Maven Central
+
+- The Java tab says `org.opena2a:aim-sdk` is not published on Maven Central and that its clone-and-build line installs
+  `org.opena2a:aim-sdk:1.0.0` locally. A test reads `sdk/python/setup.py`, `sdk/typescript/package.json` and
+  `sdk/java/pom.xml` and fails when a package name, console script, login flag, import or Maven coordinate the SDK
+  tabs cite differs from them.
+
+### Fixed — the registration, password reset and device sign-in pages render text at 14px or larger, and Show password is a 44px target
+
+- On the register, forgot-password and device pages, helper text, form labels, field errors, the reset page's next
+  steps, the device consent warning and the "Enter a different code" link rendered at 12px; they render at 14px. No
+  copy or colour changed.
+- The "Show password" control on the register, sign-in and change-password pages is a 44 by 44 pixel button around the
+  same icon, named "Show password" or "Hide password" as before.
+
+### Changed — a verified agent's page shows a Verified status badge instead of a disabled button
+
+- Once an agent is verified, managers and admins see a success badge with a check mark and the word "Verified" where a
+  disabled "Verified" button was. The badge is not a button and not a tab stop. An agent that is not verified keeps the
+  "Verify agent" button, which is disabled and reads "Verifying..." only while the request runs.
+
+### Fixed — phone menus open above the bottom tab bar
+
+- On a phone, the dashboard's fixed menus, drawers and dialogs stacked beneath the bottom tab bar. They open above it:
+  the navigation drawer ends above the bar, and the header account menu limits its height to stay clear of the bar and
+  scrolls inside.
+
+### Fixed — the phone tab bar shows an admin's tabs when the profile request is refused (#591)
+
+- The bottom tab bar and the hub tabs took the user's role only from `GET /api/v1/auth/me` and dropped a failure, so a
+  refused request left an admin with the viewer tabs (Overview, Agents, Guide). They take the role from the session the
+  route gate reads, and `GET /api/v1/auth/me` refines it when it answers.
+
+### Changed — the flight-search example refuses a search AIM did not verify
+
+- `examples/flight-search-agent/flight_agent.py` ran the search after any verification failure, printing "Proceeding
+  without verification". It refuses the search on a denial or any other verification failure, prints why and
+  re-raises the SDK's exception, and reports a denial that carries a verification ID as not executed.
+- It reports a verified search's result through `report_execution_status`, reading `verification_id` from the
+  verification. It read `audit_id`, which the verification does not return, and called `log_capability_result`, whose
+  route the server refuses.
+
+### Changed — the backend builds with Go 1.26.8, the toolchain `apps/backend/go.mod` declares
+
+- `apps/backend/go.mod` keeps `go 1.25.0` and declares `toolchain go1.26.8`; platform 1.0.0 declared no toolchain.
+  `scripts/check-go-toolchain.sh` holds the CI workflows and the backend Dockerfile's builder image to that release.
+
+### Changed — the backend image names its base images by digest
+
+- `infrastructure/docker/Dockerfile.backend` names its Go builder image and its alpine runtime image by digest, so a
+  rebuild uses the same base images. `scripts/lint-runtime-image-pins.py` fails a publish build or backend Dockerfile
+  that names an image without a digest.
+
+### Added — migrations 118 and 119 create the audit record chain and record debt tables
+
+- Migration 118 adds `record_chains` and `audit_records`, which hold each organization's chain of signed audit
+  records. Migration 119 adds `record_debts`, which keeps a reduction whose audit record could not be appended until a
+  settler appends it.
+- The server sets no transition recorder, so it writes no audit record: no chain starts, the start line reads
+  `state=pre_chain`, and the chain head route answers `notStarted`.
+
 ### Added: `GET /health/ready` reports the Azure Container Apps revision the server runs in
 
 - The readiness body carries `revision`: the value of `CONTAINER_APP_REVISION`, the variable Azure Container Apps
