@@ -11,6 +11,16 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the Java SDK and the Java A2A example took jackson 2.18.8 before 2.18.11, and use bouncycastle 1.85 (#340, #511)
+
+- `sdk/java/pom.xml` set `jackson.version` to 2.18.8 (#340), and `examples/a2a-multi-agent-demo/java/pom.xml` took the
+  same version (#511); platform 1.0.0 pinned 2.16.1 in both. Both have since moved to 2.18.11, which the entry for
+  jackson 2.18.11 records.
+- `examples/a2a-multi-agent-demo/java/pom.xml` sets `bouncycastle.version` to 1.85 (#511); platform 1.0.0 pinned 1.79
+  there. The property sets `bcprov-jdk18on` and `bcpkix-jdk18on`. `sdk/java/pom.xml` moved from 1.79 to 1.84 (#294)
+  and then to 1.85 (#500).
+- The Java SDK is built from source: rebuild it, and the example, to pick up the new versions.
+
 ### Security — `POST /api/v1/verification-events` refuses every write, so a verification event records only an outcome the server derived (#556)
 
 - `POST /api/v1/verification-events` answers `403` with `verificationEventWriteNotAccepted` in `code` and `reasonCode`
