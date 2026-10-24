@@ -35,9 +35,9 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 
 | Decision | Rows |
 | --- | --- |
-| not needed | 58 |
-| pending | 69 |
-| present | 285 |
+| needed | 4 |
+| not needed | 121 |
+| present | 287 |
 
 ## Pull requests
 
@@ -45,22 +45,22 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | --- | --- | --- | --- | --- |
 | #131 | `9f569b00`, `69716f12`, `fd45e375` | FGA Step 5 no longer denies HIGH-risk requests on the intent classifier; it runs async and is only recorded (#131) | line 7759 | present (cites #323, carried by the same commit) |
 | #269 | `b1bc019d` | docs: add "See it work" A/B demo GIF, link to DVAA RAGBot-AIM (#269) | none | not needed: documentation only, no behaviour change |
-| #270 | `d383d451` | docs(sdk): richer `aim-sdk login` output + install-first README quickstart (#270) | none | pending: decided in a later commit of this branch |
+| #270 | `d383d451` | docs(sdk): richer `aim-sdk login` output + install-first README quickstart (#270) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #272 | `83853ff1` | docs(security): correct credential-storage section (plaintext 0600, not encrypted) (#272) | none | not needed: documentation only, no behaviour change |
 | #273 | `f5651ed7` | chore(sdk): aim-sdk 1.23.0 (provisional AAP grant surface, dashboard-styled login pages, packaging fixes) (#273) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #274 | `dfe4ac89` | Wire MCP manifest drift detection into capability and attestation flows (#274) | line 7747 | present |
-| #277 | `018dc16d` | Causal-denial telemetry: correlation envelope + AIMClient wiring (TS SDK) (#277) | none | pending: decided in a later commit of this branch |
-| #278 | `b8f41f30` | feat(telemetry): SDK→Registry relay for anonymized causal-denial indicators (#278) | none | pending: decided in a later commit of this branch |
-| #279 | `54c95381` | feat(telemetry): harden joiner, bounded buffers + deferred default-sink write (#279) | none | pending: decided in a later commit of this branch |
-| #280 | `42c56f3b` | fix(telemetry): align auto-joiner write dir with the relay read dir (#280) | none | pending: decided in a later commit of this branch |
+| #277 | `018dc16d` | Causal-denial telemetry: correlation envelope + AIMClient wiring (TS SDK) (#277) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| #278 | `b8f41f30` | feat(telemetry): SDK→Registry relay for anonymized causal-denial indicators (#278) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| #279 | `54c95381` | feat(telemetry): harden joiner, bounded buffers + deferred default-sink write (#279) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| #280 | `42c56f3b` | fix(telemetry): align auto-joiner write dir with the relay read dir (#280) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #281 | `3b294f40` | feat(python-sdk): causal-denial telemetry parity with the TypeScript SDK (#281) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #282 | `ceeaa720` | fix(backend): return 400 not 500 for agent registration with invalid org/user (#282) | line 7867 | present (entry added by the same change; it does not cite the number) |
 | #283 | `59f9addc` | test(sdk): guard test_sdk_verification stray script under __main__ (#283) | none | not needed: tests only |
 | #284 | `aa893da3` | ci: restore Sync to AIM Cloud workflow with token preflight (#284) | none | not needed: CI only |
-| #285 | `fa4ff8a7` | chore: remove dead sync-to-frontend script (#285) | none | pending: decided in a later commit of this branch |
-| #286 | `3cbb44f5` | fix(sdk-cli): stop doubling the 'Token exchange failed:' prefix (#286) | none | pending: decided in a later commit of this branch |
+| #285 | `fa4ff8a7` | chore: remove dead sync-to-frontend script (#285) | none | not needed: CI and repository tooling only |
+| #286 | `3cbb44f5` | fix(sdk-cli): stop doubling the 'Token exchange failed:' prefix (#286) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #287 | `4621a28a` | release(sdk-py): aim-sdk 1.24.1 (#287) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #288 | `e9f29e04` | fix(sdk): name the real credential source path; guard login EOF (#288) | none | pending: decided in a later commit of this branch |
+| #288 | `e9f29e04` | fix(sdk): name the real credential source path; guard login EOF (#288) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #289 | `70821be0` | feat(agents): add optional declaredPurpose to agent identity (#289) | line 7738 | present |
 | #290 | `1bbfb393` | ci: retry docker registry logins to survive transient 500s (#290) | none | not needed: CI only |
 | #291 | `07e5630f` | feat(registration): capture optional signup profile questions (#291) | line 7763 | present |
@@ -70,12 +70,12 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #296 | `60862582` | ci(sync): bump actions/checkout v4 -> v5 (#296) | none | not needed: CI only |
 | #297 | `b2243491` | perf: eliminate per-row query N+1 in MCP servers + pending verifications lists (#297) | line 7849 | present |
 | #298 | `f2462ba4` | perf(web): progressively load the A2A dashboard page (#298) | line 7850 | present |
-| #299 | `c69182ee` | feat(ts-sdk): local ATX credential verification path (#299) | none | pending: decided in a later commit of this branch |
+| #299 | `c69182ee` | feat(ts-sdk): local ATX credential verification path (#299) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #300 | `02e055b9` | feat(java-sdk): local ATX credential verification (atx-verify extraction step 5) (#300) | line 7767 | present |
-| #301 | `ea766088` | sync-to-cloud: respect .sync-protect in sync_migrations() (#301) | none | pending: decided in a later commit of this branch |
-| #302 | `bc5c036b` | docs(python-sdk): cross-link aicomply as content-compliance companion (#302) | none | pending: decided in a later commit of this branch |
-| #303 | `aae8bfba` | Run vitest once in sdk/typescript test script (#303) | none | pending: decided in a later commit of this branch |
-| #304 | `162f4469` | Rename dashboard heading to 'Security Overview' (#304) | none | pending: decided in a later commit of this branch |
+| #301 | `ea766088` | sync-to-cloud: respect .sync-protect in sync_migrations() (#301) | none | not needed: CI and repository tooling only |
+| #302 | `bc5c036b` | docs(python-sdk): cross-link aicomply as content-compliance companion (#302) | none | not needed: documentation only, no behaviour change |
+| #303 | `aae8bfba` | Run vitest once in sdk/typescript test script (#303) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| #304 | `162f4469` | Rename dashboard heading to 'Security Overview' (#304) | none | not needed: the heading it set is no longer on the page at main |
 | #305 | `b449b77c` | Harden auth: block SDK tokens as bearer, idle/absolute session timeout, org name in /auth/me (#305) | line 7696 | present |
 | #307 | `5faf9019` | Server-side token revocation on logout + opt-in CORS preview origins (#307) | line 7728 | present |
 | #308 | `af523bb3` | Separate access vs refresh tokens with a typ claim (grace rollout) (#308) | line 7696 | present |
@@ -84,34 +84,34 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #312 | `542bd258` | Add Agent Trust Credential issuance delegating to the Registry (#312) | line 7751 | present |
 | #313 | `91c4abf9` | fix(mcp-drift): atomic well-known recompute + operator alert on drift (#313) | line 7748 | present |
 | #314 | `35bca2e8` | fix(trust): MCP drift alerts now affect the connected agent's trust score (#314) (#321) | line 7881 | present (cites #321, carried by the same commit) |
-| #315 | `86f77173` | Rename ATC client to ATCClient to avoid cloud-build collision (#315) | none | pending: decided in a later commit of this branch |
+| #315 | `86f77173` | Rename ATC client to ATCClient to avoid cloud-build collision (#315) | none | not needed: internal rename of a client type |
 | #316 | `ebd049cb` | feat(capabilities): honeytoken capabilities, alert + audit on verification (#293) (#316) | line 7744 | present |
 | #317 | `fc0a23c8` | feat(sdk): async-refreshed revocation cache + Java verify benchmark (#317) (#318) | line 7768 | present (cites #318, carried by the same commit) |
 | #318 | `fc0a23c8` | feat(sdk): async-refreshed revocation cache + Java verify benchmark (#317) (#318) | line 7768 | present |
-| #319 | `6615a1cd` | Fix AIM Cloud sync: move raiseHoneytokenAlert to a synced file (#319) | none | pending: decided in a later commit of this branch |
-| #320 | `8bfedaae` | Fix AIM Cloud sync: move HasCapabilityNoAlert to a synced file (#320) | none | pending: decided in a later commit of this branch |
+| #319 | `6615a1cd` | Fix AIM Cloud sync: move raiseHoneytokenAlert to a synced file (#319) | none | not needed: moves code between files for the hosted build's sync, no behaviour change |
+| #320 | `8bfedaae` | Fix AIM Cloud sync: move HasCapabilityNoAlert to a synced file (#320) | none | not needed: moves code between files for the hosted build's sync, no behaviour change |
 | #321 | `35bca2e8` | fix(trust): MCP drift alerts now affect the connected agent's trust score (#314) (#321) | line 7881 | present |
 | #322 | `fd45e375` | feat(fga): add Step 5 intent-check observability metrics (#131) (#322) | line 7757 | present |
 | #323 | `69716f12` | feat(fga): consume daemon classify/abstain signal in Step 5 intent check (#131) (#323) | line 7759 | present |
 | #324 | `9cbf6032` | feat(fga): emit gen_ai.agent.* authorization attributes on the fga.authorize span (#324) | line 7760 | present |
-| #325 | `26d2ace1` | ci: make Go linting actually run (golangci-lint v2 + action v8) (#325) | none | pending: decided in a later commit of this branch |
+| #325 | `26d2ace1` | ci: make Go linting actually run (golangci-lint v2 + action v8) (#325) | none | not needed: CI lint configuration |
 | #326 | `2af4e6ee` | ci: make Go security linters blocking; fix authenticated config-path file read (#326) | line 7693 | present |
 | #327 | `5e2cd815` | ci: make Go Lint (security) always report so it can be a required check (#327) | none | not needed: CI only |
-| #328 | `0b57e502` | ci: add fan-in CI Gate so the full test suite can be a required check (#328) | none | pending: decided in a later commit of this branch |
-| #329 | `740efab3` | Add ARP runtime-protection module at @opena2a/aim-sdk/arp (#329) | none | pending: decided in a later commit of this branch |
+| #328 | `0b57e502` | ci: add fan-in CI Gate so the full test suite can be a required check (#328) | none | not needed: CI and repository tooling only |
+| #329 | `740efab3` | Add ARP runtime-protection module at @opena2a/aim-sdk/arp (#329) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #330 | `f2a01c19` | AIP §6.1 composition rule with anti-gaming ceiling + atx-conformance CI gate (#330) | line 7830 | present |
-| #331 | `808bc6ae` | fix(sdk-ts): make the Fastify plugin work through fastify.register + close packaging gaps (#331) | none | pending: decided in a later commit of this branch |
+| #331 | `808bc6ae` | fix(sdk-ts): make the Fastify plugin work through fastify.register + close packaging gaps (#331) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #332 | `39b7c34f` | Persist execution_isolation and excluded_factors on trust scores (#332) | line 7831 | present |
 | #333 | `888a16c4` | Bump pinned atx-conformance ref to 18-fixture suite; vendor degenerate declaredPurpose fixtures (#333) | none | not needed: CI only |
-| #336 | `02dc2a14` | Merge pull request #336 from opena2a-org/fix/aim-sdk-101-batch-arp-livefire | none | pending: decided in a later commit of this branch |
+| #336 | `02dc2a14` | Merge pull request #336 from opena2a-org/fix/aim-sdk-101-batch-arp-livefire | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #337 | `d74080d2` | ATX: strict-parse the credential (fold-aware duplicate rejection) in the Java SDK; bump conformance ref to 20 fixtures (#337) | line 7654 | present |
-| #338 | `e29705e7` | sdk-ts: bump @opena2a/atx-verify to 0.3.0 (1.0.1 -> 1.0.2) (#338) | none | pending: decided in a later commit of this branch |
-| #339 | `0cac02b3` | chore: point published contact email to info@opena2a.org (#339) | none | pending: decided in a later commit of this branch |
+| #338 | `e29705e7` | sdk-ts: bump @opena2a/atx-verify to 0.3.0 (1.0.1 -> 1.0.2) (#338) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| #339 | `0cac02b3` | chore: point published contact email to info@opena2a.org (#339) | none | not needed: contact address in a code comment and the documentation |
 | #340 | `c09ce5cd` | fix(deps): bump jackson-databind and x/crypto/x/net for HIGH CVEs (#340) | line 7635 | present |
 | #341 | `1e0d0b96` | feat(auth): allow machine API keys to register agents via a narrow gate (#341) | line 7741 | present |
 | #342 | `0a54fed4` | harden delegation verification: enforce signed temporal window (#342) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #343 | `aff134f6` | auth: gate agent credential + SDK download routes to member (JWT) access (#343) | line 7690 | present |
-| #344 | `4dc241f5` | docs: document the delegation-chain API in the SDK README (#344) | none | pending: decided in a later commit of this branch |
+| #344 | `4dc241f5` | docs: document the delegation-chain API in the SDK README (#344) | none | not needed: documentation only, no behaviour change |
 | #345 | `63dd7ebf` | harden delegation chains: enforce child expiry <= parent expiry (#345) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #347 | `8a2a0185` | auth: stop OAuth service tokens from traversing human role gates (#347) | line 7687 | present |
 | #349 | `27a35e3c` | metrics: optional bearer-token auth for the /metrics endpoint (#349) | line 6053 | present |
@@ -132,34 +132,34 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #367 | `8ea0cebf` | Make the PR review gate fail closed instead of approving (#367) | none | not needed: CI only |
 | #368 | `6b4a94df` | Fix the invalid expression that has been rejecting the sync workflow since 8d79696 (#368) | none | not needed: CI only |
 | #369 | `02a46c69` | Fix having to sign in twice, caused by a login that looked like a token refresh (#369) | line 7732 | present |
-| #371 | `d4f815ef` | Stop claiming security audits and compliance we have not had (#371) | none | pending: decided in a later commit of this branch |
+| #371 | `d4f815ef` | Stop claiming security audits and compliance we have not had (#371) | none | not needed: wording of claims in documentation and page copy; the same change reworded this file's support line |
 | #372 | `27fecee8` | Authenticate the SDK verification write routes, and stop /result writing the decision (#372) | line 7666 | present |
-| #373 | `a7f243d7` | Honour .sync-protect on every sync path, not most of them (#373) | none | pending: decided in a later commit of this branch |
-| #374 | `0b1f8760` | Raise the js-yaml floor to the patched version, and unstale the lockfile (#374) | none | pending: decided in a later commit of this branch |
+| #373 | `a7f243d7` | Honour .sync-protect on every sync path, not most of them (#373) | none | not needed: CI and repository tooling only |
+| #374 | `0b1f8760` | Raise the js-yaml floor to the patched version, and unstale the lockfile (#374) | none | needed: TypeScript SDK dependency moved off a vulnerable version |
 | #375 | `b78db564` | Gate the SDK's shipped dependencies, and stop a green check that cannot fail (#375) | none | not needed: CI only |
-| #381 | `2980a027` | Correct the AAP spec version in the SDK, and stop dead-ending on the broker 404 (#381) | none | pending: decided in a later commit of this branch |
-| #384 | `d2190d0c` | Sanitise server-sent text before it can reach a terminal (#384) (#404) | none | pending: decided in a later commit of this branch |
-| #385 | `46c1b599` | Give verification a typed decision, and make a denial behave like one (#385) | none | pending: decided in a later commit of this branch |
-| #386 | `7edef266` | Block a denied action in every enforcement mode (#386) | none | pending: decided in a later commit of this branch |
+| #381 | `2980a027` | Correct the AAP spec version in the SDK, and stop dead-ending on the broker 404 (#381) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
+| #384 | `d2190d0c` | Sanitise server-sent text before it can reach a terminal (#384) (#404) | SDK changelogs | present (recorded in `sdk/typescript/CHANGELOG.md` and `sdk/python/CHANGELOG.md`, which cite #384) |
+| #385 | `46c1b599` | Give verification a typed decision, and make a denial behave like one (#385) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
+| #386 | `7edef266` | Block a denied action in every enforcement mode (#386) | SDK changelog | present (recorded in `sdk/python/CHANGELOG.md`; the dashboard gains one sentence that explains it) |
 | #387 | `a7a95312` | Pin the enforcement matrix so a denial cannot silently start executing again (#387) | none | not needed: tests only |
 | #388 | `288c21c5` | Catch a server-side denial in the Express and Fastify middlewares (#388) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #392 | `8ffe3537` | Record the two carried defects in the 2.0.0 CHANGELOG (#392) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #393 | `6190f813` | Merge pull request #393 from opena2a-org/fix/arp-signature-telemetry-opt-in | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #394 | `ad9f0226` | Merge pull request #394 from opena2a-org/fix/sdk-py-trust-score-and-console-glyphs | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #395 | `1279338b` | Merge pull request #395 from opena2a-org/fix/ci-sdk-reaches-the-backend-image | none | not needed: CI only |
-| #396 | `279c962f` | Merge pull request #396 from opena2a-org/fix/sdk-ts-version-single-source | none | pending: decided in a later commit of this branch |
-| #399 | `27d0500a` | Merge pull request #399 from opena2a-org/fix/container-scan-follows-the-dockerfile | none | pending: decided in a later commit of this branch |
+| #396 | `279c962f` | Merge pull request #396 from opena2a-org/fix/sdk-ts-version-single-source | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| #399 | `27d0500a` | Merge pull request #399 from opena2a-org/fix/container-scan-follows-the-dockerfile | none | not needed: CI and repository tooling only |
 | #401 | `8c7c16ab` | Make ARP report the version npm published (#401) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #402 | `d466eb95` | ci(pr-review): share the model call; fix the prior-review fetch and the `-` filename hole (#402) | none | not needed: CI only |
 | #403 | `f18e88f6` | ci: update claude-review action pin (#403) | none | not needed: CI only |
-| #404 | `d2190d0c` | Sanitise server-sent text before it can reach a terminal (#384) (#404) | none | pending: decided in a later commit of this branch |
+| #404 | `d2190d0c` | Sanitise server-sent text before it can reach a terminal (#384) (#404) | SDK changelogs | present (recorded in `sdk/typescript/CHANGELOG.md` and `sdk/python/CHANGELOG.md`, which cite #384 from the same commit) |
 | #405 | `f0ebb6b5` | Bump golang.org/x/net to v0.56.0 (advisory id omitted) (#405) | line 7640 | present |
 | #406 | `b39e4589` | Ship the telemetry consent CLI as the aim-arp bin (#406) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #407 | `bc1e5866` | Cut aim-sdk 2.0.1 (#407) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #411 | `fd31532f` | Attribute an opt-out to the source actually in effect, and stop claiming actions that did not happen (#411) | none | pending: decided in a later commit of this branch |
+| #411 | `fd31532f` | Attribute an opt-out to the source actually in effect, and stop claiming actions that did not happen (#411) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #413 | `bcac70d5` | A help request answers with help, never by running the command (#413) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| #414 | `ed1290da` | Date 1.3.0 by its tag; restore canonical Apache-2.0 text (#414) | none | pending: decided in a later commit of this branch |
-| #415 | `6a20b601` | Merge pull request #415 from opena2a-org/fix/pypi-license-field | none | pending: decided in a later commit of this branch |
+| #414 | `ed1290da` | Date 1.3.0 by its tag; restore canonical Apache-2.0 text (#414) | none | not needed: an SDK changelog date and the license text |
+| #415 | `6a20b601` | Merge pull request #415 from opena2a-org/fix/pypi-license-field | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #419 | `4ed0a560` | Add the Glasshouse foundation: tokens, theme switch, shell and edge gate (#419) | line 7852 | present |
 | #420 | `ac178fff` | Rebuild the overview as a Glasshouse home with Developer, Security and Executive lenses (#420) | line 7853 | present |
 | #421 | `b764a14b` | Move the auth pages and the registration queue onto Glasshouse, with claims measured against the backend (#421) | line 7854 | present |
@@ -176,13 +176,13 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #432 | `a1f428de` | Refresh mints role and email from the user record, never from the token (#432) | line 7531 | present |
 | #433 | `ae0d2a5c` | Make the mobile nav drawer and remaining menus opaque overlay surfaces (#433) | line 7856 | present |
 | #434 | `90dcb178` | Record the refresh/recovery token fix in the changelog (advisory id omitted) (#434) | line 7525 | present (entry added by the same change; it does not cite the number) |
-| #435 | `e191eadc` | Rename review check to 'Automated code review' (#435) | none | pending: decided in a later commit of this branch |
+| #435 | `e191eadc` | Rename review check to 'Automated code review' (#435) | none | not needed: CI and repository tooling only |
 | #436 | `c8ad876e` | Drop the previous-review replay from the review gate (#436) | none | not needed: CI only |
 | #437 | `70a64d82` | Require an out-of-fleet approval for changes to the merge gate's own config (#437) | none | not needed: CI only |
 | #438 | `eb68b89e` | Document the gate-file authorship rule (#438) | none | not needed: CI only |
 | #439 | `09bef205` | Document gate-file change control in the security policy (#439) | none | not needed: documentation only, no behaviour change |
 | #440 | `630bacbc` | Add the gate-file approval check (#440) | none | not needed: CI only |
-| #442 | `3c95f6ea` | Python SDK: TS-parity fixtures and drift guard for the ARP telemetry seam (#442) | none | pending: decided in a later commit of this branch |
+| #442 | `3c95f6ea` | Python SDK: TS-parity fixtures and drift guard for the ARP telemetry seam (#442) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #443 | `972964d9` | Encode gate verdicts by state class: action_required while awaiting approval (#443) | none | not needed: CI only |
 | #444 | `ac01cfdf` | Trust factor 9: cap unverified isolation attestations, expire stale ones (#444) | line 7772 | present (entry added by the same change; it does not cite the number) |
 | #445 | `7506cc4c` | Backend: register the SDK isolation-attestation path, keep /isolation as deprecated alias (#445) | line 7803 | present (entry added by the same change; it does not cite the number) |
@@ -191,7 +191,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #448 | `e389a3da` | Release @opena2a/aim-sdk 1.3.1 (#448) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #451 | `cff33cac` | SDK README: the Express and Fastify examples need registered-agent credentials; 1.3.1 known issues (#451) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #452 | `5405500a` | ci: run the TypeScript SDK suite in a job the CI Gate needs (AIM-05) (#452) | none | not needed: CI only |
-| #453 | `6deb5cb3` | feat: one enforcement deadline over the whole SDK verification call (AIM-06) (#453) | none | pending: decided in a later commit of this branch |
+| #453 | `6deb5cb3` | feat: one enforcement deadline over the whole SDK verification call (AIM-06) (#453) | none | not needed: confined to `sdk/python` and `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #454 | `a94f7032` | feat: FGA contextRules.onUnavailable, fail closed by default (AIM-08) (#454) | line 7716 | present |
 | #455 | `d176590a` | feat: GET /health/ready body contract, commit stamping, vendored schema (AIM-07) (#455) | line 7846 | present |
 | #456 | `627a804f` | ARP L2 sends nothing to a vendor unless it was configured to (#456) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
@@ -201,30 +201,30 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #462 | `0c3fa80b` | Java SDK: an untrusted issuerChain authority cannot sign for a trusted issuer (#462) | line 7651 | present |
 | #464 | `f2aa4012` | aim-sdk (Python): MCP detection payloads report the installed package version (#464) (#470) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #465 | `442389cf` | ci: pin atx-conformance at the 21-fixture suite and vendor the untrusted-chain-authority fixture (#465) | none | not needed: CI only |
-| #466 | `28434a0f` | Sweep internal role tokens and machine-local paths from the public surface (#466) | none | pending: decided in a later commit of this branch |
+| #466 | `28434a0f` | Sweep internal role tokens and machine-local paths from the public surface (#466) | none | not needed: wording of code comments and documentation, no behaviour change |
 | #467 | `b7764bca` | fix(sdk-ts): close eight open 1.3.1 release-test P2 findings (AIM-11) (#467) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #468 | `4404f023` | sdk/typescript: disposition all sixteen 1.3.1 release-test P3 findings (AIM-12) (#468) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| #469 | `d3b9bfe9` | ci(sdk): walk per-assertion vitest statuses in the publish/CI zero-skip gate (#469) | none | pending: decided in a later commit of this branch |
+| #469 | `d3b9bfe9` | ci(sdk): walk per-assertion vitest statuses in the publish/CI zero-skip gate (#469) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #470 | `f2aa4012` | aim-sdk (Python): MCP detection payloads report the installed package version (#464) (#470) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #475 | `d93a53b9` | sdk-python: drop the stale capability_detection.__version__ (#475) (#547) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #476 | `909ef0a1` | ci(sdk): match --allow-skips entries exactly against the SDK-root-relative path (AIM-18) (#476) | none | pending: decided in a later commit of this branch |
+| #476 | `909ef0a1` | ci(sdk): match --allow-skips entries exactly against the SDK-root-relative path (AIM-18) (#476) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #477 | `063feec6` | docs(sdk): name the two skipIf groups by file in the publish gate doc (AIM-20) (#477) | none | not needed: documentation only, no behaviour change |
 | #478 | `af0a25be` | test(sdk-python): read the newest release section, not the first heading, in the version changelog check (#478) | none | not needed: tests only |
 | #479 | `c28f4aad` | AIM-15: replace U+2713/U+2717 console marks with [OK]/[FAIL] across the Python SDK (#479) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #482 | `dfc5719f` | ci(sdk): bind every --allow-skips entry to a per-file skip bound in the publish/CI gate (AIM-19) (#482) | none | pending: decided in a later commit of this branch |
+| #482 | `dfc5719f` | ci(sdk): bind every --allow-skips entry to a per-file skip bound in the publish/CI gate (AIM-19) (#482) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #484 | `6f86614b` | AIM-14: rebase the five P2 findings fix onto main (CHANGELOG merged) (#484) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #486 | `27dc545b` | AIM-16: rebase the twelve P3 findings fix onto main (CHANGELOG merged) (#486) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #487 | `ce68f10e` | AIM-21: the three P2 findings and the seven P3 findings from the aim-sdk 2.0.3 release test (#487) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #488 | `c4424351` | Make the upstream tests and the cloud sync layout-agnostic (#488) | none | pending: decided in a later commit of this branch |
+| #488 | `c4424351` | Make the upstream tests and the cloud sync layout-agnostic (#488) | none | not needed: CI and repository tooling only |
 | #489 | `a796109a` | Converge the name of the fga_policies onUnavailable constraint (#489) | line 7887 | present |
 | #490 | `fa571523` | Harden the public did:aip resolver: no pending-agent oracle, rate limited, rightmost untrusted hop (#490) | line 7702 | present |
 | #491 | `efe28e11` | Bump next, sharp, postcss, x/crypto, grpc, go-jose and x/text; turn the self-hosted image optimizer off (#491) | line 7612 | present |
 | #492 | `1ea0dff8` | Retire empty-typ grace on the refresh path (P1-phase-2) (#492) | line 7697 | present |
-| #493 | `dcb7f5bf` | Pin apps/web to a committed lockfile: add apps/web/package-lock.json (v3, seeded from the root lockfile, next 16.3.5 exact) and re-sync the root lockfile's apps/web entry (QGF-224, Control B, Sequencing 1) (#493) | none | pending: decided in a later commit of this branch |
-| #494 | `fcfa9c60` | Replace the Maven Central coordinate with the source build across the Java SDK docs (QGF-225) (#494) | none | pending: decided in a later commit of this branch |
-| #495 | `1b9ffa4c` | Replace npm lockfile hunks in the PR review input with a predicate-backed placeholder and enforce its report (QGF-226) (#495) | none | pending: decided in a later commit of this branch |
+| #493 | `dcb7f5bf` | Pin apps/web to a committed lockfile: add apps/web/package-lock.json (v3, seeded from the root lockfile, next 16.3.5 exact) and re-sync the root lockfile's apps/web entry (QGF-224, Control B, Sequencing 1) (#493) | none | needed: the dashboard's committed lockfile is a build input of the shipped image |
+| #494 | `fcfa9c60` | Replace the Maven Central coordinate with the source build across the Java SDK docs (QGF-225) (#494) | none | not needed: documentation; the same change rewrote this file's preamble, lines 7-10 |
+| #495 | `1b9ffa4c` | Replace npm lockfile hunks in the PR review input with a predicate-backed placeholder and enforce its report (QGF-226) (#495) | none | not needed: CI and repository tooling only |
 | #496 | `3a65737c` | Pin both frontend Dockerfile bases and root the aim-dashboard runtime stage on alpine (QGF-230) (#496) | line 7642 | present |
-| #497 | `ed45a6b5` | License Compliance: the Go license verdict is the checker exit status behind a pinned go-licenses script with retry (QGF-251) (#497) | none | pending: decided in a later commit of this branch |
+| #497 | `ed45a6b5` | License Compliance: the Go license verdict is the checker exit status behind a pinned go-licenses script with retry (QGF-251) (#497) | none | not needed: CI license check and its inputs |
 | #498 | `4c4e0706` | Backend: remove the community-intelligence push that posted into a Registry route that does not exist, and pin the Registry's route table (#498) | line 7865 | present |
 | #499 | `993256b3` | A2A: an agent with no task data is unscored, the trust-score PUT refuses, routing stops defaulting to 0.5 (#499) | line 7510 | present (entry added by the same change; it does not cite the number) |
 | #500 | `2a749df5` | sdk-java: bouncycastle 1.84 -> 1.85 (advisory id omitted) critical, (advisory id omitted) high) (#500) | line 7636 | present |
@@ -236,7 +236,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #506 | `4c4ad1e3` | The device token endpoint mints no pair for an account that can no longer hold a session (#506) | line 7705 | present |
 | #509 | `c7d2d340` | Re-pin the aim-dashboard runtime base to alpine 3.21.8 (advisory id omitted) in openssl 3.3.7-r0) (#509) | line 7643 | present |
 | #511 | `61731aa3` | examples: clear six high/critical advisories in the Java demo and install the Python examples from exact locks (#511) | line 7638 | present |
-| #514 | `a28d78cc` | Demo videos are rendered from the README's Quick start on a throwaway stack of released images: the recording instrument under docs/demo (#514) | none | pending: decided in a later commit of this branch |
+| #514 | `a28d78cc` | Demo videos are rendered from the README's Quick start on a throwaway stack of released images: the recording instrument under docs/demo (#514) | none | not needed: documentation tooling |
 | #515 | `7d04cd1d` | A revoked session cannot download an SDK, approve a device sign-in or recover an SDK credential with its still-valid access token (#515) | line 7383 | present (entry added by the same change; it does not cite the number) |
 | #516 | `bcb367cd` | Retiring a refresh token is atomic on a set-if-absent store, and the presentation that loses the race is a reuse (#516) | line 7398 | present (entry added by the same change; it does not cite the number) |
 | #517 | `e377fffa` | Logouts are recorded in the audit log: the row comes from the presented token's claims (#517) | line 7409 | present (entry added by the same change; it does not cite the number) |
@@ -246,7 +246,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #521 | `d82b1eba` | A sign-in ends a fixed time after it began, however often it is refreshed (#521) | line 7446 | present (entry added by the same change; it does not cite the number) |
 | #523 | `850d4ee6` | The dashboard keeps its sign-in in one place: the session store is the only source of truth and the route gate moves into the dashboard shell (#523) | line 7417 | present (entry added by the same change; it does not cite the number) |
 | #524 | `993adce2` | Note the withdrawn 1.23 and 1.5 image tags in the Docker install section (#524) | none | not needed: documentation only, no behaviour change |
-| #525 | `e9be8194` | Describe what the Docker quickstart fetches, and scope the npm provenance check to @opena2a/aim-core (#525) | none | pending: decided in a later commit of this branch |
+| #525 | `e9be8194` | Describe what the Docker quickstart fetches, and scope the npm provenance check to @opena2a/aim-core (#525) | none | not needed: documentation and a script comment |
 | #526 | `cd83c3aa` | Sign-in follows only a same-origin return path: decode once, refuse control characters, resolve against a fixed origin (#526) | line 7708 | present |
 | #527 | `c629fe4f` | The API accepts a sign-in only from the Authorization header (#527) | line 7368 | present (entry added by the same change; it does not cite the number) |
 | #528 | `a7607bb5` | README: point readers from the GHCR package page to the Docker steps and the advisory's verify command (#528) | none | not needed: documentation only, no behaviour change |
@@ -258,7 +258,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #534 | `a0990d7b` | Record capability verifications as capability checks, not identity (#534) | line 7311 | present (entry added by the same change; it does not cite the number) |
 | #535 | `fd0e4906` | sdk-ts: entry points share one copy of the client and error classes (#535) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #536 | `6cad88a4` | Python SDK: every entry point reports a blocked action before raising (#536) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #537 | `dc6bfc23` | docs: cite public PRs instead of private planning records and local paths (#537) | none | pending: decided in a later commit of this branch |
+| #537 | `dc6bfc23` | docs: cite public PRs instead of private planning records and local paths (#537) | none | not needed: code comments |
 | #540 | `c94cf505` | sdk-python: console panels, trust-score range, User-Agent versions, legacy logout (#540) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #541 | `7190a0f1` | aim-arp telemetry: report a corrupt or unreadable audit log instead of an empty one (#541) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #543 | `d9daccdc` | Key-expiry enforcement suspends expired agents without touching their key material (#543) | line 7827 | present |
@@ -266,8 +266,8 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #547 | `d93a53b9` | sdk-python: drop the stale capability_detection.__version__ (#475) (#547) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #548 | `4f7265ba` | backend: an API-call analytics row keeps the strings of its own request (#548) | line 7506 | present (entry added by the same change; it does not cite the number) |
 | #550 | `e7dff3eb` | Verify ML-DSA-65, assert the conformance row set, and re-vendor the 23-fixture suite (#550) | line 7646 | present |
-| #552 | `3fa3d84e` | Stop tracking backup sibling files and ignore them (#552) | none | pending: decided in a later commit of this branch |
-| #553 | `3ab8285e` | Python SDK: aim-sdk commands import only what they use (#553) | none | pending: decided in a later commit of this branch |
+| #552 | `3fa3d84e` | Stop tracking backup sibling files and ignore them (#552) | none | not needed: stops tracking backup copies that no route served, and ignores them |
+| #553 | `3ab8285e` | Python SDK: aim-sdk commands import only what they use (#553) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #554 | `815b78c1` | python sdk: refresh-rejected banner gives the fix for the stored credential (#554) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #556 | `94d993d3` | verification-events: refuse writes until outcomes are server-derived (#556) | line 7660 | present |
 | #559 | `e4f07656` | verification-events: agent ownership check before any use, real collaborators in the refusal tests, DELETE contract corrected (#559) | line 7660 | present |
@@ -275,20 +275,20 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #561 | `3dd37aea` | Retire the sync-to-cloud push workflow and add a parsed-YAML guard that keeps it retired (#561) | none | not needed: CI only |
 | #562 | `135b65e9` | Give every gate-file path a code owner (#562) | none | not needed: CI only |
 | #564 | `f2a0deab` | docker-publish.yml: read-only verify builds on main and dispatch, publish only from a platform-v tag push with a release guard (QGF-273) (#564) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| #565 | `0e58129d` | trust_calculator.go: factor 1, 2, 5 and 7 comments say what the code computes, held by aim25_comments_test.go (AIM-25) (#565) | none | pending: decided in a later commit of this branch |
+| #565 | `0e58129d` | trust_calculator.go: factor 1, 2, 5 and 7 comments say what the code computes, held by aim25_comments_test.go (AIM-25) (#565) | none | not needed: code comments |
 | #566 | `1c05049d` | README: the quick start states the monitoring-mode default and the strict-mode step its refusal needs (#566) | none | not needed: documentation only, no behaviour change |
-| #567 | `d60017a4` | otel-demo smoke scripts run in their own compose project and remove only what they started (#567) | none | pending: decided in a later commit of this branch |
-| #568 | `156e3553` | Batch: land 7 open pull requests and 3 related fixes, one commit each (#568) | none | pending: decided in a later commit of this branch |
-| #572 | `d15e3b52` | Remove 16 backup-suffixed files under the admin dashboard directory (#572) | none | pending: decided in a later commit of this branch |
-| #573 | `786c31e1` | Automated code review: a planner comment and test name give #573 and #575 their real file and line counts | none | pending: decided in a later commit of this branch |
-| #575 | `786c31e1` | Automated code review: a planner comment and test name give #573 and #575 their real file and line counts | none | pending: decided in a later commit of this branch |
-| #579 | `d7ff3905` | The web TypeScript build cache is no longer tracked or committed (#579) | none | pending: decided in a later commit of this branch |
+| #567 | `d60017a4` | otel-demo smoke scripts run in their own compose project and remove only what they started (#567) | none | not needed: demo smoke tooling |
+| #568 | `156e3553` | Batch: land 7 open pull requests and 3 related fixes, one commit each (#568) | none | needed: a dashboard dependency move off a vulnerable version, the image install, and the bootstrap sign-in line |
+| #572 | `d15e3b52` | Remove 16 backup-suffixed files under the admin dashboard directory (#572) | none | not needed: removes backup copies that no route served |
+| #573 | `786c31e1` | Automated code review: a planner comment and test name give #573 and #575 their real file and line counts | none | not needed: named in the subject of a review-tooling fix, which changes CI only |
+| #575 | `786c31e1` | Automated code review: a planner comment and test name give #573 and #575 their real file and line counts | none | not needed: named in the subject of a review-tooling fix, which changes CI only |
+| #579 | `d7ff3905` | The web TypeScript build cache is no longer tracked or committed (#579) | none | not needed: stops tracking a build cache file |
 | #581 | `cba1cb69` | Credentials links scroll to their section and mark the key or token they name (#581) | line 6802 | present (entry added by the same change; it does not cite the number) |
 | #583 | `ccd836b6` | Agent page fits phone widths, names the Java SDK's credential source and survives a malformed trust-score answer (#583) | line 6829 | present |
 | #585 | `c86017ec`, `02d75a40` | The shutdown s1_refusals line states how long its period lasted, MCP rescoring retries after a server fails to score, four sign-in pages render text at 14px, and the demo render keeps its secrets in a mktemp directory (#585) | line 3337 | present (entry added by the same change; it does not cite the number) |
-| #587 | `16e34ea0`, `31e93214` | The docker-publish workflow-shape test refuses build cache inputs on the verify builds and a QEMU step without cache-image: false (#587) | none | pending: decided in a later commit of this branch |
+| #587 | `16e34ea0`, `31e93214` | The docker-publish workflow-shape test refuses build cache inputs on the verify builds and a QEMU step without cache-image: false (#587) | none | not needed: CI and repository tooling only |
 | #590 | `c094efe3` | The header account menu is tested at a phone viewport too short for it, proving it caps its height above the bottom tab bar and scrolls (#590) | none | not needed: tests only |
-| #591 | `96b57be1` | The phone tab bar shows an admin's tabs when the profile request is refused (#591) | none | pending: decided in a later commit of this branch |
+| #591 | `96b57be1` | The phone tab bar shows an admin's tabs when the profile request is refused (#591) | none | needed: user-visible dashboard fix |
 | #592 | `b21cb57b` | The end of a dashboard page clears the bottom tab bar's raised Secure button on tablet-width screens (#592) | line 6792 | present (entry added by the same change; it does not cite the number) |
 | #593 | `2b7a054a`, `97724d10` | MCP security policies match host names in any case, report unreadable rules, and refuse a floor off the trust scale (#593) | line 3490 | present |
 | #595 | `035eb6b7` | onboarding: events are capped per organization, a token mint is retried only after a concurrent mint, sign-out clears the viewed marker, and init links to the dashboard the server reports (#595) | line 6184 | present (entry added by the same change; it does not cite the number) |
@@ -303,7 +303,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #613 | `2fed3245`, `1eac5305` | PQCAgentMiddleware admits an agent in hybrid mode only by a request signed with both Ed25519 and ML-DSA, Ed25519AgentMiddleware refuses it, and refusing an unrecognised agent key costs a signature verification (#613) | line 3324 | present (entry added by the same change; it does not cite the number) |
 | #615 | `38554e10` | The web typecheck generates next-env.d.ts before tsc reads it, and the changelog records the untracked file and the pattern the logo split matched (#615) | line 5765 | present (entry added by the same change; it does not cite the number) |
 | #617 | `009d0030`, `74c9fc62`, `46b2b93f`, `4b74c22a` | The server refuses the signing seeds the card attestation conformance vector publishes, aim-server check-agent-keys names the agents whose stored key does not open, and three SDK request bodies are shared fixtures (#617) | line 309 | present |
-| #619 | `564d972c` | The third-suite refusal for an issued trust credential cites the ATX credential schema and section 14 (#619) | line 5856 | present (entry added by the same change; it does not cite the number) |
+| #619 | `564d972c` | The third-suite refusal for an issued trust credential cites the ATX credential schema and section 14 (#619) | line 5856 | present (rewords the existing entry it changes) |
 | #620 | `36c02a05` | The next-env.d.ts ignore check passes only on a rule in the repo-root .gitignore (#620) | none | not needed: tests only |
 | #621 | `572114c3` | LocalVerifier refuses a malformed ML-DSA-65 trust anchor at construction instead of rejecting every hybrid credential (#621) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #623 | `0906da09` | SDK requests carry the members the MCP routes read, and MCP server creation requires a name and a URL (#623) | line 3398 | present |
@@ -311,12 +311,12 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #627 | `c895a26c`, `28ec35ff` | The SDK's install line is pip install aim-sdk, and the SDK README's Requirements name PyJWT and the optional rich extra (#627) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #629 | `24f56f9b` | Java SDK docs show registerMcp adding a server to the agent's list and printing what AIM answers (#629) | none | not needed: documentation only, no behaviour change |
 | #630 | `48f713ad` | The Java SDK sends no token recovery request once its access token has expired (#630) | SDK changelog | present: recorded in `sdk/java/CHANGELOG.md` (the SDK's own release) |
-| #631 | `69f83359` | The TypeScript SDK's npm run lint covers scripts/ and tests/ as well as src/ (#631) | none | pending: decided in a later commit of this branch |
+| #631 | `69f83359` | The TypeScript SDK's npm run lint covers scripts/ and tests/ as well as src/ (#631) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | #633 | `88da9fe8` | Alerts show their repeat count, and concurrent repeats share one alert (#633) | line 5640 | present |
 | #635 | `1c54ccb1` | The agent API lists capabilities as the credential does, and A2A verification refuses suspended agents (#635) | line 5501 | present |
 | #637 | `736769b2` | Repeated capability-check alerts are counted on one alert, and other follow-ups (#637) | line 5612 | present |
-| #639 | `fe60dd59` | A key expiry sweep that cannot mint one organization's trace keeps the earlier agents' errors and goes on (#639) | none | pending: decided in a later commit of this branch |
-| #641 | `b94e4e33` | A transition change given its own agent's opening event id is refused, and the opening and replay tests pin the record-type and first-record conditions (#641) | none | pending: decided in a later commit of this branch |
+| #639 | `fe60dd59` | A key expiry sweep that cannot mint one organization's trace keeps the earlier agents' errors and goes on (#639) | none | not needed: changes the key expiry sweep's recorded path, which runs only with a transition recorder; the server sets none |
+| #641 | `b94e4e33` | A transition change given its own agent's opening event id is refused, and the opening and replay tests pin the record-type and first-record conditions (#641) | none | not needed: record path the server runs only with a transition recorder, which it does not set |
 | #643 | `a820a51d` | An A2A request whose nonce cannot be recorded does not verify as valid, and other follow-ups (#643) | line 5484 | present |
 | #645 | `948c47b4` | An A2A request whose nonce cannot be stored is answered 400, a failed agent read during A2A verification is answered 500, and a transition change given another agent's opening event id is refused (#645) | line 5465 | present |
 | #648 | `79c0ec21` | Filing a pending capability request no longer reads every agent of the organization (#648) | line 5450 | present |
@@ -356,7 +356,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #687 | `69949c7a` | The backend image's license manifest takes the gopkg.in/yaml.v3 URL from a committed file, not a lookup during the build (#687) | line 4985 | present |
 | #688 | `eed6d38b`, `159374d3`, `7560de39`, `3a32c5a1` | A check holds the root and apps/web package.json versions to the newest CHANGELOG release and the platform-v tag (#688) | line 456 | present |
 | #690 | `efcb2bfe`, `8272d89d`, `094b69e0` | test: the TypeScript SDK tests run the token literal lint and its tests on every pull request (#690) | line 4899 | present |
-| #691 | `93b43997` | Secret Detection runs hackmyagent 0.33.2, a pinned version, instead of whatever npm serves as latest (#691) | none | pending: decided in a later commit of this branch |
+| #691 | `93b43997` | Secret Detection runs hackmyagent 0.33.2, a pinned version, instead of whatever npm serves as latest (#691) | none | not needed: CI and repository tooling only |
 | #693 | `5671ab6a` | The startup cache line says Redis is disabled when REDIS_HOST is empty, and the scratch-repository docs test passes under a global git excludes file (#693) | line 4931 | present |
 | #695 | `9d829c80`, `74a3b230` | Backend print and log lines carry no pictographic marks, the TypeScript SDK's test titles open with what they check, the contributing guide says what the SDK tests need, and the SDK download drops its unserved SDK branches (#695) | line 3062 | present |
 | #697 | `7f383b1e` | A database password with a single quote or a backslash reaches PostgreSQL unchanged, the startup summary names a Redis it could not reach, the token rotation guide quotes the line the SDK prints, and the SDK route census reads every mounted route (#697) | line 4704 | present |
@@ -364,7 +364,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #701 | `473c698b` | The compose bootstrap passes a database password with a quote or a backslash unchanged, the revocation startup line names an unreachable Redis, the token guides say what the backend does, four A2A SDK methods and the JIT approval link reach real routes, and the list smoke runs no docker exec (#701) | line 4593 | present |
 | #702 | `bcbd3978` | The docker publish release-only and license compliance tests name their scratch directories and stub helpers after what they serve (#702) | none | not needed: tests only |
 | #705 | `af2d6664` | The tab bar test catches every spelling of a raised icon and a browser test measures the tabs, .hmaignore documents expires:, and a web test makes the log check the scan skips (#705) | line 4682 | present (entry added by the same change; it does not cite the number) |
-| #707 | `d8b11575`, `a61457b0`, `d717a0cd` | The TypeScript SDK's typecheck script type-checks the two integration test files it left out (#707) | none | pending: decided in a later commit of this branch |
+| #707 | `d8b11575`, `a61457b0`, `d717a0cd` | The TypeScript SDK's typecheck script type-checks the two integration test files it left out (#707) | none | not needed: SDK typecheck tooling |
 | #709 | `5d12750e` | The server reads PGPASSWORD or the password file when POSTGRES_PASSWORD is empty, aim-bootstrap names a driver variable it refuses, GET /api/v1/agents applies the status and agent type filters, and the Python SDK's log_capability_result sends no request (#709) | line 4525 | present |
 | #711 | `ac121c4e` | The connection-string login tests record each login before the recording server refuses it (#711) | none | not needed: tests only |
 | #714 | `51637c91` | The scratch-name guard parses the SDK tests, reads the test files under src too, and the telemetry tests there name their scratch directories after the test (#714) | none | not needed: tests only |
@@ -377,7 +377,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #728 | `66d8626f` | Two more IPv6 ranges are refused, and mail and approval log lines name ids (#728) | line 4018 | present (entry added by the same change; it does not cite the number) |
 | #730 | `b0674171` | The Detect MCP servers dialog says its command can replace the agent's key pair (#730) | line 3651 | present (entry added by the same change; it does not cite the number) |
 | #731 | `c02b4300` | The dialog Close button is a 44x44 px target (#731) | line 3640 | present |
-| #733 | `5ff256a8` | CHANGELOG drops the sentence saying the Java A2A demo reads AIM_URL only (#733) | line 3873 | present (entry added by the same change; it does not cite the number) |
+| #733 | `5ff256a8` | CHANGELOG drops the sentence saying the Java A2A demo reads AIM_URL only (#733) | none | not needed: corrects the wording of an existing entry |
 | #735 | `9c9f4771` | The Python SDK download's docs point at the test suite in the repository (#735) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #738 | `647ba0f7`, `21c35cc2` | A revoked session's request that the session middleware refuses at a credential route writes the credential_mint_refused audit row and SECURITY line (#738) | line 336 | present |
 | #740 | `17ab6864`, `76a243aa`, `8021f566` | fix(sdk/python): aim-sdk demo links to the dashboard address the server states, as aim-sdk init does (#740) | line 473 | present |
@@ -427,7 +427,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #811 | `54cf9519` | The account deletion purge removes the OpenID Connect sign-in configuration of an organization it deletes (#811) | line 780 | present (entry added by the same change; it does not cite the number) |
 | #812 | `6157b78f` | The deployment guide's SIEM section names the failed sign-ins answered 403 and 500 and their reasons provider_sign_in_required and sign_in_refused (#812) | line 1017 | present |
 | #817 | `79cf9409` | The agent-request-v2 payload test sends a member name spelled with a JSON escape, and fails when one of its cells repeats another's input (#817) | none | not needed: tests only |
-| #818 | `33ea64b7` | The handler tests' password routes hash a changed password at bcrypt's minimum cost, so the password change tests finish within their timeout under -race (#818) | none | pending: decided in a later commit of this branch |
+| #818 | `33ea64b7` | The handler tests' password routes hash a changed password at bcrypt's minimum cost, so the password change tests finish within their timeout under -race (#818) | none | not needed: tests hash at bcrypt's minimum cost; the server's cost is unchanged |
 | #825 | `b1a5325f`, `f2bf6008` | The detection report routes take a report an agent signed with ML-DSA or with both keys (#825) | line 321 | present |
 | #826 | `af7a0d89` | The API reference says that a verification, a reactivation and an agent delete write an audit log entry (#826) | line 270 | present |
 | #828 | `9e8a9f87` | The Python SDK's quick-start refresh test passes after the perform_action claims tests in the same pytest session (#828) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
@@ -458,12 +458,12 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 
 ## Commits with no pull request number
 
-Commits whose subject carries no `#N` and that change code, listed by commit. 119 more change only tests, CI, documentation or this changelog, or are merge commits, and are not listed.
+Commits whose subject carries no `#N` and that change code, listed by commit. 124 more change only tests, CI, documentation or this changelog, or are merge commits, and are not listed.
 
 | Commit | Subject | Entry | Decision |
 | --- | --- | --- | --- |
 | `9cc1dbc4` | feat(backend): GET /health/ready reports the Container Apps revision the server runs in | line 14 | present (entry added by the same change; it does not cite the number) |
-| `37ac41ad` | fix(deps): move source-map-js to 1.2.2 and baseline-browser-mapping to 2.11.31 in both lockfiles | none | pending: decided in a later commit of this branch |
+| `37ac41ad` | fix(deps): move source-map-js to 1.2.2 and baseline-browser-mapping to 2.11.31 in both lockfiles | none | not needed: transitive lockfile versions, no behaviour change |
 | `fe4aa903` | fix(arp): aim-arp telemetry status shows the sensor's public key each report carries | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `3f8b1e9b` | fix: the telemetry disclosure, the README and the aim-arp telemetry help and log footers name the sensor's public key each report carries | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `bb61bc66` | docs: the org pseudonym's doc comment names the sensorId and publicKey every report also carries | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
@@ -471,16 +471,15 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `cc7bb4fc` | feat: ARP reports a failed L2 call once, with its endpoint and error, and counts it in the budget status | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `19811e80` | fix: aim-sdk --version names a source build, and the SDK READMEs say what 2.0.3 lacks and what init needs from the server | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` and `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `97bc3c9f` | fix(sdk/python): aim-sdk demo --cleanup sends the stored sign-in token only to the server it signed in to and refuses a --url naming another | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| `58cf6797` | feat(record): the verifier reports a chain that held checkpoints name and the deployment no longer holds as removed without record, unless exactly one tombstone accounts for it | none | pending: decided in a later commit of this branch |
-| `94f904b9` | feat(record): a signed checkpoint names a chain's head outside its records, and the verifier reports records removed from the end and a record replaced after the checkpoint was taken | none | pending: decided in a later commit of this branch |
+| `58cf6797` | feat(record): the verifier reports a chain that held checkpoints name and the deployment no longer holds as removed without record, unless exactly one tombstone accounts for it | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `94f904b9` | feat(record): a signed checkpoint names a chain's head outside its records, and the verifier reports records removed from the end and a record replaced after the checkpoint was taken | none | not needed: record path the server runs only with a transition recorder, which it does not set |
 | `0d76f304` | fix(sdk/arp): a YAML config that does not parse fails with js-yaml's reason and position, not an excerpt of the file | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `8c8378a4` | fix(deps): move next to 16.4.2 and the sharp override to 0.35.5 (advisory id omitted) | none | pending: decided in a later commit of this branch |
-| `812e14c9` | feat(record): the store's writer appends a key rotation that moves the chain to its next key, and a correction of a record of the organization's chain | none | pending: decided in a later commit of this branch |
-| `700df789` | feat(record): a correction record names an earlier record of its chain by event_id, and the verifier fails one that names no earlier record | none | pending: decided in a later commit of this branch |
-| `b72c7c23` | feat(record): a key rotation record names a chain's next signing key, and the verifier fails a record the retired key signs after it | none | pending: decided in a later commit of this branch |
-| `32054bf3` | docs: sdk/typescript/README.md: a structural signature report is stored in the OpenA2A Registry, nothing is sent back to any install from it, and ARP matches the patterns bundled in the package | none | pending: decided in a later commit of this branch |
+| `8c8378a4` | fix(deps): move next to 16.4.2 and the sharp override to 0.35.5 (advisory id omitted) | none | needed: dashboard dependency moved off a vulnerable version |
+| `812e14c9` | feat(record): the store's writer appends a key rotation that moves the chain to its next key, and a correction of a record of the organization's chain | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `700df789` | feat(record): a correction record names an earlier record of its chain by event_id, and the verifier fails one that names no earlier record | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `b72c7c23` | feat(record): a key rotation record names a chain's next signing key, and the verifier fails a record the retired key signs after it | none | not needed: record path the server runs only with a transition recorder, which it does not set |
 | `ba68754a` | fix: /health/ready reports the dependencies the service needs to answer; SIEM delivery is read on /metrics | line 118 | present (entry added by the same change; it does not cite the number) |
-| `9290cc1c` | The README's Quick start has a committed terminal recording that docs/demo/record-quickstart.sh re-renders, with a demo-sidecar/2 sidecar, a narration file and a text version | none | pending: decided in a later commit of this branch |
+| `9290cc1c` | The README's Quick start has a committed terminal recording that docs/demo/record-quickstart.sh re-renders, with a demo-sidecar/2 sidecar, a narration file and a text version | none | not needed: README recording and its demo tooling |
 | `e948d42e` | AIM_PUBLIC_ORIGIN holds the audience an agent-request-v2 statement must name, and the server logs it at startup | line 655 | present (entry added by the same change; it does not cite the number) |
 | `d6e66523` | The Java SDK has an agent-request-v2 signer, not public, that reproduces six of the eight accepted conformance vectors byte for byte | SDK changelog | present: recorded in `sdk/java/CHANGELOG.md` (the SDK's own release) |
 | `a4b4e560` | The TypeScript SDK has an unexported agent-request-v2 signer that reproduces six of the eight accepted conformance vectors byte for byte | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
@@ -517,7 +516,7 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `759263f5` | The SDK tabs link pages that continue the hosted flow, the TypeScript tab says where its API key comes from, and the Python example declares db:read | line 1519 | present (entry added by the same change; it does not cite the number) |
 | `331b1087` | A stale copy of a user written back leaves the recorded password change in place, as the query now states and a test against PostgreSQL holds | line 1395 | present (entry added by the same change; it does not cite the number) |
 | `32f9717a` | The SDK integration scripts complete the seeded admin's required password change before the tests sign in | line 1441 | present (entry added by the same change; it does not cite the number) |
-| `03c6e50f` | The e2e suite completes the seeded admin's required password change before its workers sign in | none | pending: decided in a later commit of this branch |
+| `03c6e50f` | The e2e suite completes the seeded admin's required password change before its workers sign in | none | not needed: end-to-end test setup |
 | `d23aad40` | A password change or reset marks the user's SDK tokens revoked, and SDK token recovery does not restore them | line 1425 | present (entry added by the same change; it does not cite the number) |
 | `2345c2be` | A password change ends every session signed in before it, and the API enforces a required password change | line 1390 | present (entry added by the same change; it does not cite the number) |
 | `b2e05b39` | ARP's L2 budget and hourly call limit count the calls in flight | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
@@ -528,7 +527,7 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `3c6917f3` | A Registry credential revocation request waiting for a retry is sent after the server starts again | line 1723 | present (entry added by the same change; it does not cite the number) |
 | `0db5d049` | No Agent Trust Credential is issued for a revoked agent | line 1757 | present (entry added by the same change; it does not cite the number) |
 | `fdbe426d` | With REGISTRY_URL set, the server reads the revocation list an authority's discovery document names, and ATC_CRL_ENDPOINT has no default | line 1849 | present (entry added by the same change; it does not cite the number) |
-| `c453c803` | The revocation list client reads the list an authority's discovery document names, holds it only when a listed key signed it, and answers unknown when it holds none | none | pending: decided in a later commit of this branch |
+| `c453c803` | The revocation list client reads the list an authority's discovery document names, holds it only when a listed key signed it, and answers unknown when it holds none | line 1849 | present (matched by content) |
 | `7191c15d` | An ATC whose agent is suspended, revoked or not stored is refused, and an ATC whose agent's status cannot be read is answered 503 with Retry-After | line 1887 | present (entry added by the same change; it does not cite the number) |
 | `2d3d11b0` | The MCP server setup guide and the register-agent dialog's verification command name the API the dashboard signs in to, on a second stack and behind a reverse proxy | line 1953 | present (entry added by the same change; it does not cite the number) |
 | `122a7e3b` | aim-sdk demo signs this machine in when no sign-in is stored and a person can approve the code | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
@@ -576,16 +575,16 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `d77b7ca8` | The CyberArk CCP client encodes and checks its query as CyberArk publishes, authenticates with a client certificate, verifies the server and maps CCP's answers | line 2367 | present (entry added by the same change; it does not cite the number) |
 | `dd83b42b` | cmd/server reads the environment only through internal/config, with one rule for empty values in config.Load, and a test pins each variable | line 2335 | present (entry added by the same change; it does not cite the number) |
 | `e40f9a4e` | Every failure response the A2A handler builds comes from one mapping, and a test injects each failure on each route | line 3573 | present (entry added by the same change; it does not cite the number) |
-| `7b766c7d` | The docs prose check and its tests run git without the repository-local variables a hook exports | none | pending: decided in a later commit of this branch |
-| `818faf4b` | Every request path the three SDK clients send is checked against the route table, and the detection handlers' @Router lines name the paths they are served on | none | pending: decided in a later commit of this branch |
-| `04ad90e7` | The terminal-line sanitizers and their tests write the bidirectional formatting characters as escapes | none | pending: decided in a later commit of this branch |
+| `7b766c7d` | The docs prose check and its tests run git without the repository-local variables a hook exports | none | not needed: CI and repository tooling only |
+| `818faf4b` | Every request path the three SDK clients send is checked against the route table, and the detection handlers' @Router lines name the paths they are served on | none | not needed: a test and handler documentation comments |
+| `04ad90e7` | The terminal-line sanitizers and their tests write the bidirectional formatting characters as escapes | none | not needed: confined to `sdk/python` and `sdk/typescript`, which keeps its own changelog and release (scope) |
 | `412b0f7f` | aim-sdk init refuses a --url with a backslash, whitespace or a control character before it sends the bootstrap token | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` and `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `4f5f084a` | The master key that encrypts stored agent private keys can be rotated: a key ring and a startup sweep | line 2653 | present (entry added by the same change; it does not cite the number) |
 | `1fb3bf6c` | The quick-start's full output shows the token rotation line as the SDK now prints it | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | `bda501ba` | A source build of aim-arp says it is not the published release, and the TypeScript SDK README says init is not in 1.3.1 | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `7dad1b55` | init sends the bootstrap token over http: only to a loopback host, in the TypeScript and Python SDKs | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` and `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `151e34ca` | init checks the agent ID, organization ID and status the server answers with, and prints server text as one line | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` and `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `e78d9f46` | A release preflight asks the hosted AIM service whether it serves the routes the TypeScript SDK's first-run flows call | none | pending: decided in a later commit of this branch |
+| `e78d9f46` | A release preflight asks the hosted AIM service whether it serves the routes the TypeScript SDK's first-run flows call | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | `cab68505` | An ARP analyzer's result names the pattern set and the pattern ids it evaluated, and says when the analyzer did not scan | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `e515a7d0` | The ARP requireLlmConfirmation comment says the rule's action runs at once, and the TypeScript SDK README lists the default rules | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `8dc0d4fa` | ARP enforcement handlers receive the result of each action after it ran | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
@@ -597,12 +596,12 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `1244d07d` | The TypeScript SDK's init checks that the agent's key file can be saved before it sends the single-use bootstrap token | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `73033e3d` | Every TypeScript SDK path that signs with an agent private key decodes it with one function, and a key in any other form is refused with a Fix that converts it | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `956db7da` | The guard-socket classification annotator sends the same allowlisted event data as the L2 prompt | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `d0582066` | A tracked file that starts with a compiled executable's magic bytes fails a lint, whatever its path, extension or mode | none | pending: decided in a later commit of this branch |
-| `38ab0598` | Docs use plain punctuation; a docs check refuses em dashes, spaced dashes and Why-this headings | none | pending: decided in a later commit of this branch |
+| `d0582066` | A tracked file that starts with a compiled executable's magic bytes fails a lint, whatever its path, extension or mode | none | not needed: CI and repository tooling only |
+| `38ab0598` | Docs use plain punctuation; a docs check refuses em dashes, spaced dashes and Why-this headings | none | not needed: documentation punctuation and its check |
 | `c339546b` | A logout with any token of an SDK token family ends the family, with or without a revocation store | line 2997 | present (entry added by the same change; it does not cite the number) |
 | `1ed9988b` | SDK credential recovery refuses a token family that has ended, decided from the family's own rows | line 3046 | present (entry added by the same change; it does not cite the number) |
 | `5e0baa1d` | Creating an API key requires a live sign-in session, as an SDK download, a device sign-in approval and an SDK credential recovery do | line 3036 | present (entry added by the same change; it does not cite the number) |
-| `69c7f9b2` | get_trust_score's docstring, the SDK changelog and the trust-scoring page say excludedFactors comes with a stored score as with a calculated one | none | pending: decided in a later commit of this branch |
+| `69c7f9b2` | get_trust_score's docstring, the SDK changelog and the trust-scoring page say excludedFactors comes with a stored score as with a calculated one | none | not needed: a docstring, the SDK changelog and documentation |
 | `ac0e9d9c` | The changelog and the dashboard's API reference say an MCP server addition is refused for its audit record only when the server writes that record | line 3930 | present (entry added by the same change; it does not cite the number) |
 | `403cf07f` | A downloaded SDK's credential ends SDK_TOKEN_FAMILY_MAX_AGE after its download, and a credential-minting route needs a sign-in's access token | line 3199 | present (entry added by the same change; it does not cite the number) |
 | `dced63a5` | POST /api/v1/auth/reauth re-authenticates a signed-in user with their password | line 3228 | present (entry added by the same change; it does not cite the number) |
@@ -618,8 +617,8 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `f11afc67` | The dashboard writes "MCP servers" in sentence case on every label it shows | line 3621 | present (entry added by the same change; it does not cite the number) |
 | `2f24f3e6` | A verification event logged for an unknown or unreadable agent answers the same error as a foreign agent and logs the cause | line 3632 | present (entry added by the same change; it does not cite the number) |
 | `feceffd4` | Stopping the action-request nonce purge job waits for the job to exit | line 3829 | present (entry added by the same change; it does not cite the number) |
-| `37b72aa6` | The tenant-scoped table list's comments say it is not every tenant-owned table | none | pending: decided in a later commit of this branch |
-| `e676eaff` | The tenant-scope helpers' comments describe this repository | none | pending: decided in a later commit of this branch |
+| `37b72aa6` | The tenant-scoped table list's comments say it is not every tenant-owned table | none | not needed: code comments |
+| `e676eaff` | The tenant-scope helpers' comments describe this repository | none | not needed: code comments |
 | `af1843b5` | Webhook test deliveries send the event-delivery headers, are recorded as deliveries and log their failures, and a refused webhook URL is a 400 with a fixed reason | line 3809 | present (entry added by the same change; it does not cite the number) |
 | `be25b767` | Add the tenant-scope primitive and an opt-in request-pool role, off by default | line 3778 | present (entry added by the same change; it does not cite the number) |
 | `a7a50fcf` | A refused A2A card URL is a 400 with a fixed reason, and MCP verify and detect keep the cause in the server log | line 3759 | present (entry added by the same change; it does not cite the number) |
@@ -641,25 +640,23 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `0b6f08ee` | The key vault says whether the server holds the agent's private key, and its Algorithm row shows Not recorded when no algorithm is stored | line 4077 | present (entry added by the same change; it does not cite the number) |
 | `573b7498` | Webhook, MCP server and agent card requests refuse eight more special-purpose address ranges | line 4049 | present (entry added by the same change; it does not cite the number) |
 | `22f657b2` | Mail asks the SMTP relay not to track any message | line 4063 | present (entry added by the same change; it does not cite the number) |
-| `804e2921` | README Quick start says the [rich] extra is optional and only formats the output, and that plain pip install aim-sdk works | none | pending: decided in a later commit of this branch |
-| `aa224fe1` | README is the short form: one screen to the first output, a job list, seven sections, reference passages moved to docs | line 4318 | present (entry added by the same change; it does not cite the number) |
 | `6b15139d` | The Java SDK download's QUICKSTART.md names the version the download is named after, and backend tests list every file that states another Java SDK version than the pom | line 4233 | present (entry added by the same change; it does not cite the number) |
 | `594409a4` | Java SDK: processes sharing the credentials file refresh it once, under its lock | SDK changelog | present: recorded in `sdk/java/CHANGELOG.md` (the SDK's own release) |
 | `acb99185` | A 4xx response states its reason instead of carrying an error's text | line 6958 | present (entry added by the same change; it does not cite the number) |
 | `05ebfd9e` | Secrets resolve encrypts the credential only to the agent's registered key and answers a signed request once | line 6997 | present (entry added by the same change; it does not cite the number) |
 | `0c9800ee` | .env.quickstart keeps its earlier content; the quick-start port and project variables are named in the compose file header, the README and the release smoke contract | line 4323 | present (entry added by the same change; it does not cite the number) |
-| `29d88e7d` | The TypeScript SDK release smoke hands psql the admin email as a variable, and .hmaignore exempts its quoted docker exec calls from DOCKERINJ-001 | none | pending: decided in a later commit of this branch |
+| `29d88e7d` | The TypeScript SDK release smoke hands psql the admin email as a variable, and .hmaignore exempts its quoted docker exec calls from DOCKERINJ-001 | none | not needed: SDK release smoke tooling |
 | `2181cd08` | GET /health/ready and GET /api/v1/status report the bare semver the image tag carries | line 4291 | present (entry added by the same change; it does not cite the number) |
 | `cdebe383` | The security policies page shows the trust score a low-trust policy triggers below | line 5943 | present (entry added by the same change; it does not cite the number) |
 | `9e57da12` | The Docker quick-start takes its host ports and container names from the environment, and its test script works in a directory it creates | line 4304 | present (entry added by the same change; it does not cite the number) |
 | `16d2366b` | Sign-in responses give lastLoginAt in UTC, as /api/v1/auth/me does | line 4329 | present (entry added by the same change; it does not cite the number) |
-| `3a901895` | The TypeScript SDK has a release smoke that calls verifyAction from the packed tarball against a real server | none | pending: decided in a later commit of this branch |
+| `3a901895` | The TypeScript SDK has a release smoke that calls verifyAction from the packed tarball against a real server | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | `6cbe3284` | Java SDK: saves of the credentials file wait for a cross-process lock and replace the file in one step | SDK changelog | present: recorded in `sdk/java/CHANGELOG.md` (the SDK's own release) |
 | `70c4821c` | Turning on hybrid mode takes the manager or admin role, and the TypeScript SDK deprecates createHybridRequestHeaders | line 4426 | present (entry added by the same change; it does not cite the number) |
 | `6f4baeb9` | Two dashboard tabs share one token refresh in a browser without Web Locks, and a browser test opens two tabs against the real backend | line 4439 | present (entry added by the same change; it does not cite the number) |
 | `e6abab84` | The Java SDK's floating-point census fails on a read it does not list, and the ATX and MCP trust scores are tested with JSON strings | line 7625 | present (entry added by the same change; it does not cite the number) |
 | `62006446` | The bootstrap guide, the changelog and the connection string comment name .pgpass in the home directory as the password file the driver reads when PGPASSFILE is unset | line 4529 | present (entry added by the same change; it does not cite the number) |
-| `77dff8be` | The agent list query builds its LIMIT and OFFSET clause before the query text, so the required security lint passes | none | pending: decided in a later commit of this branch |
+| `77dff8be` | The agent list query builds its LIMIT and OFFSET clause before the query text, so the required security lint passes | none | not needed: builds the same query in a form the security lint reads |
 | `09a42f65` | The Python SDK's update_agent_card sends skills as the list of skill identifiers the server binds | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | `47235fac` | The Python SDK's get_security_violations raises for another organization when the answer holds no violation | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | `f5df5a9a` | aim-bootstrap reaches a database on the Unix socket directory POSTGRES_HOST names, and reports a connection string the driver refuses without quoting it | line 4599 | present (entry added by the same change; it does not cite the number) |
@@ -678,25 +675,25 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `34eb724e` | The changelog says a GET, PUT, PATCH or DELETE on /api/v1/a2a/verify without credentials was answered 401, where it said every one was | line 5431 | present (entry added by the same change; it does not cite the number) |
 | `16e896d7` | The changelog says both 400 answers of the POST /api/v1/a2a/verify handler carry valid: false, where it said every refusal does | line 5442 | present (entry added by the same change; it does not cite the number) |
 | `a06794e7` | An authorized capability check stores its time and no longer rewrites the agent row | line 6334 | present (entry added by the same change; it does not cite the number) |
-| `17cbd8d8` | An agent stored before records were written has its history opened by an opening_state record, written with its first change or by a sweep | none | pending: decided in a later commit of this branch |
-| `fa867a4a` | With a transition recorder set, a key expiry sweep gives each organization its own trace id | none | pending: decided in a later commit of this branch |
-| `4dfb8a14` | With a transition recorder set, an agent update answers an empty talks_to list as [], not null | none | pending: decided in a later commit of this branch |
-| `9fc4633f` | record: the debt insert and the settler's read of open debts pass the security lint | none | pending: decided in a later commit of this branch |
-| `50ef30d3` | A trust score stored after a recorded change no longer puts back a status or key another request changed meanwhile | none | pending: decided in a later commit of this branch |
-| `dfecc756` | Deleting an agent, generating its server key at signing, and suspending it as compromised can each write an authorization transition record | none | pending: decided in a later commit of this branch |
-| `dc9155df` | Adding, replacing or removing an agent's MCP servers can each write an authorization transition record with its talks_to list before and after | none | pending: decided in a later commit of this branch |
-| `8e7b1869` | Registrations and pending capability requests each write an authorization transition record, and a request's decision names it as its parent | none | pending: decided in a later commit of this branch |
-| `b5a76b4f` | Capability request decisions, verification, key updates and the automatic suspensions can each write an authorization transition record | none | pending: decided in a later commit of this branch |
-| `0b51084c` | Grants, revocations, suspensions, reactivations and key rotations can each write an authorization transition record with the agent's state before and after | none | pending: decided in a later commit of this branch |
-| `1d73522e` | record: a job run gives each organization its own trace, and an organization finds its records by the trace its callers sent | none | pending: decided in a later commit of this branch |
-| `99a41801` | record: every audit record carries a trace_id and a parent reference, and the writer refuses one without them | none | pending: decided in a later commit of this branch |
+| `17cbd8d8` | An agent stored before records were written has its history opened by an opening_state record, written with its first change or by a sweep | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `fa867a4a` | With a transition recorder set, a key expiry sweep gives each organization its own trace id | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `4dfb8a14` | With a transition recorder set, an agent update answers an empty talks_to list as [], not null | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `9fc4633f` | record: the debt insert and the settler's read of open debts pass the security lint | none | not needed: internal change for the security lint, record path the server runs only with a transition recorder, which it does not set |
+| `50ef30d3` | A trust score stored after a recorded change no longer puts back a status or key another request changed meanwhile | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `dfecc756` | Deleting an agent, generating its server key at signing, and suspending it as compromised can each write an authorization transition record | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `dc9155df` | Adding, replacing or removing an agent's MCP servers can each write an authorization transition record with its talks_to list before and after | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `8e7b1869` | Registrations and pending capability requests each write an authorization transition record, and a request's decision names it as its parent | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `b5a76b4f` | Capability request decisions, verification, key updates and the automatic suspensions can each write an authorization transition record | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `0b51084c` | Grants, revocations, suspensions, reactivations and key rotations can each write an authorization transition record with the agent's state before and after | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `1d73522e` | record: a job run gives each organization its own trace, and an organization finds its records by the trace its callers sent | none | not needed: record path the server runs only with a transition recorder, which it does not set |
+| `99a41801` | record: every audit record carries a trace_id and a parent reference, and the writer refuses one without them | none | not needed: record path the server runs only with a transition recorder, which it does not set |
 | `2c4cdc0c` | record: the server reports at start whether audit record chains can start, and a pre-chain writer commits without a record | line 5538 | present (entry added by the same change; it does not cite the number) |
 | `20ba01ab` | the compliance report and an MCP server's audit timeline name who acted by the audit record's own rule | line 5553 | present (entry added by the same change; it does not cite the number) |
 | `c97d0211` | audit records say who acted, and leave out an address or user agent that was never recorded | line 5570 | present (entry added by the same change; it does not cite the number) |
 | `d16b2778` | record: aim-breakglass chain status reads an organization's chain through the same read as the admin route | line 5585 | present (entry added by the same change; it does not cite the number) |
 | `3e292bc1` | record: admins can read their organization's chain state, and a refused record write's line says debt=none | line 5602 | present (entry added by the same change; it does not cite the number) |
-| `901cddcc` | record: a reduction whose record cannot be appended commits with a debt row, and a settler appends the record later | none | pending: decided in a later commit of this branch |
-| `e3a1aedd` | record: a writer appends signed audit records to each organization's chain under a bounded append lock | none | pending: decided in a later commit of this branch |
+| `901cddcc` | record: a reduction whose record cannot be appended commits with a debt row, and a settler appends the record later | none | needed: migration 119 |
+| `e3a1aedd` | record: a writer appends signed audit records to each organization's chain under a bounded append lock | none | needed: migration 118 |
 | `143310e6` | The alert list's repeat count wraps inside its alert card on a phone-width screen | line 5647 | present (entry added by the same change; it does not cite the number) |
 | `e68272ed` | The changelog and API reference say only alerts with a dedupe key coalesce, and the capability check sets none yet | line 5640 | present (entry added by the same change; it does not cite the number) |
 | `2ddfdefb` | The suspend, reactivate and revoke responses serve an agent's active grants as its capabilities | line 5791 | present (entry added by the same change; it does not cite the number) |
@@ -704,10 +701,9 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `339ceba2` | Repeated capability violations are counted on one open alert | line 4837 | present (entry added by the same change; it does not cite the number) |
 | `9481edd3` | The Java SDK's Maven project URL and README link go to the project page on opena2a.org | SDK changelog | present: recorded in `sdk/java/CHANGELOG.md` (the SDK's own release) |
 | `306f19bd` | README, npm and PyPI homepage links go to the project page on opena2a.org | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` and `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `2e5c5cd6` | README Quick start fits the register call and all of its captured output in the first 30 lines | none | pending: decided in a later commit of this branch |
-| `aaba5931` | A test measures which routes the strict rate limit covers, from the route table the server mounts | none | pending: decided in a later commit of this branch |
+| `aaba5931` | A test measures which routes the strict rate limit covers, from the route table the server mounts | none | not needed: a test; the route table it reads is unchanged |
 | `89561a93` | Rate limits stay at their production values when ENVIRONMENT is development, and the server logs the limits in force at start | line 5965 | present (entry added by the same change; it does not cite the number) |
-| `0a7c4945` | The server keeps one admin seed path, and its logs carry no part of the password | none | pending: decided in a later commit of this branch |
+| `0a7c4945` | The server keeps one admin seed path, and its logs carry no part of the password | none | not needed: removes an initializer nothing called; the admin seed path is unchanged |
 | `823bc145` | A suspended agent's refused signed action-request statement is recorded in the audit log | line 5806 | present (entry added by the same change; it does not cite the number) |
 | `0be13a8f` | A suspended agent's refused verification request is recorded in the audit log | line 5823 | present (entry added by the same change; it does not cite the number) |
 | `a6070387` | Terraform saved plans and local state are ignored by the repository | line 5841 | present (entry added by the same change; it does not cite the number) |
@@ -718,8 +714,8 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `7f69b9e5` | An issued agent trust credential is returned only with both ATX signature suites and the agent, score and level AIM asked for | line 5851 | present (entry added by the same change; it does not cite the number) |
 | `4b8a6f17` | The TypeScript SDK's offline verifier checks ML-DSA-65 signatures and returns the conformance verdict on every ATX fixture | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `b0c8011e` | An issued agent trust credential asks for trust level 2 at most, the highest one signing authority may assert | line 5869 | present (entry added by the same change; it does not cite the number) |
-| `6db48764` | The stored-key rows close through defer so the security lint passes | none | pending: decided in a later commit of this branch |
-| `d5f6447d` | Audit record package: canonical bytes, hash chain, signed records and a verifier that names the first tampered position | none | pending: decided in a later commit of this branch |
+| `6db48764` | The stored-key rows close through defer so the security lint passes | none | not needed: closes rows through defer for the security lint, same behaviour |
+| `d5f6447d` | Audit record package: canonical bytes, hash chain, signed records and a verifier that names the first tampered position | none | not needed: record path the server runs only with a transition recorder, which it does not set |
 | `738688c9` | Delete agent has an end-to-end test from both entry points, and the list keeps its deleted notice in a development build | line 6292 | present (entry added by the same change; it does not cite the number) |
 | `b39e0245` | Delete agent shows one dialog that says what it removes and keeps, and states a failure inside it | line 6281 | present (entry added by the same change; it does not cite the number) |
 | `5c9eb184` | A stored agent private key decrypts only in the agent row it was written for | line 5893 | present (entry added by the same change; it does not cite the number) |
@@ -750,7 +746,7 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `100a35f2` | The quickstart test builds the backend Dockerfile the published image is built from, and the alpine:latest copy is removed | line 6117 | present (entry added by the same change; it does not cite the number) |
 | `54968330` | The TypeScript SDK requests the token grant the server accepts, and expires_in reports the token's real lifetime | line 6129 | present (entry added by the same change; it does not cite the number) |
 | `a59e1e6f` | An issued agent trust credential carries publisherDid, buildAttestation and a 0-100 trustScore | line 7227 | present (entry added by the same change; it does not cite the number) |
-| `bda55c79` | Java SDK comments say ML-DSA-65 signatures are verified, not just recorded | none | pending: decided in a later commit of this branch |
+| `bda55c79` | Java SDK comments say ML-DSA-65 signatures are verified, not just recorded | none | not needed: confined to `sdk/java`, which keeps its own changelog and release (scope) |
 | `fb7624c1` | Refusals that carry a machine-readable reason also send it as reasonCode | line 7092 | present (entry added by the same change; it does not cite the number) |
 | `f1ba800a` | A verification event refused because its agent could not be read logs the cause | line 7102 | present (entry added by the same change; it does not cite the number) |
 | `aa0ed126` | A deleted webhook's name can be used again | line 7115 | present (entry added by the same change; it does not cite the number) |
@@ -764,8 +760,8 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `d23d91e9` | A restart keeps a changed admin password; ADMIN_PASSWORD only seeds the first administrator | line 7199 | present (entry added by the same change; it does not cite the number) |
 | `11ec6923` | Python SDK: processes sharing the credentials file refresh it once, under a lock | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | `6e6b873f` | aim-sdk status --json with no stored credentials reports credentialsPath as null | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| `2b5fba3e` | Dashboard route sweep: the readability instrument and its 2026-10-05 run | none | pending: decided in a later commit of this branch |
-| `e2893042` | record: audit record and checkpoint envelopes are signed and checked per payload class | none | pending: decided in a later commit of this branch |
+| `2b5fba3e` | Dashboard route sweep: the readability instrument and its 2026-10-05 run | none | not needed: readability measurement tooling and its run |
+| `e2893042` | record: audit record and checkpoint envelopes are signed and checked per payload class | none | not needed: record path the server runs only with a transition recorder, which it does not set |
 | `d584fd62` | Java SDK: useMcpTool posts its usage report to the route the API registers | line 6199 | present (entry added by the same change; it does not cite the number) |
 | `8c86a658` | The backend configuration drops its unread 24h and 7d token lifetime defaults | line 6211 | present (entry added by the same change; it does not cite the number) |
 | `15c03cb0` | The users table drops its unread password_reset_expires column and index | line 6234 | present (entry added by the same change; it does not cite the number) |
@@ -782,7 +778,6 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `22c623da` | An MCP server is verified only when its attesting agents connected and report the same tool set | line 6304 | present (entry added by the same change; it does not cite the number) |
 | `438e3342` | Agent heartbeat stores the heartbeat time and no longer rewrites the agent row | line 6324 | present (entry added by the same change; it does not cite the number) |
 | `5b804e88` | The backend image ships license notices, and MPL-2.0 source, for the Go libraries built into it | line 6345 | present (entry added by the same change; it does not cite the number) |
-| `5d9cde30` | Java SDK docs point at the pom for dependency versions instead of stating stale ones | line 6358 | present (entry added by the same change; it does not cite the number) |
 | `919d955c` | Password sign-in records only the sign-in time and no longer rewrites the user row | line 6366 | present (entry added by the same change; it does not cite the number) |
 | `07b859e9` | API refuses to start without KEYVAULT_MASTER_KEY unless ENVIRONMENT is development or test | line 6377 | present (entry added by the same change; it does not cite the number) |
 | `f6970d28` | Webhook, MCP server and agent card requests follow no redirect and connect only to addresses registration admits | line 6392 | present (entry added by the same change; it does not cite the number) |
@@ -812,60 +807,60 @@ Commits whose subject carries no `#N` and that change code, listed by commit. 11
 | `1e6d2d9c` | Deployment and installation guides name KEYVAULT_MASTER_KEY as required outside development | line 6693 | present (entry added by the same change; it does not cite the number) |
 | `66362c17` | The dashboard lists an organization's audit records, each with its actor | line 6707 | present (entry added by the same change; it does not cite the number) |
 | `c81c48ec` | Docs sample output shows a placeholder account, and a lint keeps real addresses out of docs | line 6719 | present (entry added by the same change; it does not cite the number) |
-| `b5adb616` | The source tree no longer carries a prebuilt macOS server binary | none | pending: decided in a later commit of this branch |
+| `b5adb616` | The source tree no longer carries a prebuilt macOS server binary | line 6668 | present (matched by content) |
 | `b8ac3020` | The developer compose stack passes DEFAULT_ADMIN_PASSWORD only to a one-shot bootstrap run | line 6727 | present (entry added by the same change; it does not cite the number) |
 | `4bebdf7d` | An approved device code is exchanged for one token pair | line 6742 | present (entry added by the same change; it does not cite the number) |
 | `16820cd2` | A wrong password at sign-in is shown once in the sign-in card, not as an expired session | line 6753 | present (entry added by the same change; it does not cite the number) |
 | `8eaa50c6` | aim-bootstrap prints the admin password only when it generated it | line 6767 | present (entry added by the same change; it does not cite the number) |
 | `fd4b5c3d` | The server refuses to start with the JWT_SECRET placeholder from .env.example | line 6777 | present (entry added by the same change; it does not cite the number) |
-| `d6d6b38c` | web: the first-run screen reports its view and tab switches, and platform admins see time to first agent in a panel | none | pending: decided in a later commit of this branch |
-| `a1d5fd14` | backend: AIM records onboarding steps per organization with no user data and reports time to first agent to platform admins | none | pending: decided in a later commit of this branch |
+| `d6d6b38c` | web: the first-run screen reports its view and tab switches, and platform admins see time to first agent in a panel | none | needed: user-visible dashboard screen and panel |
+| `a1d5fd14` | backend: AIM records onboarding steps per organization with no user data and reports time to first agent to platform admins | none | needed: migration 116 and two routes |
 | `fb04a839` | TypeScript SDK: npx @opena2a/aim-sdk init registers a first agent with a bootstrap token and saves its locally generated key to ~/.aim/agents | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `1aa4f3a2` | backend: a dashboard user can mint a 15-minute single-use bootstrap token that registers one agent in their organization | none | pending: decided in a later commit of this branch |
-| `6fc4318f` | Phone menus open above the bottom tab bar: the drawer ends above it and its account section is fully visible | none | pending: decided in a later commit of this branch |
-| `a01b46de` | Release: no job that runs for a tag or a publish uses a cache another run wrote, held by scripts/lint-release-path-cache.py | none | pending: decided in a later commit of this branch |
+| `1aa4f3a2` | backend: a dashboard user can mint a 15-minute single-use bootstrap token that registers one agent in their organization | none | needed: migration 115 and three routes |
+| `6fc4318f` | Phone menus open above the bottom tab bar: the drawer ends above it and its account section is fully visible | none | needed: user-visible dashboard fix |
+| `a01b46de` | Release: no job that runs for a tag or a publish uses a cache another run wrote, held by scripts/lint-release-path-cache.py | none | not needed: CI and repository tooling only |
 | `6d07efe6` | The TypeScript SDK's A2AClient task history and skill list reach routes AIM registers, and revokeAttestation is deprecated | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | `6e403531` | The server refuses a JWT presented as an agent ATC and accepts CBOR ATCs only | line 6862 | present (entry added by the same change; it does not cite the number) |
-| `c8eb264a` | The flight-search example refuses a search AIM did not verify, and reports a verified search's execution | none | pending: decided in a later commit of this branch |
+| `c8eb264a` | The flight-search example refuses a search AIM did not verify, and reports a verified search's execution | none | needed: user-visible example behaviour |
 | `e2d457ff` | Logging out an SDK-download token revokes its row in the SDK token list | line 6873 | present (entry added by the same change; it does not cite the number) |
 | `c7bd84b3` | The backend image stamps the version and commit /health/ready reports | line 7247 | present (entry added by the same change; it does not cite the number) |
 | `65f93c52` | Refused signed agent requests are counted by reason and SDK and logged once per 64-second period | line 7258 | present (entry added by the same change; it does not cite the number) |
 | `e82223ef` | Two dashboard tabs no longer sign each other out when the access token expires | line 7285 | present (entry added by the same change; it does not cite the number) |
 | `8bee1545` | MCP servers registered before the scale migration get a calculated trust score at first start | line 7300 | present (entry added by the same change; it does not cite the number) |
-| `7377d52c` | domain: SUPER_PRIVILEGED actions are authorized only by a verified owner signature, never by a message | none | pending: decided in a later commit of this branch |
+| `7377d52c` | domain: SUPER_PRIVILEGED actions are authorized only by a verified owner signature, never by a message | none | not needed: adds a domain check that no route calls at main |
 | `5e72869b` | Dashboard charts render through one chart layer that takes its colours from theme tokens | line 7274 | present (entry added by the same change; it does not cite the number) |
 | `398fb2f2` | A trust-score policy is evaluated at the threshold its seed sets | line 7213 | present (entry added by the same change; it does not cite the number) |
-| `f0095e00` | examples/mcp-server-demo: the README documents the routes, port and registration URL the server serves | none | pending: decided in a later commit of this branch |
+| `f0095e00` | examples/mcp-server-demo: the README documents the routes, port and registration URL the server serves | none | not needed: example documentation |
 | `db2b7cb9` | An issued agent trust credential carries a contentHash that matches the ATX schema | line 7240 | present (entry added by the same change; it does not cite the number) |
-| `072409f4` | Dashboard Java tab says the SDK is not on Maven Central; SDK tab names are pinned to each SDK's manifest | none | pending: decided in a later commit of this branch |
-| `c17967ea` | Sign-up, reset and device sign-in text reads at 14px or larger, and Show password is a 44px tap target | none | pending: decided in a later commit of this branch |
-| `44f25520` | Dashboard: a verified agent shows a Verified status badge, not a disabled button | none | pending: decided in a later commit of this branch |
-| `099d8272` | Dashboard: a newly registered agent's page shows its first-run steps, the old success URL redirects | none | pending: decided in a later commit of this branch |
-| `b2db8924` | Dashboard: API keys and SDK tokens share one Credentials page, the old URLs redirect | none | pending: decided in a later commit of this branch |
-| `31d1fc1e` | Dashboard: Compliance moves to /dashboard/compliance, the old URL redirects | none | pending: decided in a later commit of this branch |
-| `65af5360` | Automated code review: a pull request over the review budget is reviewed in batches or as a diff-only request, not left INCONCLUSIVE | none | pending: decided in a later commit of this branch |
-| `9fb417ad` | Published backend image reports the commit it was built from on /health/ready | none | pending: decided in a later commit of this branch |
-| `dda28577` | Release: SBOMs are generated in a read-only job with version-pinned tools, and only the attach job can write | none | pending: decided in a later commit of this branch |
-| `9c36c2fb` | Backend builds on Go 1.26.8, declared once by go.mod's toolchain directive and held by scripts/check-go-toolchain.sh | none | pending: decided in a later commit of this branch |
-| `73866974` | Publish builds and backend Dockerfiles use only digest-pinned images, held by scripts/lint-runtime-image-pins.py | none | pending: decided in a later commit of this branch |
-| `2a555dfb` | Workflows: every action reference is pinned to a commit sha, held by scripts/lint-action-pins.py | none | pending: decided in a later commit of this branch |
-| `4c4ebe95` | Dashboard: moved pages redirect from one table in lib/redirects.ts | none | pending: decided in a later commit of this branch |
-| `bd325b0b` | check-public-wording.py: a check fails when ruled-out audit and evidence wording appears in the public documents | none | pending: decided in a later commit of this branch |
-| `f24be747` | Resolve js-yaml 4.3.2 in the TypeScript SDK lockfile (advisory id omitted) | none | pending: decided in a later commit of this branch |
+| `072409f4` | Dashboard Java tab says the SDK is not on Maven Central; SDK tab names are pinned to each SDK's manifest | none | needed: user-visible dashboard text |
+| `c17967ea` | Sign-up, reset and device sign-in text reads at 14px or larger, and Show password is a 44px tap target | none | needed: user-visible dashboard fix |
+| `44f25520` | Dashboard: a verified agent shows a Verified status badge, not a disabled button | none | needed: user-visible dashboard change |
+| `099d8272` | Dashboard: a newly registered agent's page shows its first-run steps, the old success URL redirects | line 6814 | present (matched by content) |
+| `b2db8924` | Dashboard: API keys and SDK tokens share one Credentials page, the old URLs redirect | line 6802 | present (matched by content) |
+| `31d1fc1e` | Dashboard: Compliance moves to /dashboard/compliance, the old URL redirects | line 6802 | present (matched by content) |
+| `65af5360` | Automated code review: a pull request over the review budget is reviewed in batches or as a diff-only request, not left INCONCLUSIVE | none | not needed: CI and repository tooling only |
+| `9fb417ad` | Published backend image reports the commit it was built from on /health/ready | line 7247 | present (matched by content) |
+| `dda28577` | Release: SBOMs are generated in a read-only job with version-pinned tools, and only the attach job can write | none | not needed: CI and repository tooling only |
+| `9c36c2fb` | Backend builds on Go 1.26.8, declared once by go.mod's toolchain directive and held by scripts/check-go-toolchain.sh | none | needed: build toolchain of the shipped backend |
+| `73866974` | Publish builds and backend Dockerfiles use only digest-pinned images, held by scripts/lint-runtime-image-pins.py | none | needed: base images of the shipped backend image |
+| `2a555dfb` | Workflows: every action reference is pinned to a commit sha, held by scripts/lint-action-pins.py | none | not needed: CI and repository tooling only |
+| `4c4ebe95` | Dashboard: moved pages redirect from one table in lib/redirects.ts | none | not needed: moves the same redirects into one table |
+| `bd325b0b` | check-public-wording.py: a check fails when ruled-out audit and evidence wording appears in the public documents | none | not needed: CI and repository tooling only |
+| `f24be747` | Resolve js-yaml 4.3.2 in the TypeScript SDK lockfile (advisory id omitted) | none | needed: TypeScript SDK dependency moved off a vulnerable version |
 | `e1d1b3a2` | Cut aim-sdk 2.0.2 | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
-| `41a0fcc9` | Declare the license in PyPI metadata and ship the canonical Apache-2.0 text | none | pending: decided in a later commit of this branch |
-| `4fb2d5c6` | The auto-instrumentation hooks record the model call they were installed to record | none | pending: decided in a later commit of this branch |
-| `22e08bee` | PolicyCache.check() raises until a policy document is loaded, and fails closed once one is | none | pending: decided in a later commit of this branch |
-| `d0a80150` | Declare the license in PyPI metadata | none | pending: decided in a later commit of this branch |
-| `02361e5f` | Derive the docker paths filter from the Dockerfiles instead of beside them | none | pending: decided in a later commit of this branch |
-| `eed6198f` | Make the SDK report the version npm actually published | none | pending: decided in a later commit of this branch |
+| `41a0fcc9` | Declare the license in PyPI metadata and ship the canonical Apache-2.0 text | none | not needed: SDK package metadata and the license text |
+| `4fb2d5c6` | The auto-instrumentation hooks record the model call they were installed to record | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
+| `22e08bee` | PolicyCache.check() raises until a policy document is loaded, and fails closed once one is | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
+| `d0a80150` | Declare the license in PyPI metadata | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
+| `02361e5f` | Derive the docker paths filter from the Dockerfiles instead of beside them | none | not needed: CI and repository tooling only |
+| `eed6198f` | Make the SDK report the version npm actually published | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | `9c5482a9` | Stop reporting a trust score nobody measured, and drop emoji from output | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | `211fe742` | Honor OPENA2A_TELEMETRY, the opt-out the privacy policy actually documents | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `9bbc7963` | Scope the opt-out claim to the channels it reaches, and pin the whole channel set | none | pending: decided in a later commit of this branch |
-| `fa504345` | Make the fleet-gradient channel honor the master opt-out, and stop citing internal paths from a public file | none | pending: decided in a later commit of this branch |
+| `9bbc7963` | Scope the opt-out claim to the channels it reaches, and pin the whole channel set | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| `fa504345` | Make the fleet-gradient channel honor the master opt-out, and stop citing internal paths from a public file | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
 | `e79e9ef6` | Make structural signature telemetry opt-in instead of default-on | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
-| `10686228` | sdk-ts: fix localhost hint for empty AIM_BASE_URL; align harness port labels | none | pending: decided in a later commit of this branch |
-| `556715f6` | sdk-ts: v1.0.1, bump version + README snippet clarity | none | pending: decided in a later commit of this branch |
-| `7df4d789` | sdk-ts: batch 1.0.x deferred fixes + enable ARP live-fire harnesses | none | pending: decided in a later commit of this branch |
-| `53be1f72` | Harden otel-demo smoke script: reach Postgres over published port | none | pending: decided in a later commit of this branch |
-| `1a41bd2f` | Wire the 9-factor agent trust score to real data sources | none | pending: decided in a later commit of this branch |
+| `10686228` | sdk-ts: fix localhost hint for empty AIM_BASE_URL; align harness port labels | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| `556715f6` | sdk-ts: v1.0.1, bump version + README snippet clarity | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| `7df4d789` | sdk-ts: batch 1.0.x deferred fixes + enable ARP live-fire harnesses | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
+| `53be1f72` | Harden otel-demo smoke script: reach Postgres over published port | none | not needed: demo smoke tooling |
+| `1a41bd2f` | Wire the 9-factor agent trust score to real data sources | line 7828 | present (matched by content) |
