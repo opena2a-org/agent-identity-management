@@ -223,6 +223,7 @@ this line when it is published.
 
 | `CHANGELOG.md` heading | Fixed in |
 |------------------------|----------|
+| Security: the Java SDK and the Java A2A example took jackson 2.18.8 before 2.18.11, and use bouncycastle 1.85 (#340, #511) | `sdk/java` source at `platform-v1.1.0` |
 | Security: `POST /api/v1/verification-events` refuses every write, so a verification event records only an outcome the server derived (#556) | 1.1.0 |
 | Security: the dashboard uses Next.js 16.4.2 and sharp 0.35.5, and its image installs exactly what its committed lockfile pins (#493, #568) | 1.1.0 |
 | Security: the TypeScript SDK resolves js-yaml 4.3.2 (#374) | `sdk/typescript` source at `platform-v1.1.0` |
