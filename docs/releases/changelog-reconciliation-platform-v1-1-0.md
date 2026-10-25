@@ -74,7 +74,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #297 | `b2243491` | perf: eliminate per-row query N+1 in MCP servers + pending verifications lists (#297) | line 7979 | present |
 | #298 | `f2462ba4` | perf(web): progressively load the A2A dashboard page (#298) | line 7980 | present |
 | #299 | `c69182ee` | feat(ts-sdk): local ATX credential verification path (#299) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
-| #300 | `02e055b9` | feat(java-sdk): local ATX credential verification (atx-verify extraction step 5) (#300) | line 7897 | present |
+| #300 | `02e055b9` | feat(java-sdk): local ATX credential verification (#300) (subject paraphrased) | line 7897 | present |
 | #301 | `ea766088` | sync-to-cloud: respect .sync-protect in sync_migrations() (#301) | none | not needed: CI and repository tooling only |
 | #302 | `bc5c036b` | docs(python-sdk): cross-link aicomply as content-compliance companion (#302) | none | not needed: documentation only, no behaviour change |
 | #303 | `aae8bfba` | Run vitest once in sdk/typescript test script (#303) | none | not needed: confined to `sdk/typescript`, which keeps its own changelog and release (scope) |
@@ -188,7 +188,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #442 | `3c95f6ea` | Python SDK: TS-parity fixtures and drift guard for the ARP telemetry seam (#442) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #443 | `972964d9` | Encode gate verdicts by state class: action_required while awaiting approval (#443) | none | not needed: CI only |
 | #444 | `ac01cfdf` | Trust factor 9: cap unverified isolation attestations, expire stale ones (#444) | line 7902 | present (entry added by the same change; it does not cite the number) |
-| #445 | `7506cc4c` | Backend: register the SDK isolation-attestation path, keep /isolation as deprecated alias (#445) | line 7933 | present (entry added by the same change; it does not cite the number) |
+| #445 | `7506cc4c` | Backend: register the SDK isolation-attestation path, keep /isolation as deprecated alias (#445) (subject paraphrased) | line 7933 | present (entry added by the same change; it does not cite the number) |
 | #446 | `0afe2ebf` | AIM-04: fix NetworkMonitor ss parser column shift under the state filter (#446) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
 | #447 | `2fa3c064` | release: run the SDK test suite and typecheck before publishing to npm (#447) | none | not needed: CI only |
 | #448 | `e389a3da` | Release @opena2a/aim-sdk 1.3.1 (#448) | SDK changelog | present: recorded in `sdk/typescript/CHANGELOG.md` (the SDK's own release) |
@@ -222,7 +222,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #489 | `a796109a` | Converge the name of the fga_policies onUnavailable constraint (#489) | line 8017 | present |
 | #490 | `fa571523` | Harden the public did:aip resolver: no pending-agent oracle, rate limited, rightmost untrusted hop (#490) | line 7832 | present |
 | #491 | `efe28e11` | Bump next, sharp, postcss, x/crypto, grpc, go-jose and x/text; turn the self-hosted image optimizer off (#491) | line 35 | present |
-| #492 | `1ea0dff8` | Retire empty-typ grace on the refresh path (P1-phase-2) (#492) | line 7827 | present |
+| #492 | `1ea0dff8` | Retire empty-typ grace on the refresh path (#492) (subject paraphrased) | line 7827 | present |
 | #493 | `dcb7f5bf` | Pin apps/web to a committed lockfile: add apps/web/package-lock.json (v3, seeded from the root lockfile, next 16.3.5 exact) and re-sync the root lockfile's apps/web entry (#493) (subject paraphrased) | line 32 | added by this reconciliation |
 | #494 | `fcfa9c60` | Replace the Maven Central coordinate with the source build across the Java SDK docs (#494) (subject paraphrased) | none | not needed: documentation; the same change rewrote this file's preamble, lines 7-10 |
 | #495 | `1b9ffa4c` | Replace npm lockfile hunks in the PR review input with a predicate-backed placeholder and enforce its report (#495) (subject paraphrased) | none | not needed: CI and repository tooling only |
@@ -273,7 +273,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #553 | `3ab8285e` | Python SDK: aim-sdk commands import only what they use (#553) | none | not needed: confined to `sdk/python`, which keeps its own changelog and release (scope) |
 | #554 | `815b78c1` | python sdk: refresh-rejected banner gives the fix for the stored credential (#554) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #556 | `94d993d3` | verification-events: refuse writes until outcomes are server-derived (#556) | line 24 | added by this reconciliation |
-| #559 | `e4f07656` | verification-events: agent ownership check before any use, real collaborators in the refusal tests, DELETE contract corrected (#559) | line 7790 | present |
+| #559 | `e4f07656` | verification-events: agent ownership check before any use, real collaborators in the refusal tests, DELETE contract corrected (#559) (subject paraphrased) | line 7790 | present |
 | #560 | `c2a8ac5e` | sdk/java: bump jackson to 2.18.11 (#560) | line 6771 | present |
 | #561 | `3dd37aea` | Retire the sync-to-cloud push workflow and add a parsed-YAML guard that keeps it retired (#561) | none | not needed: CI only |
 | #562 | `135b65e9` | Give every gate-file path a code owner (#562) | none | not needed: CI only |
