@@ -23,8 +23,10 @@ records those in its Security section, as it does for jackson 2.18.11.
   names two numbers gives each its own row.
 - Commit: the commit or commits whose subject carries the number.
 - Subject: the commit subject. Advisory identifiers and em dashes in a subject are
-  left out or replaced here, and a subject whose wording a documentation check of
-  this repository refuses in a tracked guide is paraphrased and marked so.
+  left out or replaced here. A subject that is otherwise reworded, for example
+  because a documentation check of this repository refuses its wording in a
+  tracked guide or because it carries an identifier that is not a pull request or
+  issue number of this repository, is marked `(subject paraphrased)`.
 - Entry: the line of `CHANGELOG.md` that cites the number (the `### ` heading when
   one cites it, otherwise the bullet), or the line of the entry the same change
   added when that entry does not cite the number. Line numbers refer to
@@ -179,7 +181,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #434 | `90dcb178` | Record the refresh/recovery token fix in the changelog (advisory id omitted) (#434) | line 7655 | present (entry added by the same change; it does not cite the number) |
 | #435 | `e191eadc` | Rename review check to 'Automated code review' (#435) | none | not needed: CI and repository tooling only |
 | #436 | `c8ad876e` | Drop the previous-review replay from the review gate (#436) | none | not needed: CI only |
-| #437 | `70a64d82` | Require an out-of-fleet approval for changes to the merge gate's own config (#437) | none | not needed: CI only |
+| #437 | `70a64d82` | Add a CODEOWNERS file so that a change to the merge gate's own config needs a code owner's approval (#437) (subject paraphrased) | none | not needed: CI only |
 | #438 | `eb68b89e` | Document the gate-file authorship rule (#438) | none | not needed: CI only |
 | #439 | `09bef205` | Document gate-file change control in the security policy (#439) | none | not needed: documentation only, no behaviour change |
 | #440 | `630bacbc` | Add the gate-file approval check (#440) | none | not needed: CI only |
@@ -221,11 +223,11 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #490 | `fa571523` | Harden the public did:aip resolver: no pending-agent oracle, rate limited, rightmost untrusted hop (#490) | line 7832 | present |
 | #491 | `efe28e11` | Bump next, sharp, postcss, x/crypto, grpc, go-jose and x/text; turn the self-hosted image optimizer off (#491) | line 35 | present |
 | #492 | `1ea0dff8` | Retire empty-typ grace on the refresh path (P1-phase-2) (#492) | line 7827 | present |
-| #493 | `dcb7f5bf` | Pin apps/web to a committed lockfile: add apps/web/package-lock.json (v3, seeded from the root lockfile, next 16.3.5 exact) and re-sync the root lockfile's apps/web entry (QGF-224, Control B, Sequencing 1) (#493) | line 32 | added by this reconciliation |
-| #494 | `fcfa9c60` | Replace the Maven Central coordinate with the source build across the Java SDK docs (QGF-225) (#494) | none | not needed: documentation; the same change rewrote this file's preamble, lines 7-10 |
-| #495 | `1b9ffa4c` | Replace npm lockfile hunks in the PR review input with a predicate-backed placeholder and enforce its report (QGF-226) (#495) | none | not needed: CI and repository tooling only |
-| #496 | `3a65737c` | Pin both frontend Dockerfile bases and root the aim-dashboard runtime stage on alpine (QGF-230) (#496) | line 7772 | present |
-| #497 | `ed45a6b5` | License Compliance: the Go license verdict is the checker exit status behind a pinned go-licenses script with retry (QGF-251) (#497) | none | not needed: CI license check and its inputs |
+| #493 | `dcb7f5bf` | Pin apps/web to a committed lockfile: add apps/web/package-lock.json (v3, seeded from the root lockfile, next 16.3.5 exact) and re-sync the root lockfile's apps/web entry (#493) (subject paraphrased) | line 32 | added by this reconciliation |
+| #494 | `fcfa9c60` | Replace the Maven Central coordinate with the source build across the Java SDK docs (#494) (subject paraphrased) | none | not needed: documentation; the same change rewrote this file's preamble, lines 7-10 |
+| #495 | `1b9ffa4c` | Replace npm lockfile hunks in the PR review input with a predicate-backed placeholder and enforce its report (#495) (subject paraphrased) | none | not needed: CI and repository tooling only |
+| #496 | `3a65737c` | Pin both frontend Dockerfile bases and root the aim-dashboard runtime stage on alpine (#496) (subject paraphrased) | line 7772 | present |
+| #497 | `ed45a6b5` | License Compliance: the Go license verdict is the checker exit status behind a pinned go-licenses script with retry (#497) (subject paraphrased) | none | not needed: CI license check and its inputs |
 | #498 | `4c4e0706` | Backend: remove the community-intelligence push that posted into a Registry route that does not exist, and pin the Registry's route table (#498) | line 7995 | present |
 | #499 | `993256b3` | A2A: an agent with no task data is unscored, the trust-score PUT refuses, routing stops defaulting to 0.5 (#499) | line 7640 | present (entry added by the same change; it does not cite the number) |
 | #500 | `2a749df5` | sdk-java: bouncycastle 1.84 -> 1.85 (advisory id omitted) critical, (advisory id omitted) high) (#500) | line 21 | present |
@@ -275,7 +277,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 | #560 | `c2a8ac5e` | sdk/java: bump jackson to 2.18.11 (#560) | line 6771 | present |
 | #561 | `3dd37aea` | Retire the sync-to-cloud push workflow and add a parsed-YAML guard that keeps it retired (#561) | none | not needed: CI only |
 | #562 | `135b65e9` | Give every gate-file path a code owner (#562) | none | not needed: CI only |
-| #564 | `f2a0deab` | docker-publish.yml: read-only verify builds on main and dispatch, publish only from a platform-v tag push with a release guard (QGF-273) (#564) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
+| #564 | `f2a0deab` | docker-publish.yml: read-only verify builds on main and dispatch, publish only from a platform-v tag push with a release guard (#564) (subject paraphrased) | SDK changelog | present: recorded in `sdk/python/CHANGELOG.md` (the SDK's own release) |
 | #565 | `0e58129d` | trust_calculator.go: factor 1, 2, 5 and 7 comments say what the code computes, held by aim25_comments_test.go (AIM-25) (#565) | none | not needed: code comments |
 | #566 | `1c05049d` | README: the quick start states the monitoring-mode default and the strict-mode step its refusal needs (#566) | none | not needed: documentation only, no behaviour change |
 | #567 | `d60017a4` | otel-demo smoke scripts run in their own compose project and remove only what they started (#567) | none | not needed: demo smoke tooling |
