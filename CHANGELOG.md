@@ -24,9 +24,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 ### Security — `POST /api/v1/verification-events` refuses every write, so a verification event records only an outcome the server derived (#556)
 
 - `POST /api/v1/verification-events` answers `403` with `verificationEventWriteNotAccepted` in `code` and `reasonCode`
-  for every caller and role. It no longer reads the request, looks up an agent or records an event, so no caller can
-  record a verification outcome it reports itself. The server's own verification paths still record verification
-  events.
+  for every member, manager and admin caller. It no longer reads the request, looks up an agent or records an event, so
+  no caller can record a verification outcome it reports itself. The role check refuses a viewer with `403` and no code,
+  and a request without a valid token with `401`. The server's own verification paths still record verification events.
 - The read routes and `DELETE` are unchanged. The developer API documentation marks the write disabled.
 
 ### Security — the dashboard uses Next.js 16.4.2 and sharp 0.35.5, and its image installs exactly what its committed lockfile pins (#493, #568)
