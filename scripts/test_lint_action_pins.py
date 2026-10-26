@@ -138,7 +138,7 @@ class StaticRules(Case):
     def test_a_docker_image_needs_a_digest(self) -> None:
         digest = hashlib.sha256(b"image").hexdigest()
         self.write(".github/workflows/ci.yml", workflow(
-            "uses: docker://alpine:3.21", f"uses: docker://alpine:3.21@sha256:{digest}",
+            "uses: docker://library/alpine:3.21", f"uses: docker://library/alpine:3.21@sha256:{digest}",
         ))
         rc, out, _ = self.lint()
         self.assertEqual(rc, 1)
