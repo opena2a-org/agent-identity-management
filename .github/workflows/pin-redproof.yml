@@ -1,0 +1,40 @@
+# Red-proof fixture for scripts/lint-action-pins.py, on a branch that is never
+# merged. One CI run of this branch shows the required CI Gate context turning
+# red on the three references below. workflow_dispatch is the only trigger, so
+# no runner executes them.
+#
+#   1. a tag, which its repository can move                       [mutable-ref]
+#   2. a commit that exists only in a fork network and on no
+#      branch of actions/checkout                                 [unreachable]
+#   3. the head of actions/checkout's releases/v3, a branch that is
+#      neither the default branch nor allowlisted for v3          [unreachable]
+name: Pin red-proof fixture
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  redproof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@783a99ae790ed4c4fcce7cf7ebd54529d27c4dc6 # v4
+      - uses: actions/checkout@a37ce9120846195fa4ece8f58b268e6043cb2f26 # v3.7.0
+
+  # Red-proof fixture for scripts/lint-runtime-image-pins.py. This job's token
+  # is write-scoped (packages: write), so every image it runs must carry an
+  # @sha256 digest. The binfmt image below names the tag `latest` and no digest,
+  # which the check must refuse. Its uses: line is a commit sha that
+  # docker-publish.yml already pins, so the action-pin findings above stay at
+  # three. workflow_dispatch is the only trigger, so no runner executes it.
+  redproof-runtime-image:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          image: docker.io/tonistiigi/binfmt:latest
