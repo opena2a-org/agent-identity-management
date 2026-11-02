@@ -106,6 +106,11 @@ type bodyChannelSite struct {
 	// reached reports whether the double saw the call, and with which actor.
 	reached func(*bodyWriterDouble) (bool, uuid.UUID)
 	success int
+	// boundBeforeLoad marks a route where an agent credential is bound to its
+	// own id before any lookup (middleware.BindAgentID): a foreign actor in
+	// the body is refused 403 agent_path_mismatch and the loader is never
+	// reached. The refusal still names no foreign agent or organization.
+	boundBeforeLoad bool
 }
 
 var bodyChannelSites = []bodyChannelSite{
@@ -194,7 +199,8 @@ var bodyChannelSites = []bodyChannelSite{
 			}
 			return true, d.registeredCardReq.AgentID
 		},
-		success: fiber.StatusCreated,
+		success:         fiber.StatusCreated,
+		boundBeforeLoad: true,
 	},
 }
 
@@ -241,11 +247,17 @@ func TestA2ABodyChannel_CrossOrgActorInTheBodyIsRefused(t *testing.T) {
 				c.Locals("organization_id", f.callerOrg)
 				c.Locals("agent_id", f.ownedAgent) // the attacker's own agent is in the principal
 			}, site.body(f.foreignAgent.String(), f.foreignAgent))
-			assert.Equal(t, fiber.StatusNotFound, status, "body: %s", body)
-			assert.JSONEq(t, `{"error":"not found"}`, body, "the refusal is silent about existence")
+			if site.boundBeforeLoad {
+				assert.Equal(t, fiber.StatusForbidden, status, "body: %s", body)
+				assert.Contains(t, body, `"reasonCode":"agent_path_mismatch"`)
+				assert.NotContains(t, f.loaded, f.foreignAgent, "bound before any lookup")
+			} else {
+				assert.Equal(t, fiber.StatusNotFound, status, "body: %s", body)
+				assert.JSONEq(t, `{"error":"not found"}`, body, "the refusal is silent about existence")
+				assert.Contains(t, f.loaded, f.foreignAgent, "the guard must load the resolved actor")
+			}
 			assert.NotContains(t, body, f.foreignAgent.String())
 			assert.NotContains(t, body, f.victimOrg.String())
-			assert.Contains(t, f.loaded, f.foreignAgent, "the guard must load the resolved actor")
 		})
 	}
 }

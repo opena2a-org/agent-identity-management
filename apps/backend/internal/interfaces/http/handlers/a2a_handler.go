@@ -1876,7 +1876,7 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 	}
 
 	// Create the agent card using the service
-	card, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
+	card, err := h.a2aWriter.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
 		AgentID: agentID,
 		CardURL: req.CardURL,
 	})
