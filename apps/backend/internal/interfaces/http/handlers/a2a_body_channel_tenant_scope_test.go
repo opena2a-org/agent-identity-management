@@ -200,7 +200,10 @@ var bodyChannelSites = []bodyChannelSite{
 
 func postBodyChannel(t *testing.T, site bodyChannelSite, h *A2AHandler, locals func(fiber.Ctx), body string) (int, string) {
 	t.Helper()
-	app := fiber.New()
+	// The package's test app preserves a response the handler already wrote
+	// when it returns ErrUnauthorized, which is how the 401 the guard writes
+	// is observable here (the default fiber error handler would overwrite it).
+	app := newTestApp()
 	app.Post(site.route, func(c fiber.Ctx) error {
 		locals(c)
 		return site.handler(h)(c)
