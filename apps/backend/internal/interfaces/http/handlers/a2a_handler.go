@@ -24,6 +24,13 @@ type A2AHandler struct {
 	// LoadOwned loaders (RevokeConsent + UpdateTaskState — A3d-vii.b).
 	// Defaults to a2aService in NewA2AHandler; tests can swap a mock.
 	a2aReader A2AReader
+	// a2aWriter is the narrow write-side interface behind the five request-
+	// body handlers that resolve the ACTING agent out of the body
+	// (RegisterSkill, AttestSkill, CheckSecurity, SignRequestAlt,
+	// RegisterAgentCardAlt). Defaults to a2aService in NewA2AHandler; tests
+	// swap a double so the same-organization path can be shown to reach the
+	// service and the cross-organization path shown never to.
+	a2aWriter A2ABodyWriter
 	// agentService is typed as the interface (AgentServicer) rather than the
 	// concrete *application.AgentService so tests can swap a mock. The
 	// constructor still accepts the concrete service — Go satisfies the
@@ -46,6 +53,7 @@ func NewA2AHandler(
 	return &A2AHandler{
 		a2aService:   a2aService,
 		a2aReader:    a2aService,
+		a2aWriter:    a2aService,
 		agentService: agentService,
 		auditService: auditService,
 	}
