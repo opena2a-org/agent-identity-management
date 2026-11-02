@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 
 	"github.com/gofiber/fiber/v3"
@@ -543,68 +542,6 @@ func (h *CapabilityHandler) MarkHoneytoken(c fiber.Ctx) error {
 	return c.JSON(updated)
 }
 
-// VerifyAction godoc
-// @Summary Verify an action
-// @Description Verify if an agent is authorized to perform a specific action
-// @Tags capabilities
-// @Accept json
-// @Produce json
-// @Param request body VerifyActionRequest true "Action verification request"
-// @Success 200 {object} application.VerificationResult
-// @Failure 400 {object} ErrorResponse
-// @Failure 401 {object} ErrorResponse
-// @Failure 500 {object} ErrorResponse
-// @Router /internal/verify-action [post]
-func (h *CapabilityHandler) VerifyAction(c fiber.Ctx) error {
-	var req VerifyActionRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Invalid request body",
-		})
-	}
-
-	agentID, err := uuid.Parse(req.AgentID)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Invalid agent ID",
-		})
-	}
-
-	// Decode signature and payload from base64
-	signature, err := base64.StdEncoding.DecodeString(req.Signature)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Invalid signature encoding",
-		})
-	}
-
-	payload, err := base64.StdEncoding.DecodeString(req.RequestPayload)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
-			Error: "Invalid payload encoding",
-		})
-	}
-
-	// Get source IP
-	sourceIP := c.IP()
-
-	capSvc := h.getCapabilityService()
-	result, err := capSvc.VerifyAction(
-		context.Background(),
-		agentID,
-		req.RequestedCapability,
-		signature,
-		payload,
-		&sourceIP,
-		req.Metadata,
-	)
-	if err != nil {
-		return respondServerError(c, fiber.StatusInternalServerError, err)
-	}
-
-	return c.JSON(result)
-}
-
 // GetViolationsByAgent godoc
 // @Summary Get violations for an agent
 // @Description Retrieve capability violations for a specific agent
@@ -735,14 +672,6 @@ type GrantCapabilityRequest struct {
 // MarkHoneytokenRequest toggles the honeytoken flag on a granted capability (issue #293).
 type MarkHoneytokenRequest struct {
 	Honeytoken bool `json:"honeytoken"`
-}
-
-type VerifyActionRequest struct {
-	AgentID             string                 `json:"agentId" validate:"required"`
-	Signature           string                 `json:"signature" validate:"required"`
-	RequestPayload      string                 `json:"requestPayload" validate:"required"`
-	RequestedCapability string                 `json:"requestedCapability" validate:"required"`
-	Metadata            map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type ViolationsResponse struct {
