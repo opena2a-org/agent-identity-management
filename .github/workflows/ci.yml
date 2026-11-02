@@ -710,7 +710,8 @@ jobs:
     name: E2E empty-state (Playwright)
     needs: changes
     if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.backend == 'true'
-    runs-on: ubuntu-latest
+    # ubuntu-latest is Ubuntu 26.04 as of 2026-11-02; the locked @playwright/test (1.59.1) has no chromium build for it; remove this pin with the Playwright bump.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
