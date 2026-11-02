@@ -170,57 +170,6 @@ func TestCapabilityHandler_RevokeCapability_InvalidCapabilityID(t *testing.T) {
 }
 
 // ===========================
-// CapabilityHandler.VerifyAction Tests
-// ===========================
-
-func TestCapabilityHandler_VerifyAction_InvalidJSON(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Post("/agents/verify-action", withCapabilityContext(handler.VerifyAction))
-
-	req := httptest.NewRequest("POST", "/agents/verify-action", strings.NewReader("not json"))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-func TestCapabilityHandler_VerifyAction_EmptyFields(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Post("/agents/verify-action", withCapabilityContext(handler.VerifyAction))
-
-	body := `{"agentId":"","actionType":""}`
-	req := httptest.NewRequest("POST", "/agents/verify-action", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-func TestCapabilityHandler_VerifyAction_InvalidAgentID(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Post("/agents/verify-action", withCapabilityContext(handler.VerifyAction))
-
-	body := `{"agentId":"not-a-uuid","actionType":"read"}`
-	req := httptest.NewRequest("POST", "/agents/verify-action", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-// ===========================
 // CapabilityHandler.GetViolationsByAgent Tests
 // ===========================
 
@@ -346,44 +295,6 @@ func TestCapabilityHandler_RevokeCapability_NoUserContext(t *testing.T) {
 }
 
 // ===========================
-// CapabilityHandler.VerifyAction Additional Tests
-// ===========================
-
-func TestCapabilityHandler_VerifyAction_InvalidSignatureEncoding(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Post("/agents/verify-action", withCapabilityContext(handler.VerifyAction))
-
-	// Valid agent ID but invalid signature encoding
-	body := `{"agentId":"` + uuid.New().String() + `","signature":"not-valid-base64!!!","requestPayload":"dGVzdA==","requestedCapability":"read:data"}`
-	req := httptest.NewRequest("POST", "/agents/verify-action", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-func TestCapabilityHandler_VerifyAction_InvalidPayloadEncoding(t *testing.T) {
-	handler := &CapabilityHandler{}
-	app := fiber.New()
-	app.Post("/agents/verify-action", withCapabilityContext(handler.VerifyAction))
-
-	// Valid signature but invalid payload encoding
-	body := `{"agentId":"` + uuid.New().String() + `","signature":"dGVzdA==","requestPayload":"not-valid-base64!!!","requestedCapability":"read:data"}`
-	req := httptest.NewRequest("POST", "/agents/verify-action", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
-}
-
-// ===========================
 // CapabilityHandler.ListCapabilities Additional Tests
 // ===========================
 
@@ -490,22 +401,6 @@ func TestGrantCapabilityRequest_Struct(t *testing.T) {
 	}
 
 	assert.Equal(t, "db:execute", req.CapabilityType)
-}
-
-func TestVerifyActionRequest_Struct(t *testing.T) {
-	req := VerifyActionRequest{
-		AgentID:             "agent-123",
-		Signature:           "c2lnbmF0dXJl",
-		RequestPayload:      "cGF5bG9hZA==",
-		RequestedCapability: "network:connect",
-		Metadata:            map[string]interface{}{"key": "value"},
-	}
-
-	assert.Equal(t, "agent-123", req.AgentID)
-	assert.Equal(t, "c2lnbmF0dXJl", req.Signature)
-	assert.Equal(t, "cGF5bG9hZA==", req.RequestPayload)
-	assert.Equal(t, "network:connect", req.RequestedCapability)
-	assert.NotNil(t, req.Metadata)
 }
 
 func TestViolationsResponse_Struct(t *testing.T) {
