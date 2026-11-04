@@ -7,6 +7,29 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — ARP's process checks match a listed binary in any letter case and with a version, report each process once instead of at every poll, and leave the process monitor's own `ps` out of the process interceptor's events (opena2a-org/arp-guard#189, opena2a-org/arp-guard#187)
+
+- Measured with the code before this change on macOS (Node.js 26.12.1): a `ProcessMonitor` polling every 500 ms for
+  3.25 s, over four children started before it as `/usr/bin/perl`, `/opt/homebrew/bin/python3` (3.14),
+  `/usr/bin/python3` (Command Line Tools 3.9) and `/bin/sleep`. `ps` listed both pythons as
+  `.../Python.app/Contents/MacOS/Python`, and the monitor reported neither of them, while it reported
+  `Suspicious binary executed: perl` 6 times for the one perl child. With a `ProcessInterceptor` started before the
+  monitor, the interceptor also reported the monitor's own `ps -ax -o pid=,ppid=,user=,%cpu=,%mem=,command=` 7 times
+  as `Intercepted process spawn`.
+- The monitor and the interceptor share one list, unchanged, and one match: a binary's base name, in lower case,
+  matches an entry it equals or that it extends with a version, digits in groups separated by dots. `Python`,
+  `python3.12`, `perl5.34` and `PERL` match; `python3-config`, `ncdu` and `sshd` do not.
+- The monitor reports `Suspicious binary executed` once per pid and binary, `Child process running as root` once per
+  pid and user, and `High CPU usage` once per episode, again after a poll reads the pid at 90% or below. A pid listed
+  again after it left the listing is reported again. The category, severity, description and data of each event are
+  unchanged.
+- The monitor reads the process table through the `spawnSync` it was loaded with, so the interceptor's hook does not
+  see that call. A `spawnSync('ps', ...)` with the same arguments made by the agent is still reported.
+- In the run above, the monitor now reports `Suspicious binary executed` 3 times, once for each interpreter child, and
+  the interceptor reports the monitor's `ps` 0 times.
+- Tests: `tests/arp/suspicious-binaries.test.ts`, `tests/arp/monitors/process-monitor.test.ts` and
+  `tests/arp/interceptors/process.test.ts`.
+
 ### Changed: the README's `init` section says what `init` needs from the server and how a bootstrap token is minted
 
 - "Register a first agent from the terminal" says that `init` needs an AIM server that has onboarding tokens, which

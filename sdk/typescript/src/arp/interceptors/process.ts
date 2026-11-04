@@ -2,13 +2,7 @@ import * as path from 'path';
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 import { nodeRequire } from '../node-require';
-
-/** Binaries commonly used for exfiltration, lateral movement, or exploitation */
-const SUSPICIOUS_BINARIES = [
-  'curl', 'wget', 'nc', 'ncat', 'nmap', 'ssh', 'scp',
-  'python', 'python3', 'perl', 'ruby', 'base64',
-  'socat', 'telnet', 'ftp', 'rsync',
-];
+import { isSuspiciousBinary } from '../suspicious-binaries';
 
 /**
  * CR-001: Command complexity analysis for adversarial bash pipeline detection.
@@ -129,7 +123,7 @@ export class ProcessInterceptor implements Monitor {
   private handleSpawn(command: string, args: string[]): void {
     const binary = path.basename(command);
     const fullCommand = [command, ...args].join(' ');
-    const isSuspicious = SUSPICIOUS_BINARIES.includes(binary);
+    const isSuspicious = isSuspiciousBinary(binary);
 
     this.engine.emit({
       source: 'process',
@@ -151,7 +145,7 @@ export class ProcessInterceptor implements Monitor {
   private handleExec(command: string): void {
     const parts = command.trim().split(/\s+/);
     const binary = path.basename(parts[0]);
-    const isSuspicious = SUSPICIOUS_BINARIES.includes(binary);
+    const isSuspicious = isSuspiciousBinary(binary);
 
     // CR-001: Analyze command complexity for adversarial pipeline detection
     const complexity = analyzeCommandComplexity(command);
