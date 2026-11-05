@@ -562,9 +562,9 @@ lists only `MCP-ALLOWLIST`, because it did not scan the arguments. A result
 with `truncated: true` covers only the first 64 KB of the text. An analyzer
 that is not started returns `scanned: false` and an empty `patternIds`: it
 evaluated nothing, and its `detected: false` is not a verdict. `scanText`
-throws a `TypeError` naming the parameter when `text` is not a string or
-`patterns` is not an array of `ThreatPattern`, so a wrong argument is never
-reported as `detected: false`.
+throws a `TypeError` naming the parameter when `text` is not a string, when
+`patterns` is not an array, or when an entry of `patterns` has no `pattern`
+with an `exec` method.
 
 Classification of runtime events is supplied through the injectable
 `ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`

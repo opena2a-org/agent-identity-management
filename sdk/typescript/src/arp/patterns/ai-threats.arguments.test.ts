@@ -1,7 +1,7 @@
 /**
- * scanText refuses a wrong argument with a TypeError that names the parameter
- * (opena2a-org/arp-guard#178), so a wrong argument is never returned as a scan
- * that found nothing.
+ * scanText throws a TypeError that names the parameter when text is not a
+ * string, when patterns is not an array, or when an entry of patterns has no
+ * pattern with an exec method (opena2a-org/arp-guard#178).
  */
 import { describe, it, expect } from 'vitest';
 import { scanText, ALL_PATTERNS, type ThreatPattern } from './ai-threats';

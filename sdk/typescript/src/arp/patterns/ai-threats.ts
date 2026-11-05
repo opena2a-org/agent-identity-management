@@ -266,9 +266,9 @@ function describeArgument(value: unknown): string {
  * Returns all matches (not just first) for comprehensive reporting.
  * Input is truncated to MAX_SCAN_LENGTH to prevent ReDoS.
  * The result's `scope` lists the ids of `patterns` under `set`.
- * Throws a TypeError naming the parameter when `text` is not a string or
- * `patterns` is not an array of ThreatPattern, so a wrong argument is never
- * returned as a scan that found nothing.
+ * Throws a TypeError naming the parameter when `text` is not a string, when
+ * `patterns` is not an array, or when an entry of `patterns` has no `pattern`
+ * with an `exec` method.
  */
 export function scanText(
   text: string,
