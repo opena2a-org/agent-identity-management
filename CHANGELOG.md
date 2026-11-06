@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Security — the five A2A write routes that take the acting agent from the request body scope it to the caller's organization
+
+- `POST /api/v1/a2a/skills`, `POST /api/v1/a2a/attestations`, `POST /api/v1/a2a/security/check` and
+  `POST /api/v1/a2a/sign` read the acting agent from the request body, or from the caller's agent credential when the
+  body names none, and accept it only when the caller's organization owns it, before the request reaches the service.
+  An agent of another organization, an agent that does not exist and an agent whose record cannot be read are each
+  answered `404 {"error":"not found"}`; on `/skills`, `/attestations` and `/sign` the last two were answered 500
+  before. The attested agent of an attestation and the target agent of a security check are the requests' subjects
+  and may belong to any organization.
+- `POST /api/v1/a2a/cards`, the fifth such route, already applied the same check, and its answers are unchanged: an
+  agent credential that names another agent is answered `403` with `agent_path_mismatch` before any lookup, and a
+  caller that names an agent outside its own organization is answered `404 {"error":"not found"}`.
+- `CapabilityHandler.VerifyAction`, a request-body handler that no route served, is removed with its request type.
+  `CapabilityService.VerifyAction` is unchanged.
+
 ### Security — the Java SDK and the Java A2A example took jackson 2.18.8 before 2.18.11, and use bouncycastle 1.85 (#340, #511)
 
 - `sdk/java/pom.xml` set `jackson.version` to 2.18.8 (#340), and `examples/a2a-multi-agent-demo/java/pom.xml` took the

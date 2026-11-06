@@ -141,6 +141,18 @@ type A2AReader interface {
 	GetA2ATask(ctx context.Context, taskID uuid.UUID) (*domain.A2ATask, error)
 }
 
+// A2ABodyWriter is the write-side sibling of A2AReader: the five A2AService
+// mutations reached by the request-body handlers whose acting agent is
+// scoped to the caller's organization before the call.
+// *application.A2AService satisfies it implicitly.
+type A2ABodyWriter interface {
+	RegisterSkill(ctx context.Context, skill *domain.A2ASkill) error
+	AttestSkill(ctx context.Context, req application.AttestSkillRequest) (*domain.A2AAgentAttestation, error)
+	CheckA2ASecurity(ctx context.Context, req *domain.A2ASecurityCheckRequest) (*domain.A2ASecurityCheckResult, error)
+	SignA2ARequest(ctx context.Context, agentID uuid.UUID, method, path string, body []byte) (*domain.A2ARequestSignature, error)
+	RegisterAgentCard(ctx context.Context, req application.RegisterAgentCardRequest) (*application.RegisterAgentCardResponse, error)
+}
+
 // AuthServicer defines the methods from AuthService that handlers use
 type AuthServicer interface {
 	GetUsersByOrganization(ctx context.Context, orgID uuid.UUID) ([]*domain.User, error)

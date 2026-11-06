@@ -24,6 +24,13 @@ type A2AHandler struct {
 	// LoadOwned loaders (RevokeConsent + UpdateTaskState — A3d-vii.b).
 	// Defaults to a2aService in NewA2AHandler; tests can swap a mock.
 	a2aReader A2AReader
+	// a2aWriter is the narrow write-side interface behind the five request-
+	// body handlers that resolve the ACTING agent out of the body
+	// (RegisterSkill, AttestSkill, CheckSecurity, SignRequestAlt,
+	// RegisterAgentCardAlt). Defaults to a2aService in NewA2AHandler; tests
+	// swap a double so the same-organization path can be shown to reach the
+	// service and the cross-organization path shown never to.
+	a2aWriter A2ABodyWriter
 	// agentService is typed as the interface (AgentServicer) rather than the
 	// concrete *application.AgentService so tests can swap a mock. The
 	// constructor still accepts the concrete service — Go satisfies the
@@ -46,6 +53,7 @@ func NewA2AHandler(
 	return &A2AHandler{
 		a2aService:   a2aService,
 		a2aReader:    a2aService,
+		a2aWriter:    a2aService,
 		agentService: agentService,
 		auditService: auditService,
 	}
@@ -1217,6 +1225,17 @@ func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
 		}
 	}
 
+	// The acting agent was resolved from the body or the context
+	// principal; both are caller-controlled, so it is scoped to the caller's
+	// organization on the RESOLVED id, before the service is reached, with
+	// the read side's not-found shape (the LogTask guard, body-class #2).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
+	}
 	skill := &domain.A2ASkill{
 		AgentID:     agentID,
 		SkillID:     req.ID,
@@ -1228,7 +1247,7 @@ func (h *A2AHandler) RegisterSkill(c fiber.Ctx) error {
 		Examples:    req.Examples,
 	}
 
-	if err := h.a2aService.RegisterSkill(c.Context(), skill); err != nil {
+	if err := h.a2aWriter.RegisterSkill(c.Context(), skill); err != nil {
 		return respondA2AFailureCause(c, a2aServerError, err)
 	}
 
@@ -1275,6 +1294,17 @@ func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
 		}
 	}
 
+	// The ATTESTING agent (the attested agent is the endpoint's cross-organization subject and gains no predicate) was resolved from the body or the context
+	// principal; both are caller-controlled, so it is scoped to the caller's
+	// organization on the RESOLVED id, before the service is reached, with
+	// the read side's not-found shape (the LogTask guard, body-class #2).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, attestingAgentID, orgID) == nil {
+		return nil
+	}
 	attestReq := application.AttestSkillRequest{
 		AttestingAgentID: attestingAgentID,
 		AttestedAgentID:  attestedAgentID,
@@ -1284,7 +1314,7 @@ func (h *A2AHandler) AttestSkill(c fiber.Ctx) error {
 		Evidence:         req.Evidence,
 	}
 
-	attestation, err := h.a2aService.AttestSkill(c.Context(), attestReq)
+	attestation, err := h.a2aWriter.AttestSkill(c.Context(), attestReq)
 	if err != nil {
 		return respondA2AFailureCause(c, a2aServerError, err)
 	}
@@ -1433,13 +1463,24 @@ func (h *A2AHandler) CheckSecurity(c fiber.Ctx) error {
 		return respondA2AFailure(c, a2aInvalidTargetAgentID)
 	}
 
+	// The REQUESTING agent (the target is the endpoint's cross-organization subject and gains no predicate; a violation row can then only name a requester the caller owns) was resolved from the body or the context
+	// principal; both are caller-controlled, so it is scoped to the caller's
+	// organization on the RESOLVED id, before the service is reached, with
+	// the read side's not-found shape (the LogTask guard, body-class #2).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, requestingID, orgID) == nil {
+		return nil
+	}
 	checkReq := &domain.A2ASecurityCheckRequest{
 		RequestingAgentID: requestingID,
 		TargetAgentID:     targetID,
 		SkillID:           req.SkillID,
 	}
 
-	result, err := h.a2aService.CheckA2ASecurity(c.Context(), checkReq)
+	result, err := h.a2aWriter.CheckA2ASecurity(c.Context(), checkReq)
 	if err != nil {
 		return respondA2AFailureCause(c, a2aServerError, err)
 	}
@@ -1512,7 +1553,18 @@ func (h *A2AHandler) SignRequestAlt(c fiber.Ctx) error {
 		}
 	}
 
-	signature, err := h.a2aService.SignA2ARequest(withTransitionActor(c), agentID, req.Method, req.Path, []byte(req.Body))
+	// The signing agent (no key material is generated or read for a foreign agent) was resolved from the body or the context
+	// principal; both are caller-controlled, so it is scoped to the caller's
+	// organization on the RESOLVED id, before the service is reached, with
+	// the read side's not-found shape (the LogTask guard, body-class #2).
+	orgID, err := RequireOrganizationID(c)
+	if err != nil {
+		return err
+	}
+	if h.loadOwnedAgent(c, agentID, orgID) == nil {
+		return nil
+	}
+	signature, err := h.a2aWriter.SignA2ARequest(withTransitionActor(c), agentID, req.Method, req.Path, []byte(req.Body))
 	if err != nil {
 		return respondA2AFailureCause(c, a2aServerError, err)
 	}
@@ -1824,7 +1876,7 @@ func (h *A2AHandler) RegisterAgentCardAlt(c fiber.Ctx) error {
 	}
 
 	// Create the agent card using the service
-	card, err := h.a2aService.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
+	card, err := h.a2aWriter.RegisterAgentCard(c.Context(), application.RegisterAgentCardRequest{
 		AgentID: agentID,
 		CardURL: req.CardURL,
 	})
