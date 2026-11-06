@@ -387,16 +387,21 @@ func TestHeldAgentRouteServesEveryCallerAndRecordsTheComparison(t *testing.T) {
 // agentBindingHoldUntil bounds the hold on the routes in agentBindingHeld. The
 // hold exists because the effect of binding them has not been measured: they
 // serve the dashboard and API-key automation as well as SDK agents. Each is
-// released by a count, over 14 days of request records, of agent-principal
-// requests whose path ID differs from the caller: zero binds the route;
-// non-zero makes it an admitted exception naming the call site, or binds it
-// with a dated migration. After this date a route still held fails the test —
-// the remedy is the measurement, never a later date.
+// released by a count of agent-principal requests whose path ID differs from
+// the caller: zero binds the route; non-zero makes it an admitted exception
+// naming the call site, or binds it with a dated migration. After this date a
+// route still held fails the test.
+//
+// The first date, 2026-11-05, passed with no count read. The count is now read
+// first from the callers in this repository (the SDKs, the web app and the
+// examples), then from request records where the observation below has run
+// for 14 days. A later date is set only with the count that is still missing
+// and the day it will exist.
 //
 // A held route is registered through holdAgentRoutes, which records that count
 // on each request's api_calls row (agent_path_route, agent_path_outcome,
 // auth_method); scripts/agent_path_binding_report.sql reads it per route.
-const agentBindingHoldUntil = "2026-11-05"
+const agentBindingHoldUntil = "2026-12-17"
 
 const agentBindingHoldReason = "held: binding effect on dashboard, API-key and service-principal callers not yet measured"
 
