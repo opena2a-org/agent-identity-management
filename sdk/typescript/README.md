@@ -525,6 +525,13 @@ const monitor = new FilesystemMonitor(engine);
 await monitor.start();
 ```
 
+The filesystem monitor that `AgentRuntimeProtection` builds reports no change
+under the directories ARP writes to itself: the data directory (`dataDir`, by
+default `.opena2a/arp` under the working directory) and, when the behavioral
+twin is on, `.opena2a/arp` under the home directory. ARP creates the data
+directory in `start()`, not when it is constructed. A `FilesystemMonitor` you
+build yourself takes such directories as its fourth argument.
+
 **Interception scope.** The filesystem and process interceptors patch the CJS
 module registry (`require('fs')`, `require('child_process')`). Code that loads
 those builtins via `require` or an ESM namespace/default import
@@ -554,7 +561,10 @@ not a clean verdict on the file. After an allowlist refusal, `scanToolCall`
 lists only `MCP-ALLOWLIST`, because it did not scan the arguments. A result
 with `truncated: true` covers only the first 64 KB of the text. An analyzer
 that is not started returns `scanned: false` and an empty `patternIds`: it
-evaluated nothing, and its `detected: false` is not a verdict.
+evaluated nothing, and its `detected: false` is not a verdict. `scanText`
+throws a `TypeError` naming the parameter when `text` is not a string, when
+`patterns` is not an array, or when an entry of `patterns` has no `pattern`
+with an `exec` method.
 
 Classification of runtime events is supplied through the injectable
 `ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`
