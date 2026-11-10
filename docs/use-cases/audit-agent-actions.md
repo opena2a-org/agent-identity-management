@@ -31,23 +31,18 @@ Each event is appended to `~/.opena2a/aim-core/audit.jsonl` as one JSON line. Th
 opena2a identity audit
 ```
 
-Expected output:
+What `opena2a identity audit` prints with one `db:read` event in the log (captured from opena2a-cli 0.10.13, 2026-11-10):
 
 ```
-Audit Log: my-agent (aim_7f3a9c2e)
-Chain integrity: VALID (12 events, 0 breaks)
-
-#   Timestamp                Action          Target      Outcome
-1   2026-03-16T14:20:00Z     identity:create my-agent    allowed
-2   2026-03-16T14:20:05Z     tool:attach     claude-code allowed
-3   2026-03-16T14:20:05Z     tool:attach     cursor      allowed
-4   2026-03-16T14:23:01Z     db:read         users       allowed
-...
-
-Showing 4 of 12 events. Use --limit to see more.
+Audit Log (last 1)
+----------------------------------------------------------------------
+  2026-11-10 19:24:13  db:read          users            allowed [cli]
+----------------------------------------------------------------------
 ```
 
-## Step 4: Filter Events
+The row gives the event's time in UTC, its action, its target, its result and, in brackets, the plugin name it was logged with (`cli` for `opena2a identity log`).
+
+## Step 3: Filter Events
 
 View the last 50 events:
 
@@ -55,20 +50,13 @@ View the last 50 events:
 opena2a identity audit --limit 50
 ```
 
-Expected output:
+`--limit` sets how many of the most recent events are listed; without it, `opena2a identity audit` lists the last 10. With one event in the log, `--limit 50` prints the same list as Step 2 (captured from opena2a-cli 0.10.13, 2026-11-10):
 
 ```
-Audit Log: my-agent (aim_7f3a9c2e)
-Chain integrity: VALID (50 events shown of 128 total, 0 breaks)
-
-#    Timestamp                Action          Target         Outcome
-79   2026-03-16T10:00:12Z     db:read         customers      allowed
-80   2026-03-16T10:01:44Z     db:read         orders         allowed
-81   2026-03-16T10:02:03Z     file:write      /tmp/report    denied
-...
-128  2026-03-16T14:23:01Z     db:read         users          allowed
-
-Showing 50 of 128 events.
+Audit Log (last 1)
+----------------------------------------------------------------------
+  2026-11-10 19:24:13  db:read          users            allowed [cli]
+----------------------------------------------------------------------
 ```
 
 ## Using the SDK
@@ -122,7 +110,6 @@ Events logged via the TypeScript SDK follow the same format as CLI-logged events
 ## What You Now Have
 
 - A log of every agent action
-- Tamper detection via SHA-256 hash chain
 - Filterable history for incident investigation
 
 ## Audit Log Storage

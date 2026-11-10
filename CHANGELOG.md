@@ -11,6 +11,17 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the audit use case says the local audit log has no hash chain, and its sample outputs are what opena2a-cli prints
+
+- `docs/use-cases/audit-agent-actions.md` no longer says that `~/.opena2a/aim-core/audit.jsonl` is linked by a SHA-256
+  hash chain that shows tampering. `@opena2a/aim-core` 0.2.0 appends each event to that file as one JSON line and
+  writes no hash or signature, so the file does not show whether an earlier line was changed. The page drops its hash
+  chain step, the hash and chain integrity lines of its sample outputs, the hash chain from its SDK section and its
+  tamper detection bullet, and its steps are numbered 1 to 3.
+- The sample outputs of `opena2a identity log`, `opena2a identity audit` and `opena2a identity audit --limit 50` are
+  captured from opena2a-cli 0.10.13. The page says that `opena2a identity audit` lists the last 10 events when
+  `--limit` is not given.
+
 ### Security — the Java SDK and the Java A2A example took jackson 2.18.8 before 2.18.11, and use bouncycastle 1.85 (#340, #511)
 
 - `sdk/java/pom.xml` set `jackson.version` to 2.18.8 (#340), and `examples/a2a-multi-agent-demo/java/pom.xml` took the
