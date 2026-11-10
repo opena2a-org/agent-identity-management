@@ -13,18 +13,17 @@ Your agent performs actions (reading databases, calling APIs, writing files), bu
 opena2a identity log --action "db:read" --target "users"
 ```
 
-Expected output:
+What `opena2a identity log --action "db:read" --target "users"` prints (captured from opena2a-cli 0.10.13, 2026-11-10, on an empty HOME):
 
 ```
-Event logged:
-  Action:    db:read
-  Target:    users
-  Timestamp: 2026-03-16T14:23:01.000Z
-  Hash:      sha256:a3f8c1...9e2b
-  Chain:     sha256:7d4e0a...1f8c (links to previous event)
+Event logged
+  Action:  db:read
+  Target:  users
+  Result:  allowed
+  Time:    2026-11-10T10:04:49.402Z
 ```
 
-Each event is appended to `~/.opena2a/aim-core/audit.jsonl`. The hash chain means any tampering is detectable: if someone modifies an earlier entry, every subsequent hash breaks.
+Each event is appended to `~/.opena2a/aim-core/audit.jsonl` as one JSON line. The file has no hash chain or signature, so it does not show whether an earlier line was changed. When the file passes 50 MB it is rotated, and the five most recent rotated files are kept.
 
 ## Step 2: View the Audit Log
 
@@ -47,23 +46,6 @@ Chain integrity: VALID (12 events, 0 breaks)
 
 Showing 4 of 12 events. Use --limit to see more.
 ```
-
-## Step 3: Understand the Hash Chain
-
-Every event includes two hashes:
-
-- **Event hash**: SHA-256 of the event data (action, target, timestamp, agent ID)
-- **Chain hash**: SHA-256 of this event hash combined with the previous chain hash
-
-This forms a linked chain:
-
-```
-Event 1: hash(data_1)                          -> chain_1
-Event 2: hash(data_2) + hash(chain_1)          -> chain_2
-Event 3: hash(data_3) + hash(chain_2)          -> chain_3
-```
-
-If anyone modifies Event 1 after the fact, `chain_1` changes, which invalidates `chain_2`, `chain_3`, and every event after it. The `Chain integrity: VALID` line at the top of the audit output confirms no tampering has occurred.
 
 ## Step 4: Filter Events
 
@@ -110,7 +92,7 @@ aim.logEvent({ action: 'db:read', target: 'customers', result: 'allowed', plugin
 aim.logEvent({ action: 'db:write', target: 'customers', result: 'allowed', plugin: 'my-agent' });
 aim.logEvent({ action: 'file:write', target: '/tmp/report', result: 'denied', plugin: 'my-agent' });
 
-// Each event is appended to the local audit log with a SHA-256 hash chain.
+// Each event is appended to the local audit log.
 // These events stay on this machine, separate from the AIM server's audit log.
 ```
 
@@ -135,7 +117,7 @@ def read_customers():
 # When connected to an AIM Server (via aim_url), events are also sent to the central database.
 ```
 
-Events logged via the TypeScript SDK follow the same hash chain format as CLI-logged events. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
+Events logged via the TypeScript SDK follow the same format as CLI-logged events. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
 
 ## What You Now Have
 
