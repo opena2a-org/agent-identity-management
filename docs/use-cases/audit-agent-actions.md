@@ -42,7 +42,7 @@ Audit Log (last 1)
 
 The row gives the event's time in UTC, its action, its target, its result and, in brackets, the plugin name it was logged with (`cli` for `opena2a identity log`).
 
-## Step 3: Filter Events
+## Step 3: Limit the Number of Events
 
 View the last 50 events:
 
@@ -80,7 +80,7 @@ aim.logEvent({ action: 'db:read', target: 'customers', result: 'allowed', plugin
 aim.logEvent({ action: 'db:write', target: 'customers', result: 'allowed', plugin: 'my-agent' });
 aim.logEvent({ action: 'file:write', target: '/tmp/report', result: 'denied', plugin: 'my-agent' });
 
-// Each event is appended to the local audit log.
+// Each event is appended to the local audit log as one JSON line.
 // These events stay on this machine, separate from the AIM server's audit log.
 ```
 
@@ -101,16 +101,16 @@ agent = secure("my-agent")
 def read_customers():
     return db.query("SELECT * FROM customers")
 
-# Each decorated call is automatically logged with the agent's identity.
+# AIM records the decorated calls it verifies, with the agent's identity.
 # When connected to an AIM Server (via aim_url), events are also sent to the central database.
 ```
 
-Events logged via the TypeScript SDK follow the same format as CLI-logged events. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
+Events logged through the TypeScript SDK and through the CLI go to the same file in the same format, unless a `dataDir` is set. The audit log at `~/.opena2a/aim-core/audit.jsonl` is compatible with both the CLI `opena2a identity audit` command and SDK-based querying.
 
 ## What You Now Have
 
-- A log of every agent action
-- Filterable history for incident investigation
+- A local log of the events your agent and tools record
+- A history you can read back with `opena2a identity audit`
 
 ## Audit Log Storage
 
