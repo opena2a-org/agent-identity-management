@@ -154,6 +154,14 @@ export class RuntimeTwin {
   }
 
   /**
+   * The directory the twin writes its logs to (`events.jsonl` and
+   * `l1-escalations.jsonl`): `.opena2a/arp` under the home directory.
+   */
+  getLogDir(): string {
+    return path.dirname(this.eventLogPath);
+  }
+
+  /**
    * Attach to an ARP EventEngine — processes every event for anomaly detection.
    * Non-blocking: L1 runs in parallel, L0 decision is returned immediately.
    */

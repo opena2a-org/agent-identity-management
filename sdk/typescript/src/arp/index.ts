@@ -37,6 +37,7 @@ export type {
   ARPConfig,
   ARPEvent,
   MonitorType,
+  MonitorKind,
   EventCategory,
   EventSeverity,
   LLMAdapter,
@@ -188,7 +189,7 @@ export type {
 export type { SignatureTelemetryConfig } from './types';
 
 import * as path from 'path';
-import type { ARPConfig, ARPEvent, EnforcementResult, IntelligenceStatus, Monitor } from './types';
+import type { ARPConfig, ARPEvent, EnforcementResult, IntelligenceStatus, Monitor, MonitorKind } from './types';
 import { EventEngine } from './engine/event-engine';
 import { IntelligenceCoordinator } from './intelligence/coordinator';
 import { RuntimeTwin } from './intelligence/runtime-twin';
@@ -244,6 +245,8 @@ export class AgentRuntimeProtection {
   private readonly enforcement: EnforcementEngine;
   private readonly logger: LocalLogger;
   private readonly monitors: Monitor[] = [];
+  /** Whether each entry of `monitors` is a monitor or an interceptor, for getStatus(). */
+  private readonly monitorKinds = new Map<Monitor, MonitorKind>();
   private gtinForwarder: GTINForwarder | null = null;
   /**
    * Structural signature producer (G2/G4/G5/G7). OFF by default, opt-in — distinct
@@ -335,37 +338,44 @@ export class AgentRuntimeProtection {
     // Create monitors based on config
     const mc = this.config.monitors;
     if (mc?.process?.enabled !== false) {
-      this.monitors.push(new ProcessMonitor(this.engine, mc?.process?.intervalMs));
+      this.addMonitor(new ProcessMonitor(this.engine, mc?.process?.intervalMs), 'monitor');
     }
     if (mc?.network?.enabled !== false) {
-      this.monitors.push(new NetworkMonitor(this.engine, mc?.network?.intervalMs, mc?.network?.allowedHosts));
+      this.addMonitor(new NetworkMonitor(this.engine, mc?.network?.intervalMs, mc?.network?.allowedHosts), 'monitor');
     }
     if (mc?.filesystem?.enabled !== false) {
-      this.monitors.push(new FilesystemMonitor(this.engine, mc?.filesystem?.watchPaths, mc?.filesystem?.allowedPaths));
+      // The directories this instance writes to itself: its data directory, and
+      // the runtime twin's log directory when the twin is on. The monitor
+      // reports no change under them.
+      const ownWriteDirs = this.runtimeTwin ? [dataDir, this.runtimeTwin.getLogDir()] : [dataDir];
+      this.addMonitor(
+        new FilesystemMonitor(this.engine, mc?.filesystem?.watchPaths, mc?.filesystem?.allowedPaths, ownWriteDirs),
+        'monitor',
+      );
     }
 
     // Create interceptors (application-level hooks — zero latency, 100% accuracy)
     const ic = this.config.interceptors;
     if (ic?.process?.enabled) {
-      this.monitors.push(new ProcessInterceptor(this.engine));
+      this.addMonitor(new ProcessInterceptor(this.engine), 'interceptor');
     }
     if (ic?.network?.enabled) {
-      this.monitors.push(new NetworkInterceptor(this.engine, ic.network.allowedHosts));
+      this.addMonitor(new NetworkInterceptor(this.engine, ic.network.allowedHosts), 'interceptor');
     }
     if (ic?.filesystem?.enabled) {
-      this.monitors.push(new FilesystemInterceptor(this.engine, ic.filesystem.allowedPaths, [dataDir]));
+      this.addMonitor(new FilesystemInterceptor(this.engine, ic.filesystem.allowedPaths, [dataDir]), 'interceptor');
     }
 
     // Create AI-layer interceptors
     const al = this.config.aiLayer;
     if (al?.prompt?.enabled) {
-      this.monitors.push(new PromptInterceptor(this.engine));
+      this.addMonitor(new PromptInterceptor(this.engine), 'interceptor');
     }
     if (al?.mcp?.enabled) {
-      this.monitors.push(new MCPProtocolInterceptor(this.engine, al.mcp.allowedTools));
+      this.addMonitor(new MCPProtocolInterceptor(this.engine, al.mcp.allowedTools), 'interceptor');
     }
     if (al?.a2a?.enabled) {
-      this.monitors.push(new A2AProtocolInterceptor(this.engine, al.a2a.trustedAgents));
+      this.addMonitor(new A2AProtocolInterceptor(this.engine, al.a2a.trustedAgents), 'interceptor');
     }
 
     // The master opt-out (env / marker file / config) disables the three
@@ -420,6 +430,11 @@ export class AgentRuntimeProtection {
     }
   }
 
+  private addMonitor(monitor: Monitor, kind: MonitorKind): void {
+    this.monitors.push(monitor);
+    this.monitorKinds.set(monitor, kind);
+  }
+
   /**
    * Write an executed result to enforcement.jsonl. A `log` action is carried
    * out by this write, so a failed write makes it `failed`; for any other
@@ -443,6 +458,12 @@ export class AgentRuntimeProtection {
   /** Start all monitors */
   async start(): Promise<void> {
     if (this.running) return;
+
+    // The data directory is created here, not in the constructor. The
+    // filesystem monitor reports no change under it, and not the creation of
+    // a directory on the way to it that was missing when the monitor was
+    // constructed.
+    this.logger.ensureDataDir();
 
     // Ask L2's destination whether it answers, so that one that cannot be reached is
     // reported now rather than at the first event L1 flags. It runs while the monitors
@@ -509,17 +530,24 @@ export class AgentRuntimeProtection {
    * Get current status. `intelligence` says whether L2 and the runtime twin run,
    * read from the coordinator's L2 decision and from the twin's own send check;
    * see `IntelligenceStatus`.
+   * Each entry of `monitors` carries its `type` and a
+   * `kind`, `monitor` or `interceptor`, which tells apart two entries of one
+   * type, such as the filesystem monitor and the filesystem interceptor.
    */
   getStatus(): {
     running: boolean;
-    monitors: Array<{ type: string; running: boolean }>;
+    monitors: Array<{ type: string; kind: MonitorKind; running: boolean }>;
     budget: ReturnType<IntelligenceCoordinator['getBudgetStatus']>;
     pausedPids: number[];
     intelligence: IntelligenceStatus;
   } {
     return {
       running: this.running,
-      monitors: this.monitors.map((m) => ({ type: m.type, running: m.isRunning() })),
+      monitors: this.monitors.map((m) => ({
+        type: m.type,
+        kind: this.monitorKinds.get(m) ?? 'monitor',
+        running: m.isRunning(),
+      })),
       budget: this.intelligence.getBudgetStatus(),
       pausedPids: this.enforcement.getPausedPids(),
       intelligence: {

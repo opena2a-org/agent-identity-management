@@ -7,6 +7,29 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — ARP's process checks match a listed binary in any letter case and with a version, report each process once instead of at every poll, and leave the process monitor's own `ps` out of the process interceptor's events (opena2a-org/arp-guard#189, opena2a-org/arp-guard#187)
+
+- Measured with the code before this change on macOS (Node.js 26.12.1): a `ProcessMonitor` polling every 500 ms for
+  3.25 s, over four children started before it as `/usr/bin/perl`, `/opt/homebrew/bin/python3` (3.14),
+  `/usr/bin/python3` (Command Line Tools 3.9) and `/bin/sleep`. `ps` listed both pythons as
+  `.../Python.app/Contents/MacOS/Python`, and the monitor reported neither of them, while it reported
+  `Suspicious binary executed: perl` 6 times for the one perl child. With a `ProcessInterceptor` started before the
+  monitor, the interceptor also reported the monitor's own `ps -ax -o pid=,ppid=,user=,%cpu=,%mem=,command=` 7 times
+  as `Intercepted process spawn`.
+- The monitor and the interceptor share one list, unchanged, and one match: a binary's base name, in lower case,
+  matches an entry it equals or that it extends with a version, digits in groups separated by dots. `Python`,
+  `python3.12`, `perl5.34` and `PERL` match; `python3-config`, `ncdu` and `sshd` do not.
+- The monitor reports `Suspicious binary executed` once per pid and binary, `Child process running as root` once per
+  pid and user, and `High CPU usage` once per episode, again after a poll reads the pid at 90% or below. A pid listed
+  again after it left the listing is reported again. The category, severity, description and data of each event are
+  unchanged.
+- The monitor reads the process table through the `spawnSync` it was loaded with, so the interceptor's hook does not
+  see that call. A `spawnSync('ps', ...)` with the same arguments made by the agent is still reported.
+- In the run above, the monitor now reports `Suspicious binary executed` 3 times, once for each interpreter child, and
+  the interceptor reports the monitor's `ps` 0 times.
+- Tests: `tests/arp/suspicious-binaries.test.ts`, `tests/arp/monitors/process-monitor.test.ts` and
+  `tests/arp/interceptors/process.test.ts`.
+
 ### Changed: the README's `init` section says what `init` needs from the server and how a bootstrap token is minted
 
 - "Register a first agent from the terminal" says that `init` needs an AIM server that has onboarding tokens, which
@@ -428,6 +451,51 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   signatures included; the other two are forms it does not write, an ML-DSA-65 signature alone and a statement with
   line breaks and its members in another order. The tests also send signed requests with fetch to a loopback server
   and check each statement against the request received, verifying the Ed25519 signature with `node:crypto`.
+
+### Fixed — ARP's filesystem monitor does not report ARP's own log writes, `scanText` names a wrong argument, `getStatus()` tells a monitor from an interceptor, and constructing ARP does not create the data directory (opena2a-org/arp-guard#178)
+
+- The filesystem monitor that `AgentRuntimeProtection` builds reports no change under the data directory (`dataDir`,
+  by default `.opena2a/arp` under the working directory) or, when the runtime twin is on, under the twin's log
+  directory, `.opena2a/arp` under the home directory. It also leaves out a change to a directory on the way to one of
+  them that did not exist when the monitor was constructed, such as `.opena2a` when `start()` creates `.opena2a/arp`.
+  Paths are compared with symbolic links resolved, as the watcher reports them: on macOS a working directory under
+  `/tmp` is reported under `/private/tmp`. On a build of the code before this change, with the default config,
+  `intelligence: { enabled: false }` and a new working directory under `/tmp`, one prompt injection scanned by a
+  `PromptInterceptor` on `arp.getEngine()` was followed by `filesystem` `info` events for `.opena2a/arp/events.jsonl`
+  and `.opena2a/arp/enforcement.jsonl`, a `critical` event `Cross-monitor correlation: events detected from
+  filesystem, prompt within 60s window`, and a second `kill`, for that correlation, that failed with `No PID to kill`.
+  In the new tests run on that build, with the process and network monitors off, the creation of `.opena2a` and of
+  `.opena2a/arp` was reported as well. After this change the same injection is followed by the two prompt events,
+  `PI-001` and `DE-001`, and by no `filesystem` event. A file created elsewhere in a watched directory is still
+  reported: in the new tests, `new-file.js` in the working directory at `info` and `wallet.json` at `high`.
+  `FilesystemMonitor` takes the directories to leave out as a fourth constructor argument, and
+  `RuntimeTwin.getLogDir()` returns the twin's log directory.
+- `scanText(text, patterns)` throws a `TypeError` naming the parameter when `text` is not a string, for example
+  `scanText(text, patterns): text must be a string (received null)`, or when `patterns` is not an array of
+  `ThreatPattern`, for example `scanText(text, patterns): patterns must be an array of ThreatPattern (received
+  undefined)`; an entry whose `pattern` has no `exec` method, such as a string, is named by its index, as in
+  `patterns[1] has no RegExp in pattern`. On the build before this change,
+  `scanText(null, ALL_PATTERNS)` and `scanText(undefined, ALL_PATTERNS)` threw `Cannot read properties of null
+  (reading 'length')` and `Cannot read properties of undefined (reading 'length')`,
+  `scanText('Ignore all previous instructions')` threw `patterns is not iterable`, `scanText('...', 'notarray')`
+  threw `Cannot read properties of undefined (reading 'exec')`, and `scanText(123, ALL_PATTERNS)` returned
+  `detected: false` with no match. `PromptInterceptor.scanInput` and `scanOutput` pass their argument to `scanText`:
+  given `123`, each returned `detected: false` with `scanned: true` before this change, and each now throws
+  `scanText(text, patterns): text must be a string (received number)`.
+- Each entry of `getStatus().monitors` carries `kind`: `monitor` for an entry built from `monitors` in the config,
+  `interceptor` for one built from `interceptors` or `aiLayer`. With `interceptors: { filesystem: { enabled: true } }`
+  and the process and network monitors off, the list after `start()` was
+  `[{"type":"filesystem","running":true},{"type":"filesystem","running":true}]`; it is now
+  `[{"type":"filesystem","kind":"monitor","running":true},{"type":"filesystem","kind":"interceptor","running":true}]`.
+  The `MonitorKind` type is exported from `@opena2a/aim-sdk/arp`.
+- Constructing `AgentRuntimeProtection` does not create the data directory: `start()` creates it, and `LocalLogger`
+  creates it, with any missing parent, on its first write when it is missing. On the build before this
+  change, `new AgentRuntimeProtection({ agentName: 'x', intelligence: { enabled: false } })` without `start()` created
+  `.opena2a` and `.opena2a/arp` under the working directory. In the new tests, constructing it with the default
+  monitors and data directory, with the runtime twin off and on, leaves the working directory and the home directory
+  empty.
+- Tests: `src/arp/monitors/filesystem.own-writes.test.ts`, `src/arp/patterns/ai-threats.arguments.test.ts`,
+  `tests/arp/status-kind-and-data-dir.test.ts`.
 
 ### Fixed — ARP log rotation rotates the file a symbolic link points to and counts only rotated copies, and `telemetryLog('0')` is refused (#762)
 
