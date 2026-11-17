@@ -22,7 +22,7 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   captured from opena2a-cli 0.10.13. The page says that `opena2a identity audit` lists the last 10 events when
   `--limit` is not given.
 
-### Security — the five A2A write routes that take the acting agent from the request body scope it to the caller's organization
+### Security — `POST /api/v1/a2a/skills`, `/attestations`, `/security/check` and `/sign` scope the acting agent they take from the request body to the caller's organization
 
 - `POST /api/v1/a2a/skills`, `POST /api/v1/a2a/attestations`, `POST /api/v1/a2a/security/check` and
   `POST /api/v1/a2a/sign` read the acting agent from the request body, or from the caller's agent credential when the
@@ -31,9 +31,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   answered `404 {"error":"not found"}`; on `/skills`, `/attestations` and `/sign` the last two were answered 500
   before. The attested agent of an attestation and the target agent of a security check are the requests' subjects
   and may belong to any organization.
-- `POST /api/v1/a2a/cards`, the fifth such route, already applied the same check, and its answers are unchanged: an
-  agent credential that names another agent is answered `403` with `agent_path_mismatch` before any lookup, and a
-  caller that names an agent outside its own organization is answered `404 {"error":"not found"}`.
+- `POST /api/v1/a2a/cards` already applied the same check, as `POST /api/v1/a2a/tasks` does, and the answers of
+  `/cards` are unchanged: an agent credential that names another agent is answered `403` with `agent_path_mismatch`
+  before any lookup, and a caller that names an agent outside its own organization is answered
+  `404 {"error":"not found"}`.
 - `CapabilityHandler.VerifyAction`, a request-body handler that no route served, is removed with its request type.
   `CapabilityService.VerifyAction` is unchanged.
 
