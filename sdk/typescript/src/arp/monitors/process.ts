@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
+import { isSuspiciousBinary } from '../suspicious-binaries';
 
 interface ProcessInfo {
   pid: number;
@@ -13,12 +14,26 @@ interface ProcessInfo {
   mem: number;
 }
 
-/** Binaries commonly used for exfiltration, lateral movement, or exploitation */
-const SUSPICIOUS_BINARIES = [
-  'curl', 'wget', 'nc', 'ncat', 'nmap', 'ssh', 'scp',
-  'python', 'python3', 'perl', 'ruby', 'base64',
-  'socat', 'telnet', 'ftp', 'rsync',
-];
+/** What the per-process checks have reported for one listed pid. */
+interface Reported {
+  /** Base names reported as `Suspicious binary executed`. */
+  binaries: Set<string>;
+  /** Users reported as `Child process running as root`. */
+  users: Set<string>;
+  /** Whether the pid is in a high CPU episode: `High CPU usage` was reported
+   *  and no poll since has read it at 90% or below. */
+  highCpu: boolean;
+}
+
+/**
+ * The `spawnSync` this module was loaded with. The process table is read
+ * through it rather than through `child_process.spawnSync` at each call, so a
+ * hook installed on that module later, as ProcessInterceptor.start() installs
+ * one, does not see the monitor's own `ps`. A call the agent makes to
+ * `spawnSync`, with the same arguments or any others, still goes through such
+ * a hook.
+ */
+const spawnSyncAtLoad = spawnSync;
 
 /** Arguments of the one `ps` call that reads the process table. `command=` is
  *  last because it holds spaces. Valid for both macOS and Linux (procps) `ps`. */
@@ -40,6 +55,9 @@ export class ProcessMonitor implements Monitor {
   private readonly engine: EventEngine;
   private readonly intervalMs: number;
   private knownPids = new Set<number>();
+  /** Per listed pid, what the checks reported; a pid's entry goes when the pid
+   *  leaves the listing, so a reused pid is checked afresh. */
+  private reported = new Map<number, Reported>();
   private agentPid?: number;
 
   constructor(engine: EventEngine, intervalMs: number = 5000) {
@@ -49,6 +67,7 @@ export class ProcessMonitor implements Monitor {
 
   async start(): Promise<void> {
     this.agentPid = process.pid; // Monitor children of the current (agent) process
+    this.reported = new Map();
     const table = this.readProcessTable();
     this.knownPids = new Set(table ? this.getDescendants(table).map((info) => info.pid) : []);
 
@@ -101,13 +120,21 @@ export class ProcessMonitor implements Monitor {
         }
       }
 
-      // Check for suspicious processes (binaries, high CPU, unexpected users)
+      // Check for suspicious processes (binaries, high CPU, unexpected users).
+      // Each check reports a process once, not at every poll that lists it.
       for (const info of current) {
         const pid = info.pid;
+        let reported = this.reported.get(pid);
+        if (!reported) {
+          reported = { binaries: new Set(), users: new Set(), highCpu: false };
+          this.reported.set(pid, reported);
+        }
 
-        // Suspicious binary detection
+        // Suspicious binary detection: once per pid and binary, so a pid that
+        // execs into another listed binary is reported for that one too
         const binaryName = path.basename(info.command.split(/\s+/)[0]);
-        if (SUSPICIOUS_BINARIES.includes(binaryName)) {
+        if (isSuspiciousBinary(binaryName) && !reported.binaries.has(binaryName)) {
+          reported.binaries.add(binaryName);
           this.engine.emit({
             source: 'process',
             category: 'violation',
@@ -117,19 +144,26 @@ export class ProcessMonitor implements Monitor {
           });
         }
 
-        // High CPU for extended period
+        // High CPU for extended period: once per episode, which ends at the
+        // first poll that reads the pid at 90% or below
         if (info.cpu > 90) {
-          this.engine.emit({
-            source: 'process',
-            category: 'anomaly',
-            severity: 'medium',
-            description: `High CPU usage: PID ${pid} at ${info.cpu}% — ${info.command.slice(0, 60)}`,
-            data: { pid, cpu: info.cpu, command: info.command },
-          });
+          if (!reported.highCpu) {
+            reported.highCpu = true;
+            this.engine.emit({
+              source: 'process',
+              category: 'anomaly',
+              severity: 'medium',
+              description: `High CPU usage: PID ${pid} at ${info.cpu}% — ${info.command.slice(0, 60)}`,
+              data: { pid, cpu: info.cpu, command: info.command },
+            });
+          }
+        } else {
+          reported.highCpu = false;
         }
 
-        // Running as different user
-        if (info.user === 'root' && os.userInfo().username !== 'root') {
+        // Running as different user: once per pid and user
+        if (info.user === 'root' && os.userInfo().username !== 'root' && !reported.users.has(info.user)) {
+          reported.users.add(info.user);
           this.engine.emit({
             source: 'process',
             category: 'violation',
@@ -138,6 +172,11 @@ export class ProcessMonitor implements Monitor {
             data: { pid, user: info.user, command: info.command },
           });
         }
+      }
+
+      // A pid that left the listing takes what was reported for it along
+      for (const pid of this.reported.keys()) {
+        if (!currentSet.has(pid)) this.reported.delete(pid);
       }
 
       this.knownPids = currentSet;
@@ -152,7 +191,7 @@ export class ProcessMonitor implements Monitor {
    *  spawnSync reports, the agent as parent and its exact command line.
    *  Returns null when `ps` fails. */
   private readProcessTable(): ProcessInfo[] | null {
-    const result = spawnSync('ps', LISTING_ARGS, {
+    const result = spawnSyncAtLoad('ps', LISTING_ARGS, {
       encoding: 'utf-8',
       timeout: 5000,
       // The command column makes the listing large; the 1 MiB default cuts it off on a busy host.

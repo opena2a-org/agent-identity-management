@@ -273,3 +273,119 @@ describe('ProcessMonitor checks on descendant rows', () => {
     ]);
   });
 });
+
+describe('ProcessMonitor reports each check once per process', () => {
+  /** How `ps` on macOS lists a child started as Homebrew's python3. */
+  const HOMEBREW_PYTHON =
+    '/opt/homebrew/Cellar/python@3.14/3.14.3_1/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python -c import time; time.sleep(30)';
+
+  function child(command: string, extra: Partial<Row> = {}): Row {
+    return { pid: 2001, ppid: AGENT, command, ...extra };
+  }
+
+  /** Scripts a start() read with no child and one read per entry of `polls`, then starts the monitor. */
+  async function script(polls: Array<Row[] | { fail: true }>): Promise<void> {
+    listings = [{ ownPid: 1001, rows: [] }, ...polls.map((p, i) => (Array.isArray(p) ? { ownPid: 1002 + i, rows: p } : p))];
+    await monitor.start();
+  }
+
+  /** As script(), then polls once for each entry of `polls`. */
+  async function pollEach(polls: Array<Row[] | { fail: true }>): Promise<void> {
+    await script(polls);
+    for (let i = 0; i < polls.length; i++) poll();
+  }
+
+  /** The descriptions of the events emitted so far that begin with `prefix`. */
+  function described(prefix: string): string[] {
+    return events.filter((e) => e.description.startsWith(prefix)).map((e) => e.description);
+  }
+
+  it('reports a python child that macOS lists as Python once over three polls', async () => {
+    const row = child(HOMEBREW_PYTHON);
+    await pollEach([[row], [row], [row]]);
+    expect(events.filter((e) => e.category !== 'normal')).toEqual([
+      {
+        source: 'process',
+        category: 'violation',
+        severity: 'high',
+        description: 'Suspicious binary executed: Python (PID 2001)',
+        data: { pid: 2001, binary: 'Python', command: HOMEBREW_PYTHON, user: 'agent' },
+      },
+    ]);
+  });
+
+  it('reports a child run as /usr/bin/python3.12 once over three polls', async () => {
+    const row = child('/usr/bin/python3.12 x.py');
+    await pollEach([[row], [row], [row]]);
+    expect(described('Suspicious binary executed')).toEqual(['Suspicious binary executed: python3.12 (PID 2001)']);
+  });
+
+  it('reports a perl child once over three polls, not at each poll', async () => {
+    const row = child('/usr/bin/perl -e sleep 30');
+    await pollEach([[row], [row], [row]]);
+    expect(described('Suspicious binary executed')).toEqual(['Suspicious binary executed: perl (PID 2001)']);
+  });
+
+  it('reports a pid whose command changes from sh to curl once, for curl', async () => {
+    await pollEach([[child('sh -c curl --version')], [child('curl --version')], [child('curl --version')]]);
+    expect(described('Suspicious binary executed')).toEqual(['Suspicious binary executed: curl (PID 2001)']);
+  });
+
+  it('reports a pid again when it execs into another listed binary', async () => {
+    await pollEach([[child('perl -e 1')], [child('curl --version')], [child('curl --version')]]);
+    expect(described('Suspicious binary executed')).toEqual([
+      'Suspicious binary executed: perl (PID 2001)',
+      'Suspicious binary executed: curl (PID 2001)',
+    ]);
+  });
+
+  it('reports a reused pid again on each check after the pid left the listing', async () => {
+    const row = child('perl -e 1', { user: 'root', cpu: 95 });
+    await pollEach([[row], [row], [], [row]]);
+    expect(events.filter((e) => e.category !== 'normal').map((e) => e.description)).toEqual([
+      'Suspicious binary executed: perl (PID 2001)',
+      'High CPU usage: PID 2001 at 95% — perl -e 1',
+      'Child process running as root: PID 2001 — perl -e 1',
+      'Suspicious binary executed: perl (PID 2001)',
+      'High CPU usage: PID 2001 at 95% — perl -e 1',
+      'Child process running as root: PID 2001 — perl -e 1',
+    ]);
+  });
+
+  it('does not report a pid again after a read of the process table fails', async () => {
+    const row = child('perl -e 1');
+    await pollEach([[row], { fail: true }, [row]]);
+    expect(described('Suspicious binary executed')).toEqual(['Suspicious binary executed: perl (PID 2001)']);
+  });
+
+  it('reports a child running as root once over three polls', async () => {
+    const row = child('sleep 30', { user: 'root' });
+    await pollEach([[row], [row], [row]]);
+    expect(described('Child process running as root')).toEqual([
+      'Child process running as root: PID 2001 — sleep 30',
+    ]);
+  });
+
+  it('reports high CPU once over three polls above 90%, and again after a poll at 90% or below', async () => {
+    await script([95, 97.5, 99, 90, 96].map((cpu) => [child('sleep 30', { cpu })]));
+    poll();
+    poll();
+    poll();
+    expect(described('High CPU usage')).toEqual(['High CPU usage: PID 2001 at 95% — sleep 30']);
+    poll();
+    poll();
+    expect(described('High CPU usage')).toEqual([
+      'High CPU usage: PID 2001 at 95% — sleep 30',
+      'High CPU usage: PID 2001 at 96% — sleep 30',
+    ]);
+  });
+
+  it('reports nothing but new children for sleep, python3-config, ncdu and sshd', async () => {
+    const rows = ['/bin/sleep 5', '/usr/bin/python3-config --prefix', 'ncdu /', '/usr/sbin/sshd -D'].map(
+      (command, i): Row => ({ pid: 2001 + i, ppid: AGENT, command }),
+    );
+    await pollEach([rows, rows, rows]);
+    expect(events.filter((e) => e.category !== 'normal')).toEqual([]);
+    expect(events).toHaveLength(4);
+  });
+});
