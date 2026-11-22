@@ -621,12 +621,14 @@ jobs:
       # defect green; ConsentGrantorOwnership was added with the RecordConsent
       # grantor check, where one of the four asserts two rejection responses are
       # indistinguishable, so a skip hides an enumeration oracle rather than a
-      # missing feature.
+      # missing feature. ReplacesRescaledPlaceholders was added because the MCP
+      # rescore integration test matched none of the other alternatives, so
+      # the step above ran it while this assertion never covered it.
       - name: Assert integration tests were not skipped
         run: |
           set -o pipefail
           go test -tags=integration -v \
-            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription|NakedTimestamp|CrossTenant|ConsentGrantorOwnership|A2AListAllTenantScope' \
+            -run 'Trigger|Backfill|OutOfScale|AgentRevocation|UpdateDoesNotWriteTrustScore|RoundTrip|SeededMCPPoliciesAreNotEnabled|RevocationList|AgentRepositoryList|NullDescription|NakedTimestamp|CrossTenant|ConsentGrantorOwnership|A2AListAllTenantScope|ReplacesRescaledPlaceholders' \
             ./internal/application/... ./internal/interfaces/http/middleware/... \
             ./internal/infrastructure/repository/... \
             ./internal/interfaces/http/handlers/... 2>&1 | tee /tmp/integration.log
