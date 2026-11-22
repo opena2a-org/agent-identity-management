@@ -31,10 +31,13 @@
 # Each line exempts its file from AST-CRED-003 only; every other check,
 # including the other credential checks, still reads the file. Delete a
 # line once the file stops matching.
+apps/backend/cmd/bootstrap/aim_backend_script_test.go:AST-CRED-003 # DATABASE_URL strings whose passwords are the made-up FAKE...PLACEHOLDER values the script is asserted to percent-decode
 apps/backend/cmd/server/admin_seed_log_test.go:AST-CRED-003 # alphabet-pattern passwords the test asserts are never logged
+apps/backend/cmd/server/database_conn_string_test.go:AST-CRED-003 # the made-up password "plain" the test's own recording Postgres receives over net.Pipe
 apps/backend/cmd/server/bootstrap_token_routes_test.go:AST-CRED-003 # bootstrap tokens the test mints in-process and posts to its own app
 apps/backend/cmd/server/metrics_wiring_test.go:AST-CRED-003 # sample bearer tokens built from digits and a-f
 apps/backend/cmd/server/migrations_renumbered_row_integration_test.go:AST-CRED-003 # a migration file name containing "key"
+apps/backend/cmd/server/quickstart_admin_seed_test.go:AST-CRED-003 # the made-up password "FAKEnoSpecial0" and .env lines the test writes to a temporary directory
 apps/backend/internal/application/agent_service_test.go:AST-CRED-003 # the placeholder string "encrypted-private-key"
 apps/backend/internal/application/api_key_service_test.go:AST-CRED-003 # the `aim_live_` prefix an API key is asserted to start with
 apps/backend/internal/application/device_auth_service_session_test.go:AST-CRED-003 # a labelled test-only JWT secret set with t.Setenv, and device codes minted in-process
