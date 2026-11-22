@@ -2,10 +2,12 @@ name: Docker Publish
 
 # Two kinds of run share this file, split at the job boundary:
 #
-#   verify-*  every main-branch push under the path filter and every manual
-#             dispatch. Read-only: `contents: read`, no secret, `push: false`,
-#             no outputs. It proves the two Dockerfiles still build with the
-#             publish build's inputs; it moves no tag on any registry.
+#   verify-*  every run: each main-branch push under the path filter, each
+#             manual dispatch, and each `platform-v*` tag push (no job-level
+#             `if`, so on a tag they run alongside build-*). Read-only:
+#             `contents: read`, no secret, `push: false`, no outputs. They
+#             prove the two Dockerfiles still build with the publish build's
+#             inputs; they move no tag on any registry.
 #   build-*   a push of a `platform-v*` tag only (job-level `if`). These keep
 #             the write permissions, the registry logins, cosign and the
 #             provenance attestation, build the same inputs the verify jobs
