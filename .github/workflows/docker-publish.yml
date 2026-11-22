@@ -18,7 +18,7 @@ name: Docker Publish
 #
 # A merge is therefore no longer a publish; `edge` is not computed anywhere.
 # The cell sdk/typescript/tests/docker-publish-release-only.test.ts holds this
-# shape (QGF-273).
+# shape.
 
 on:
   push:
