@@ -1750,7 +1750,8 @@ func (h *AgentHandler) GetAgentByIdentifier(c fiber.Ctx) error {
 	}
 	capabilities, err := h.capabilityService.GetAgentCapabilities(c.Context(), agent.ID, true)
 	if err != nil {
-		capabilities = []*domain.AgentCapability{}
+		// An empty list in its place would say the agent holds no grant.
+		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 	// Return agent details (excluding sensitive private key)
 	return c.JSON(fiber.Map{

@@ -176,3 +176,44 @@ func TestAgentActResponsesLeaveCapabilitiesOutWhenGrantsCannotBeRead(t *testing.
 		})
 	}
 }
+
+// When the grant table cannot be read, GET /sdk-api/agents/:identifier fails
+// instead of serving an empty capability list, by ID and by name alike.
+func TestGetAgentByIdentifierFailsWhenGrantsCannotBeRead(t *testing.T) {
+	agent := newLifecycleAgent(domain.AgentStatusVerified)
+	capabilities := &MockCapabilityServiceImpl{
+		GetAgentCapabilitiesFunc: func(context.Context, uuid.UUID, bool) ([]*domain.AgentCapability, error) {
+			return nil, errors.New("agent_capabilities: connection reset")
+		},
+	}
+	agents := lifecycleService(agent)
+	agents.GetAgentByNameFunc = func(context.Context, uuid.UUID, string) (*domain.Agent, error) {
+		return agent, nil
+	}
+	handler := NewAgentHandlerWithInterfaces(
+		agents,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		capabilities,
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+	app := createTestAppWithAuth(handler, agent.OrganizationID, uuid.New())
+	app.Get("/sdk-api/agents/:identifier", handler.GetAgentByIdentifier)
+
+	for _, identifier := range []string{agent.ID.String(), "some-agent-name"} {
+		resp, err := app.Test(httptest.NewRequest("GET", "/sdk-api/agents/"+identifier, nil))
+		require.NoError(t, err)
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+		resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode, identifier)
+		assert.Equal(t, map[string]any{"error": ServerErrorMessage}, body, identifier)
+	}
+}
