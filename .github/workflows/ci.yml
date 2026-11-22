@@ -59,6 +59,19 @@ jobs:
           # disables that integration so this job fails on workflow-level defects only and
           # does not become a shell-style gate by accident.
           ./actionlint -shellcheck= -color
+      # No job that can run for a release tag or a publish may build from a cache another
+      # run wrote (scripts/lint-release-path-cache.py). The self-test runs first so a lint
+      # that has stopped refusing its red fixtures cannot report the workflows clean.
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install PyYAML from the hash-pinned requirements
+        run: |
+          python -m pip install --require-hashes --only-binary :all: --no-deps -r scripts/requirements-ci-lint.txt
+      - name: The release-path cache lint refuses every red fixture and passes every green one
+        run: python scripts/lint-release-path-cache.py --self-test
+      - name: No job on the release path uses a run-written cache
+        run: python scripts/lint-release-path-cache.py
 
   # AST lint that catches HTTP handlers reading c.Params("id"|"agent_id")
   # without invoking the tenant-scoping helper (LoadOwned or
