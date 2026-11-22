@@ -1,0 +1,28 @@
+# Refused: the only release run is the tag push, and the lint cannot decide
+# `inputs.publish` for it (called from a tag push, this workflow carries the
+# caller's tag and inputs). A condition it cannot decide keeps the job on the
+# release path for the tag run too, not only for a manual dispatch.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'platform-v*'
+  workflow_call:
+    inputs:
+      publish:
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.npm
+          key: npm
