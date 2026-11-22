@@ -556,6 +556,7 @@ func (s *SecurityPolicyService) suspendAgentForLowTrustScore(ctx context.Context
 	if !write {
 		return nil
 	}
+	from := agent.Status
 	agent.Status = to
 	if s.transitions == nil {
 		return s.agentRepo.Update(agent)
@@ -565,7 +566,7 @@ func (s *SecurityPolicyService) suspendAgentForLowTrustScore(ctx context.Context
 	return recordAgentChange(transition.WithActor(ctx, transition.System()), s.transitions, agent,
 		transition.TriggerAgentSuspended, transition.System(),
 		func(ctx context.Context, tx *sql.Tx) error {
-			return repository.SetAgentStatusTx(ctx, tx, agent.ID, to, nil)
+			return repository.SetAgentStatusTx(ctx, tx, agent.ID, from, to, nil)
 		})
 }
 
