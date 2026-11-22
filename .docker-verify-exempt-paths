@@ -1,5 +1,10 @@
 # Paths exempt from the local build-and-swap docker verification gate.
 #
+# The local verification script (docker-verify.sh) passes only
+# `-f docker-compose.yml` to docker compose, so docker-compose.override.yml is
+# deliberately NOT used. A verification run therefore never sees local override
+# settings, and nothing in an override file can change what the gate observes.
+#
 # One path prefix or glob per line. `**` is the only recursive form; a single
 # `*` does not cross a `/`.
 #
