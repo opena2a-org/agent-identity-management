@@ -187,46 +187,50 @@ func TestInsecureDevSecretDigests_MatchKnownPlaintexts(t *testing.T) {
 }
 
 // TestConfigSource_HasNoPlaintextDevSecrets closes defect #36 directly: walks
-// the AST of config.go and asserts no string literal decrypts to one of the
-// known dev secrets. Fails on master because lines 13-20 of config.go (pre-
-// fix) carried the plaintexts inline. Passes after the fix replaces them with
+// the AST of config.go and dev_secret_digests.go and asserts no string literal
+// is one of the known dev secrets. Failed before the fix because config.go
+// carried the plaintexts inline. Passes after the fix replaces them with
 // SHA-256 hex digests, which do not match the plaintext set.
+// dev_secret_digests.go is exempt from HackMyAgent's AST-CRED-003 in
+// .hmaignore, so this test is what keeps a plaintext out of it.
 func TestConfigSource_HasNoPlaintextDevSecrets(t *testing.T) {
 	t.Parallel()
-
-	src, err := os.ReadFile("config.go")
-	if err != nil {
-		t.Fatalf("read config.go: %v", err)
-	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "config.go", src, parser.ParseComments)
-	if err != nil {
-		t.Fatalf("parse config.go: %v", err)
-	}
 
 	banned := make(map[string]struct{}, len(knownDevSecrets))
 	for _, s := range knownDevSecrets {
 		banned[s] = struct{}{}
 	}
 
-	ast.Inspect(file, func(n ast.Node) bool {
-		lit, ok := n.(*ast.BasicLit)
-		if !ok || lit.Kind != token.STRING {
+	for _, name := range []string{"config.go", "dev_secret_digests.go"} {
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+
+		fset := token.NewFileSet()
+		file, err := parser.ParseFile(fset, name, src, parser.ParseComments)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+
+		ast.Inspect(file, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			// lit.Value includes the surrounding quotes.
+			raw := lit.Value
+			if len(raw) < 2 {
+				return true
+			}
+			unquoted := raw[1 : len(raw)-1]
+			if _, isBanned := banned[unquoted]; isBanned {
+				pos := fset.Position(lit.Pos())
+				t.Errorf("%s:%d carries plaintext dev secret %q in shipped source; replace with a SHA-256 digest in insecureDevSecretDigests", name, pos.Line, unquoted)
+			}
 			return true
-		}
-		// lit.Value includes the surrounding quotes.
-		raw := lit.Value
-		if len(raw) < 2 {
-			return true
-		}
-		unquoted := raw[1 : len(raw)-1]
-		if _, isBanned := banned[unquoted]; isBanned {
-			pos := fset.Position(lit.Pos())
-			t.Errorf("config.go:%d carries plaintext dev secret %q in shipped source; replace with a SHA-256 digest in insecureDevSecretDigests", pos.Line, unquoted)
-		}
-		return true
-	})
+		})
+	}
 }
 
 // TestLoad_MetricsAuthToken pins the METRICS_AUTH_TOKEN contract for issue #348:

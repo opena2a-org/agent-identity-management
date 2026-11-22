@@ -43,6 +43,14 @@ apps/backend/internal/application/api_key_service_test.go:AST-CRED-003 # the `ai
 apps/backend/internal/application/device_auth_service_session_test.go:AST-CRED-003 # a labelled test-only JWT secret set with t.Setenv, and device codes minted in-process
 apps/backend/internal/application/device_auth_service_single_use_test.go:AST-CRED-003 # device codes minted in-process by the shared test helper
 
+# The server's blocklist of known development secrets and template
+# placeholders, such as the JWT_SECRET placeholder in .env.example. The
+# list stores only SHA-256 digests; AST-CRED-003 reads a 64-character hex
+# string under a name containing "secret" as a hardcoded secret. The list
+# lives in its own file so config.go stays under every check, and
+# config_test.go fails if a plaintext from the list appears in either file.
+apps/backend/internal/config/dev_secret_digests.go:AST-CRED-003 # SHA-256 digests of dev secrets the server refuses; no plaintext
+
 # A local smoke script a developer runs against a throwaway Postgres
 # container (DOCKERINJ-001, "docker exec with variable interpolation").
 # Its `docker exec` takes the container name and password from the
