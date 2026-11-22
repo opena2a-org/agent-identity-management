@@ -235,9 +235,13 @@ export function TrustScoreBreakdown({ agentId, userRole = "viewer", onTrustScore
     );
   }
 
-  // A 200 answer without a factors object has nothing to break down; show the empty state
-  // instead of letting the maps below throw and take the whole agent page down.
-  if (error || !breakdown?.factors) {
+  // A 200 answer without a factors object (or with an empty one) has nothing to break down;
+  // show the empty state instead of letting the maps below throw and take the whole agent page down.
+  const hasFactors =
+    !!breakdown?.factors &&
+    typeof breakdown.factors === 'object' &&
+    Object.keys(breakdown.factors).length > 0;
+  if (error || !breakdown || !hasFactors) {
     return (
       <Card>
         <CardHeader>
