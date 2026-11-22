@@ -1,0 +1,34 @@
+name: Token literal lint
+
+# Runs scripts/lint-token-literals.mjs over every tracked file, and the
+# node:test cells that hold the scanner to its contract. The scanner fails
+# closed (exit 2 when its planted control is not caught), and the cells
+# include one asserting this tree is clean under the committed allowlist.
+# Unconditional (no path filter): a token can land in any file, and the run
+# takes seconds. Node built-ins only, so no install step.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: lint-token-literals-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-token-literals:
+    name: Token literal lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: No token-shaped literal in a tracked file
+        run: node scripts/lint-token-literals.mjs
+      - name: The scanner holds its contract
+        run: node --test scripts/test-lint-token-literals.mjs

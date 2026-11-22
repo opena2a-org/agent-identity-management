@@ -1,0 +1,35 @@
+name: Public surface lint
+
+# Runs scripts/lint-public-surface.mjs over every tracked file, and the
+# node:test cells that hold the scanner to its contract. The scanner fails
+# closed (exit 2 when a class does not catch its own canary). Only the
+# built-in class runs here: extra classes are kept outside this repository
+# and are not supplied to CI. Unconditional (no path filter): a home directory
+# path can land in any file, and the run takes seconds. Node built-ins only,
+# so no install step.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: lint-public-surface-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint-public-surface:
+    name: Public surface lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+      - name: No reference a public reader cannot follow
+        run: node scripts/lint-public-surface.mjs
+      - name: The scanner holds its contract
+        run: node --test scripts/test-lint-public-surface.mjs
