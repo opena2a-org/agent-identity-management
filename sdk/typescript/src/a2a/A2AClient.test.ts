@@ -729,6 +729,40 @@ describe('A2AClient', () => {
       ]);
     });
 
+    it('getTaskHistory matches the target agent ID case-insensitively', async () => {
+      setMockResponse({
+        tasks: [
+          {
+            id: 'row-1',
+            externalTaskId: 'ext-1',
+            contextId: 'code-review',
+            clientAgentId: 'test-agent-id',
+            remoteAgentId: TARGET,
+            state: 'COMPLETED',
+            createdAt: '2026-10-01T12:00:00Z',
+          },
+          {
+            id: 'row-2',
+            externalTaskId: 'ext-2',
+            contextId: 'unrelated',
+            clientAgentId: 'test-agent-id',
+            remoteAgentId: OTHER,
+            state: 'FAILED',
+            createdAt: '2026-10-01T10:00:00Z',
+          },
+        ],
+        total: 2,
+        limit: 50,
+        offset: 0,
+      });
+
+      const result = await client.getTaskHistory(TARGET.toUpperCase());
+
+      expect(result).toEqual([
+        { id: 'row-1', taskId: 'ext-1', taskType: 'code-review', status: 'COMPLETED', createdAt: '2026-10-01T12:00:00Z' },
+      ]);
+    });
+
     it('getTaskHistory returns an empty list when the server returns no tasks', async () => {
       setMockResponse({ tasks: null, total: 0, limit: 50, offset: 0 });
 

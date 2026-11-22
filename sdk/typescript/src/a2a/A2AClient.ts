@@ -493,8 +493,10 @@ export class A2AClient {
     }>(`${A2A_BASE_PATH}/tasks?agentId=${encodeURIComponent(targetAgentId)}&limit=${limit}`);
     // The server drops an agentId it cannot parse and lists every task instead,
     // so keep only the tasks the target agent took part in.
+    // Agent IDs are UUIDs, which are case-insensitive, so compare them that way.
+    const target = targetAgentId.toLowerCase();
     return (response.tasks ?? [])
-      .filter((task) => task.clientAgentId === targetAgentId || task.remoteAgentId === targetAgentId)
+      .filter((task) => task.clientAgentId?.toLowerCase() === target || task.remoteAgentId?.toLowerCase() === target)
       .map((task) => ({
         id: task.id,
         taskId: task.externalTaskId,
