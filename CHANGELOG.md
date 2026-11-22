@@ -4849,6 +4849,10 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
   one argument with no `sh -c`. `.hmaignore` names each of the nine files with its reason as a
   `<path>:<CHECK-ID> # <reason>` rule, and the same scan now reports no findings (score 100). Each line exempts its
   file from the one check it names; every other check still reads the file.
+- `.hmaignore` also names three more Go test files that `hackmyagent@0.33.2 secure . --ci` reported for AST-CRED-003:
+  `apps/backend/cmd/bootstrap/aim_backend_script_test.go`, `apps/backend/cmd/server/database_conn_string_test.go` and
+  `apps/backend/cmd/server/quickstart_admin_seed_test.go`. Their passwords are made-up values for the test, and each
+  line exempts its file from AST-CRED-003 only.
 - The header of `.hmaignore` also documents the `expires:YYYY-MM-DD` attribute a rule can end in. The rule applies
   through that UTC day; from the next day the scan lists the line under `hmaignore.errors`, stops applying it and
   reports its findings again.
