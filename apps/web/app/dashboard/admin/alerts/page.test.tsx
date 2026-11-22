@@ -104,6 +104,33 @@ describe("AlertsPage alert list", () => {
     expect(cardOf(once.title).textContent).not.toContain("Seen");
   });
 
+  it("shows the repeat count without a last-seen time when the alert has none", async () => {
+    const noLastSeen = {
+      ...baseAlert,
+      id: "alert-no-last-seen",
+      title: "Repeated, no last seen",
+      occurrenceCount: 2,
+      lastSeenAt: null,
+    };
+    serveAlerts([noLastSeen]);
+    render(<AlertsPage />);
+
+    const seen = await screen.findByText(/Seen 2 times/);
+    expect(seen.textContent).toBe("Seen 2 times");
+    expect(cardOf(noLastSeen.title).contains(seen)).toBe(true);
+  });
+
+  it("shows no repeat count when the alert carries no occurrence count", async () => {
+    const uncounted = { ...baseAlert, id: "alert-uncounted", title: "No count field" };
+    serveAlerts([uncounted]);
+    render(<AlertsPage />);
+
+    await screen.findByText(uncounted.title);
+    const card = cardOf(uncounted.title);
+    expect(card.textContent).not.toContain("Seen");
+    expect(card.textContent).toContain(formatDateTime(baseAlert.createdAt));
+  });
+
   it("wraps the row that holds the repeat count", async () => {
     serveAlerts([repeated]);
     render(<AlertsPage />);
