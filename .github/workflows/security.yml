@@ -395,10 +395,10 @@ jobs:
           cache-dependency-path: apps/backend/go.sum
 
       - name: Run golangci-lint (full set, non-blocking)
-        # NON-BLOCKING: staticcheck/unused carry a pre-existing 166-finding backlog.
+        # NON-BLOCKING: staticcheck/unused carry a pre-existing backlog of findings.
         # Findings post as inline PR annotations so they stay visible; this job is made
         # blocking once the backlog reaches zero. Tracked in
-        # todo/2026-06-26-aim-golangci-lint-silently-disabled.md.
+        # https://github.com/opena2a-org/agent-identity-management/issues/713.
         uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         continue-on-error: true
         with:
