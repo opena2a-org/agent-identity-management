@@ -473,6 +473,28 @@ func TestEmergencyStatus_ReadsTheExtension(t *testing.T) {
 	assert.Equal(t, EmergencyStatusRevoked, emergencyStatus(d, now))
 }
 
+func TestApprovalStatus_ReadsTheClock(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	cases := map[string]struct {
+		decision  string
+		expiresAt time.Time
+		want      string
+	}{
+		"pending before its expiry":         {"", now.Add(time.Nanosecond), ApprovalStatusPending},
+		"expired at the evaluation instant": {"", now, ApprovalStatusExpired},
+		"expired after its expiry":          {"", now.Add(-time.Second), ApprovalStatusExpired},
+		"approved is kept at the expiry":    {ApprovalStatusApproved, now, ApprovalStatusApproved},
+		"denied is kept at the expiry":      {ApprovalStatusDenied, now, ApprovalStatusDenied},
+		"another decision reads as expired": {"WITHDRAWN", now.Add(time.Hour), ApprovalStatusExpired},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			a := &ApprovalRequest{ApproverDecision: tc.decision, ExpiresAt: tc.expiresAt}
+			assert.Equal(t, tc.want, approvalStatus(a, now))
+		})
+	}
+}
+
 func TestCampaignStatus_ReadsTheClock(t *testing.T) {
 	now := time.Now().UTC()
 	c := &CertificationCampaign{StartsAt: now, ClosesAt: now.Add(time.Hour)}
