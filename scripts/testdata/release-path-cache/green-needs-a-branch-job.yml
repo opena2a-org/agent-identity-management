@@ -1,0 +1,31 @@
+# Passes: `report` has no `if:` of its own and no status function, so it runs only
+# when every job it needs runs, and the job it needs is branch-only. The needs are
+# written as a list.
+name: fixture
+
+on:
+  push:
+    tags:
+      - 'platform-v*'
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+  report:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.npm
+          key: npm

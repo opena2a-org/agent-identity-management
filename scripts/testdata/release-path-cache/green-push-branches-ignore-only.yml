@@ -1,0 +1,21 @@
+# Passes: a push filtered only by `branches-ignore` names branches and no tags, so
+# it never runs for a tag.
+name: fixture
+
+on:
+  push:
+    branches-ignore:
+      - 'dependabot/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0000000000000000000000000000000000000000 # fixture
+        with:
+          path: ~/.npm
+          key: npm
