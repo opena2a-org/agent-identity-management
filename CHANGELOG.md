@@ -5586,7 +5586,7 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
 - Tests: `forwarder_test.go`, `splunk_test.go`, `audit_test.go` and `env_test.go` (SIEM adapters),
   `audit_log_on_create_test.go` (audit log repository) and `siem_forwarding_test.go` (server).
 
-### Fixed — `POST /api/v1/a2a/verify` is mounted once, and another method on the path that reaches the routes is answered 405 (#652)
+### Fixed — `POST /api/v1/a2a/verify` is mounted once, and a GET, PUT, PATCH or DELETE on the path that reaches the routes is answered 405 (#652)
 
 - `POST /api/v1/a2a/verify` was mounted twice: once without authentication, and again inside the authenticated
   `/a2a` group. The first answers every POST that reaches the routes, so the second was never reached; it is
