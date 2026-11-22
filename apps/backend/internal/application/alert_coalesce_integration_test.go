@@ -58,10 +58,11 @@ func seedAlertCoalesceOrg(t *testing.T, db *sql.DB) uuid.UUID {
 	return orgID
 }
 
-// Alerts with one dedupe key arriving together in an organization with no open
-// alert for that key are stored as one alert that counts each of them. Without
-// a guard each CreateAlert call finds no open alert and each inserts one, and
-// later repeats coalesce onto the newest row only.
+// CreateAlert calls with one dedupe key running concurrently in an organization
+// with no open alert for that key store one alert that counts each of them.
+// CreateCoalesced serializes them with a transaction-scoped advisory lock on the
+// organization and key. Without it each call finds no open alert and inserts
+// its own, and later repeats are counted on the newest of those rows only.
 func TestAlertCoalesce_ConcurrentFirstOccurrencesCreateOneAlert(t *testing.T) {
 	db := openAlertCoalesceTestDB(t)
 	db.SetMaxOpenConns(32)
@@ -99,8 +100,10 @@ func TestAlertCoalesce_ConcurrentFirstOccurrencesCreateOneAlert(t *testing.T) {
 	}
 }
 
-// GET /api/v1/security/alerts serializes the alerts GetAlerts returns. A repeat
-// coalesced onto an alert is visible there as occurrenceCount and lastSeenAt.
+// GET /api/v1/security/alerts and GET /api/v1/admin/alerts both return the
+// alerts GetAlerts returns, serialized as JSON in the "alerts" field of the
+// response. A repeat counted on an alert is visible there as occurrenceCount
+// and lastSeenAt.
 func TestAlertCoalesce_RepeatCountIsInTheAlertsResponse(t *testing.T) {
 	db := openAlertCoalesceTestDB(t)
 	service := NewAlertService(repository.NewAlertRepository(db), nil, nil)
