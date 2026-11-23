@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: webhook create and update name the refused address class when they refuse a URL
+
+- `POST /api/v1/webhooks` and `PUT /api/v1/webhooks/:id` answer a URL whose host is, or resolves to, an address the
+  egress policy refuses with `400 {"error":"url must be a public http or https URL (refused address class: <class>)"}`,
+  where `<class>` is `loopback`, `private`, `link-local` and so on. The answer names the class, never the address. Other
+  refused URLs are still answered `400 {"error":"url must be a public http or https URL"}`.
+- A URL whose host is `localhost` is refused as the `loopback` class (`destination address is not allowed (loopback)`)
+  rather than as an internal or metadata endpoint, wherever the server checks a URL with `ValidateExternalURL`.
+
 ### Fixed: the audit use case says the local audit log has no hash chain, and its sample outputs are what opena2a-cli prints
 
 - `docs/use-cases/audit-agent-actions.md` no longer says that `~/.opena2a/aim-core/audit.jsonl` is linked by a SHA-256

@@ -15,6 +15,7 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/middleware"
 )
 
@@ -75,17 +76,30 @@ func (h *WebhookHandler) getAuditService() AuditServicer {
 // that stays in the server log.
 const webhookURLRefusedMessage = "url must be a public http or https URL"
 
+// webhookURLRefusedClassMessage answers a webhook URL whose host is or resolves
+// to an address the egress policy refuses. It names the class of the address
+// (loopback, private, link-local, ...), never the address itself.
+func webhookURLRefusedClassMessage(class string) string {
+	return webhookURLRefusedMessage + " (refused address class: " + class + ")"
+}
+
 // respondWebhookServiceError answers a webhook create or update error. A URL
 // the server refuses is a problem with the caller's input, so it is answered
-// with 400 and a fixed reason, and the service's reason stays in the server
-// log. An event or secret the service refuses is answered with 400 and the
-// service's reason, which names the event or the secret's length. Any other
-// error is answered by respondServerError.
+// with 400 and the service's reason stays in the server log. The answer names
+// the refused address class when the egress policy refused the URL's address,
+// and is the fixed reason otherwise. An event or secret the service refuses is
+// answered with 400 and the service's reason, which names the event or the
+// secret's length. Any other error is answered by respondServerError.
 func respondWebhookServiceError(c fiber.Ctx, err error) error {
 	if errors.Is(err, application.ErrWebhookURLRefused) {
 		log.Printf("webhook: URL refused: %v", err)
+		message := webhookURLRefusedMessage
+		var refused *utils.EgressRefusedError
+		if errors.As(err, &refused) {
+			message = webhookURLRefusedClassMessage(refused.Class)
+		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": webhookURLRefusedMessage,
+			"error": message,
 		})
 	}
 	var invalid *application.WebhookRequestError

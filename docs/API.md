@@ -1197,7 +1197,8 @@ A create or update the server refuses is answered `400`:
 | `{"error":"unknown field: headers"}` | The body has a key the route does not take (`unknown fields: a, b` for several). Keys are matched exactly, case included. |
 | `{"error":"unsupported event: auth.failed"}` | An event name that is not one of those in [Webhook Events](#webhook-events). |
 | `{"error":"secret must be at least 32 characters"}` | `secret` is shorter than 32 characters; one longer than 255 is answered `secret must be at most 255 characters`. |
-| `{"error":"url must be a public http or https URL"}` | The URL does not parse, is not `http` or `https`, has no host, names a host that does not exist, or resolves to an address the server does not send to, such as a loopback or private one. |
+| `{"error":"url must be a public http or https URL (refused address class: loopback)"}` | The URL's host is, or resolves to, an address the server does not send to. The answer names the class of the address (`loopback`, `private`, `link-local`, `multicast` and so on), never the address. `localhost` is answered with the `loopback` class. |
+| `{"error":"url must be a public http or https URL"}` | The URL does not parse, is not `http` or `https`, has no host, names a host that does not exist, or names a cloud metadata host. |
 
 ### PUT /api/v1/webhooks/:id
 

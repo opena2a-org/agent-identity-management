@@ -37,10 +37,15 @@ func ValidateExternalURL(rawURL string) error {
 		return fmt.Errorf("URL has no hostname")
 	}
 
-	// Block common internal hostnames
+	// localhost is refused before it is looked up, whatever the resolver
+	// would answer for it, and the refusal names its class as the lookup's would.
 	lowerHost := strings.ToLower(hostname)
+	if lowerHost == "localhost" || lowerHost == "localhost." {
+		return &EgressRefusedError{Class: "loopback"}
+	}
+
+	// Block common internal hostnames
 	blockedHosts := []string{
-		"localhost",
 		"metadata.google.internal", // GCP metadata
 		"169.254.169.254",          // AWS/Azure/GCP metadata endpoint
 		"metadata.google.internal.",
