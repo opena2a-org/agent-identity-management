@@ -7,9 +7,10 @@ AC2: detection output is a telemetry PRODUCER only. It
 never enters ``verify_action`` or any PDP deny path, and the verification
 modules do not import the seam.
 
-AC3: the port stops at stage 1. No guard-socket client (stage 2) and no
-interceptor patching of ``builtins`` / ``subprocess`` / ``socket`` (stage 3),
-and the stage boundary is stated in the package's own docstring.
+AC3: the seam itself stays at stage 1. No guard-socket client (stage 2) in it,
+and the interceptor patching of ``builtins`` / ``subprocess`` / ``socket``
+(stage 3) lives only in ``aim_sdk.arp.interceptors``, not in the seam or any
+other module. The stage boundary is stated in the package's own docstring.
 
 AC4: the seam is stdlib-only, matching the TS module's zero-runtime-dep posture.
 """
@@ -26,6 +27,7 @@ from aim_sdk.telemetry import CorrelationJoiner, DetectionInput, IntentInput
 
 AIM_SDK_DIR = Path(seam.__file__).resolve().parent.parent   # .../aim_sdk
 SEAM_DIR = AIM_SDK_DIR / "telemetry"
+ARP_INTERCEPTORS = AIM_SDK_DIR / "arp" / "interceptors.py"
 
 #: The modules that decide allow/deny. Nothing here may know the seam exists.
 VERIFICATION_MODULES = ["enforcement.py", "decision.py"]
@@ -235,7 +237,7 @@ def test_detection_output_cannot_change_a_verdict():
 
 
 # --------------------------------------------------------------------------- #
-# AC3 -- stages 2 and 3 are not begun.
+# AC3 -- the seam stays at stage 1; stage 3 patching is confined to aim_sdk.arp.
 # --------------------------------------------------------------------------- #
 def test_stage_boundary_is_documented():
     doc = (seam.__doc__ or "").lower()
@@ -265,17 +267,21 @@ def test_no_guard_socket_client_in_the_seam():
             ):
                 pytest.fail(f"{path.name}: socket client is stage 2")
 
-    # And no stage-2/stage-3 module has appeared in the SDK.
-    assert not (AIM_SDK_DIR / "arp").exists()
+    # No stage-2 module has appeared in the SDK, and the stage-3 interceptors
+    # live in the ARP engine package only.
     for path in _python_files(AIM_SDK_DIR):
         assert "guard" not in path.name.lower()
-        assert "interceptor" not in path.name.lower()
+        if "interceptor" in path.name.lower():
+            assert path == ARP_INTERCEPTORS, f"{path}: interceptors belong in aim_sdk/arp"
 
 
 def test_no_interceptor_patching_of_builtins_subprocess_or_socket():
-    patched_modules = {"builtins", "subprocess", "socket", "os"}
+    """Only aim_sdk/arp/interceptors.py patches Python's primitives."""
+    patched_modules = {"builtins", "subprocess", "socket", "os", "io"}
 
     for path in _python_files(AIM_SDK_DIR):
+        if path == ARP_INTERCEPTORS:
+            continue
         for node in ast.walk(_parse(path)):
             # `builtins.open = ...` / `subprocess.Popen = ...`
             if isinstance(node, ast.Assign):
@@ -287,7 +293,7 @@ def test_no_interceptor_patching_of_builtins_subprocess_or_socket():
                     ):
                         pytest.fail(
                             f"{path.name}: patches {target.value.id}.{target.attr} "
-                            "-- interceptors are stage 3"
+                            "-- only aim_sdk/arp/interceptors.py patches primitives"
                         )
             # `setattr(builtins, "open", ...)`
             if (
@@ -300,7 +306,7 @@ def test_no_interceptor_patching_of_builtins_subprocess_or_socket():
             ):
                 pytest.fail(
                     f"{path.name}: setattr on {node.args[0].id} "
-                    "-- interceptors are stage 3"
+                    "-- only aim_sdk/arp/interceptors.py patches primitives"
                 )
 
 

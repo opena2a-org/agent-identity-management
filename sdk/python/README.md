@@ -348,6 +348,39 @@ reference in `sdk/typescript/src/telemetry` so both SDKs write the same
 engine port: event engine, runtime twin, coordinator, monitors, interceptors)
 are not part of this package. See the module docstring for the boundary.
 
+### Runtime protection engine (`aim_sdk.arp`)
+
+Stage 3 of the port is its own package, `aim_sdk.arp`, mirroring
+`sdk/typescript/src/arp`: the event engine (L0 rules and cross-monitor
+correlation), the runtime twin (L1 behavioral scoring), the intelligence
+coordinator (comply gate, behavioral risk fusion, statistical anomaly scoring,
+and L2 through an adapter object you pass in), the process, network and
+filesystem monitors, and interceptors that patch `builtins.open`, `subprocess`
+and `socket`:
+
+```python
+from aim_sdk.arp import EventEngine, FilesystemInterceptor, NetworkInterceptor, ProcessInterceptor
+
+engine = EventEngine()
+engine.on_event(lambda event: print(event.severity, event.description))
+hooks = [ProcessInterceptor(engine), NetworkInterceptor(engine), FilesystemInterceptor(engine)]
+for hook in hooks:
+    hook.start()
+# ... the agent runs; every open/subprocess/connect is reported before it proceeds ...
+for hook in hooks:
+    hook.stop()  # puts the original functions back
+```
+
+An interceptor only observes: the call it reports proceeds unchanged, and an
+error inside ARP never reaches the caller. ARP is a telemetry producer only, so
+nothing it detects enters `verify_action` or any allow/deny path. No other
+`aim_sdk` module imports it (including `aim_sdk.enforcement` and
+`aim_sdk.decision`), it uses only the standard library, and it makes no network
+call of its own. The TS fleet-gradient upload and the vendor L2 adapters are not
+ported. A behavioral suite shared with the TypeScript SDK
+(`tests/fixtures/ts_arp/behavioral-cases.json`) fails on either side when the
+two implementations stop giving the same output.
+
 ## Manual mode (no OAuth)
 
 For CI environments or pre-configured credentials, skip `aim-sdk login` and pass an API key.

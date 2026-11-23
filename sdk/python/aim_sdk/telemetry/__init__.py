@@ -17,8 +17,7 @@ input, ported schema-identical to the TypeScript reference
 (``sdk/typescript/src/telemetry``) so both SDKs feed one local log format
 (``~/.opena2a/correlated-events.jsonl``).
 
-The two later stages are deliberately NOT begun here, and neither exists in this
-SDK -- each stage gates the next:
+The two later stages are NOT part of this package:
 
 * **Stage 2 -- the guard-socket client.** JSON-lines over AF_UNIX to the
   NanoMind-Guard daemon: null on socket-absent (graceful unavailability, never a
@@ -26,7 +25,8 @@ SDK -- each stage gates the next:
 * **Stage 3 -- the engine port.** Event engine (L0), runtime twin (L1),
   coordinator (L2), monitors, and the interceptors that patch Python primitives
   (``builtins.open``, ``subprocess``, ``socket``) -- shipped WITH the behavioral
-  suite that guards against drift from the TS reference.
+  suite that guards against drift from the TS reference. It lives in its own
+  package, ``aim_sdk.arp``, which this seam does not import.
 
 ARP's contract holds at every stage, and this seam is a telemetry PRODUCER only:
 detection output never enters ``verify_action`` or any PDP deny path

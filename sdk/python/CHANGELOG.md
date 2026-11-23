@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added: `aim_sdk.arp`, the runtime-protection engine ported from the TypeScript SDK (stage 3 of #441)
+
+- `EventEngine` (L0 rules, the TS default rules, cross-monitor correlation, an optional executor for matched
+  actions), `RuntimeTwin` (L1 behavioral scoring, logging to `~/.opena2a/arp/events.jsonl` and
+  `l1-escalations.jsonl` in the TS record shape and rotation), `IntelligenceCoordinator` (guard-anomaly drift,
+  the comply gate when the manifest sets `comply.enforce`, behavioral risk fusion, statistical anomaly scoring,
+  and L2 with a budget and batching), `ProcessMonitor`, `NetworkMonitor` and `FilesystemMonitor`.
+- `FilesystemInterceptor` patches `builtins.open` (and `io.open`), `os.remove`, `os.unlink` and `os.mkdir`;
+  `ProcessInterceptor` patches `subprocess.Popen.__init__` and `os.system`; `NetworkInterceptor` patches
+  `socket.socket.connect` and `connect_ex`. Each reports the call before it proceeds and never changes or blocks
+  it; `stop()` puts the originals back, also when interceptors are stopped out of order.
+- A telemetry producer only: no other `aim_sdk` module imports the package, so nothing it detects enters
+  `verify_action`; `aim_sdk.enforcement` and `aim_sdk.decision` do not import it. It uses only the standard
+  library and makes no network call. Not ported: the twin's fleet-gradient upload, the vendor L2 adapters (the
+  coordinator takes an adapter object), the behavioral-risk unix-socket source and the prompt/MCP/A2A
+  interceptors.
+- The FilesystemMonitor compares directory snapshots on an interval, as the standard library has no recursive
+  file watch, and reports `rename` and `change` as `fs.watch` does.
+- Tests: `tests/test_arp_engine_parity.py` runs the cases in `tests/fixtures/ts_arp/behavioral-cases.json`,
+  which `sdk/typescript/tests/arp/python-port-parity.test.ts` runs against the TS SDK, and pins the
+  classification tables to the TS source; `tests/test_arp_engine_behavior.py` covers the real patching and the
+  producer-only constraints.
+
 ### Changed: `aim-sdk --version`, `aim-sdk -V` and `aim-sdk version` say when the copy is a source build
 
 - The three version lines print `aim-sdk <version>+source (built from source; not the published <version>)` unless
