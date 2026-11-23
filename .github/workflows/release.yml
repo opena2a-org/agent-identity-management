@@ -118,8 +118,8 @@ jobs:
   # Publishes the Python aim-sdk to PyPI on an `aim-sdk-v<version>` tag
   # push, using PyPI Trusted Publishing (OIDC). No long-lived token in
   # the workflow or in repo secrets — the OIDC token issued to this job
-  # is exchanged at the registry, per global CLAUDE.md "npm Publish
-  # (MANDATORY — Trusted Publishing via OIDC)" applied to PyPI.
+  # is exchanged at the registry, the same Trusted Publishing model the
+  # npm job below uses.
   #
   # First publish under this job requires PyPI Trusted Publishers to be
   # configured for `aim-sdk` (Account → Publishing on pypi.org; owner=
@@ -236,8 +236,8 @@ jobs:
   # configured for @opena2a/aim-sdk on npmjs.com (Package settings →
   # Publishing access → Trusted Publisher → GitHub Actions; owner=
   # opena2a-org, repo=agent-identity-management, workflow=release.yml,
-  # environment=blank). The package name is unclaimed on npm as of this
-  # PR; the org admin needs to reserve it as part of the TP config flow.
+  # environment=blank). If the package name is not yet claimed on npm,
+  # the org admin reserves it as part of the TP config flow.
   publish-npm:
     name: Publish @opena2a/aim-sdk to npm
     if: startsWith(github.ref, 'refs/tags/sdk-ts-v')
@@ -254,9 +254,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Node 24 is the minimum that ships an npm new enough to do the
-      # OIDC handshake against npmjs.com per the org TP rollout (global
-      # CLAUDE.md "Node 24 minimum for setup-node@v4"). Older Node + npm
-      # will fall back to token auth and fail.
+      # OIDC handshake against npmjs.com. Older Node + npm will fall back
+      # to token auth and fail.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
@@ -330,7 +329,7 @@ jobs:
       - name: Publish to npm with provenance
         if: steps.idempotence.outputs.skip != 'true'
         # --provenance is technically redundant under Trusted Publishing
-        # (it's implicit) but kept explicit per global CLAUDE.md.
+        # (it's implicit) but kept explicit so the intent is visible.
         # --access public is required for scoped packages on a public
         # registry the first time they publish.
         run: npm publish --provenance --access public
@@ -371,7 +370,7 @@ jobs:
   # release profile) talks to central.sonatype.com's portal API and
   # auto-releases the staged bundle.
   #
-  # Required repo secrets (see PR body for setup):
+  # Required repo secrets:
   #   MAVEN_CENTRAL_USERNAME   sonatype portal token user (NOT JIRA login)
   #   MAVEN_CENTRAL_PASSWORD   sonatype portal token value
   #   MAVEN_GPG_PRIVATE_KEY    ASCII-armored GPG private key

@@ -981,7 +981,7 @@ describe('Trust attenuation through delegation hops', () => {
   });
 });
 
-describe('Delegation temporal lower bound (AIM-11 item 7)', () => {
+describe('Delegation temporal lower bound', () => {
   async function makeFutureWindow() {
     const root = await generateKeyPair();
     const agent = await generateKeyPair();

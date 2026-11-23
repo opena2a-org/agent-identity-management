@@ -20,8 +20,10 @@ import * as ts from 'typescript';
  * literal in any quote style or a template literal, whose text before the first
  * substitution is read. A title is reported when its text opens with a capital
  * letter, any further capitals or digits, a hyphen and a digit (`AIM-11`,
- * `CR-002`, `MCP-001`). Comments and the text of strings are never read as
- * calls.
+ * `CR-002`, `MCP-001`). A title is reported too when it names a tracker
+ * identifier (`AIM-11`, `QGF-273`) anywhere, which a trailing pattern
+ * identifier such as `(MCP-001)` is not. Comments and the text of strings are
+ * never read as calls.
  */
 
 const TESTS_DIR = __dirname;
@@ -30,6 +32,7 @@ const SOURCE_FILE = /\.[cm]?[jt]s$/;
 const TEST_FILE = /\.test\.ts$/;
 const TEST_FUNCTIONS = new Set(['describe', 'it', 'test']);
 const OPENING_IDENTIFIER = /^[A-Z][A-Z0-9]*-[0-9]/;
+const TRACKER_IDENTIFIER = /\b(?:AIM|QGF)-[0-9]/;
 
 /** Every file under `dir` whose name matches `pattern`, at any depth, fixtures directories aside. */
 function sourceFiles(dir: string, pattern: RegExp): string[] {
@@ -61,7 +64,7 @@ function titleText(argument: ts.Expression | undefined): string | null {
   return null;
 }
 
-/** Every describe, it and test title in `source`, as `<line>: <title>`, and the ones that open with an identifier. */
+/** Every describe, it and test title in `source`, as `<line>: <title>`, and the ones that open with an identifier or name a tracker identifier. */
 function readTitles(fileName: string, source: string): { titles: string[]; opening: string[] } {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   const titles: string[] = [];
@@ -74,7 +77,7 @@ function readTitles(fileName: string, source: string): { titles: string[]; openi
         const { line } = file.getLineAndCharacterOfPosition(node.arguments[0].getStart(file));
         const entry = `${line + 1}: ${title}`;
         titles.push(entry);
-        if (OPENING_IDENTIFIER.test(title)) opening.push(entry);
+        if (OPENING_IDENTIFIER.test(title) || TRACKER_IDENTIFIER.test(title)) opening.push(entry);
       }
     }
     ts.forEachChild(node, visit);
@@ -84,7 +87,7 @@ function readTitles(fileName: string, source: string): { titles: string[]; openi
 }
 
 describe('test titles open with what the test checks', () => {
-  it('no describe, it or test title under tests/ or in a test file under src/ opens with an identifier', () => {
+  it('no describe, it or test title under tests/ or in a test file under src/ opens with an identifier or names a tracker identifier', () => {
     const files = [...sourceFiles(TESTS_DIR, SOURCE_FILE), ...sourceFiles(join(SDK_ROOT, 'src'), TEST_FILE)];
     const opening: string[] = [];
     const read = new Map<string, string[]>();
@@ -119,6 +122,9 @@ describe('test titles open with what the test checks', () => {
       "  test.only('PI-1 a one-digit identifier', () => {});",
       "  it('detects path traversal (MCP-001)', () => {});",
       "  it('T0: defaultConfig() has L2 off', () => {});",
+      "  describe('the enforcement deadline (AIM-06)', () => {});",
+      "  it('Delegation temporal lower bound (AIM-11 item 7)', () => {});",
+      "  test('the publish shape (QGF-273)', () => {});",
       '  // it(\'AIM-01.AC1 in a comment\', () => {});',
       "  const sample = \"it('AIM-02.AC1 in a string')\";",
       "  expect(sample).toBe('AIM-03.AC1');",
@@ -136,9 +142,12 @@ describe('test titles open with what the test checks', () => {
       '7: AIM-06.AC3 (a) a stalled POST is ended',
       '10: MCP-001 case %s',
       '11: PI-1 a one-digit identifier',
+      '14: the enforcement deadline (AIM-06)',
+      '15: Delegation temporal lower bound (AIM-11 item 7)',
+      '16: the publish shape (QGF-273)',
     ]);
     expect(titles).toContain('12: detects path traversal (MCP-001)');
     expect(titles).toContain('13: T0: defaultConfig() has L2 off');
-    expect(titles).toHaveLength(10);
+    expect(titles).toHaveLength(13);
   });
 });
