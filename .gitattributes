@@ -1,0 +1,7 @@
+# Until it was replaced by traced vector paths, apps/web/public/opena2a-logo.svg
+# was one 1,018,749-byte line wrapping a base64 PNG. Shown as text, that line
+# alone is several times the PR review gate's token budget, so any diff with the
+# old revision on one side could never be reviewed. `-diff` prints the file as
+# binary in a diff; the current file is still read whole as full-file context.
+# Drop this line once no open change has the old revision on one side.
+apps/web/public/opena2a-logo.svg -diff
