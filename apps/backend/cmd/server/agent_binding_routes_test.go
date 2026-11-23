@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gofiber/fiber/v3"
@@ -384,24 +383,26 @@ func TestHeldAgentRouteServesEveryCallerAndRecordsTheComparison(t *testing.T) {
 	}, "a route with no agent parameter has nothing to hold")
 }
 
-// agentBindingHoldUntil bounds the hold on the routes in agentBindingHeld. The
-// hold exists because the effect of binding them has not been measured: they
-// serve the dashboard and API-key automation as well as SDK agents. Each is
-// released by a count of agent-principal requests whose path ID differs from
-// the caller: zero binds the route; non-zero makes it an admitted exception
-// naming the call site, or binds it with a dated migration. After this date a
-// route still held fails the test.
+// agentBindingHeld is held because the effect of binding its routes has not
+// been measured: they serve the dashboard and API-key automation as well as SDK
+// agents. Each is released by a count of agent-principal requests whose path
+// ID differs from the caller: zero binds the route; non-zero makes it an
+// admitted exception naming the call site, or binds it with a dated migration.
 //
-// The first date, 2026-11-05, passed with no count read. The count is now read
-// first from the callers in this repository (the SDKs, the web app and the
-// examples), then from request records where the observation below has run
-// for 14 days. A later date is set only with the count that is still missing
-// and the day it will exist.
+// The hold is not ended by a date. Its first date, 2026-11-05, passed with no
+// count read, and moving the date only made the test fail on the calendar
+// rather than on a route. What bounds the hold now is that it can only shrink:
+// agentBindingHeldCount pins its length, so a route is added to it only by
+// raising that number where a reviewer sees it, and a route that leaves it
+// lowers the number in the same change.
 //
 // A held route is registered through holdAgentRoutes, which records that count
 // on each request's api_calls row (agent_path_route, agent_path_outcome,
-// auth_method); scripts/agent_path_binding_report.sql reads it per route.
-const agentBindingHoldUntil = "2026-12-17"
+// auth_method); scripts/agent_path_binding_report.sql reads it per route. The
+// count is read first from the callers in this repository (the SDKs, the web
+// app and the examples), then from request records where the observation has
+// run for 14 days.
+const agentBindingHeldCount = 51
 
 const agentBindingHoldReason = "held: binding effect on dashboard, API-key and service-principal callers not yet measured"
 
@@ -495,9 +496,9 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 		held[route] = true
 	}
 
-	holdEnd, err := time.Parse("2006-01-02", agentBindingHoldUntil)
-	require.NoError(t, err)
-	holdExpired := time.Now().UTC().After(holdEnd.Add(24 * time.Hour))
+	require.Len(t, agentBindingHeld, agentBindingHeldCount,
+		"the hold only shrinks: when a route leaves agentBindingHeld lower agentBindingHeldCount with it, and bind "+
+			"or except a new route rather than holding it")
 
 	seen := map[string]bool{}
 	var bound int
@@ -520,10 +521,6 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 		case excepted && held[route.key]:
 			t.Errorf("%s (%s) is both held and excepted", route.key, route.at)
 		case excepted:
-		case held[route.key] && holdExpired:
-			t.Errorf("%s (%s) is still held after %s (%s). Read the per-route count and bind it "+
-				"(bindAgentRoutes) or move it to agentBindingExceptions with the call site that needs it.",
-				route.key, route.at, agentBindingHoldUntil, agentBindingHoldReason)
 		case held[route.key]:
 		default:
 			t.Errorf("%s (%s) takes an agent ID under a group that authenticates agents, and is neither bound nor "+
@@ -548,9 +545,9 @@ func TestAgentParameterRoutesUnderAgentGroupsAreDispositioned(t *testing.T) {
 			observed++
 		}
 	}
-	t.Logf("census: %d agent-parameter routes under %d agent-authenticated groups; %d bound, %d held until %s "+
-		"(%d observed), %d excepted",
-		len(census.routes), census.agentGroups, bound, len(agentBindingHeld), agentBindingHoldUntil, observed,
+	t.Logf("census: %d agent-parameter routes under %d agent-authenticated groups; %d bound, %d held (%d observed; %s), "+
+		"%d excepted",
+		len(census.routes), census.agentGroups, bound, len(agentBindingHeld), observed, agentBindingHoldReason,
 		len(agentBindingExceptions))
 	assert.Positive(t, bound, "no route registered through bindAgentRoutes was found")
 	for _, required := range []string{
