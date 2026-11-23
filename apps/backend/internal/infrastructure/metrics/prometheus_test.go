@@ -137,6 +137,10 @@ var allowedLabelNames = map[string]bool{
 	// aim_s1_refusals_total: reason is an S1RefusalReason and sdk one of the
 	// s1SDKUserAgentPrefixes labels or "other" (s1_refusals.go).
 	"reason": true, "sdk": true,
+	// aim_fga_intent_checks_total and aim_fga_intent_skipped_total: risk_tier
+	// is one of fgaIntentRiskTiers and agreement one of the FGAIntentAgreement
+	// constants (fga_intent.go).
+	"risk_tier": true, "agreement": true,
 }
 
 var labelVecConstructor = regexp.MustCompile(`^New(Counter|Gauge|Histogram|Summary)Vec$`)

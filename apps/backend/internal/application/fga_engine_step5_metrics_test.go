@@ -171,9 +171,10 @@ func TestRecordIntentCheckEmitsCounter(t *testing.T) {
 	t.Cleanup(func() { _ = engine.Shutdown(context.Background()) })
 
 	ctx := context.Background()
-	engine.recordIntentCheck(ctx, "HIGH", "sync", &IntentCheckResult{Status: intentStatusClassified, Blocked: true})
-	engine.recordIntentCheck(ctx, "MEDIUM", "async", &IntentCheckResult{Status: intentStatusAbstain, Blocked: false})
-	engine.recordIntentCheck(ctx, "HIGH", "sync", nil) // worst case: count as fail_open
+	agentA, agentB := uuid.New(), uuid.New()
+	engine.recordIntentCheck(ctx, agentA, "HIGH", "sync", &IntentCheckResult{Status: intentStatusClassified, Blocked: true})
+	engine.recordIntentCheck(ctx, agentA, "MEDIUM", "async", &IntentCheckResult{Status: intentStatusAbstain, Blocked: false})
+	engine.recordIntentCheck(ctx, agentA, "HIGH", "sync", nil) // worst case: count as fail_open
 
 	dps := collectCounter(t, reader, "fga.intent_checks")
 	require.Len(t, dps, 3, "expected one series per distinct attribute set")
@@ -189,6 +190,39 @@ func TestRecordIntentCheckEmitsCounter(t *testing.T) {
 	failOpen := findDP(dps, "HIGH", "sync", intentStatusFailOpen, false)
 	require.NotNil(t, failOpen, "nil result must be counted as fail_open")
 	assert.Equal(t, int64(1), failOpen.Value)
+
+	for _, dp := range dps {
+		assert.Equal(t, agentA.String(), attrStr(dp.Attributes, "agent.id"), "every series carries the agent")
+	}
+
+	// Per-agent classification, agreement and skip counts: a confident benign
+	// agrees with the allow of steps 1 to 4, an attack class disagrees, an
+	// abstain gives no verdict. Each agent is its own series.
+	engine.recordIntentCheck(ctx, agentB, "HIGH", "async", &IntentCheckResult{Status: intentStatusClassified, IntentClass: ""})
+	engine.recordIntentCheck(ctx, agentB, "HIGH", "async", &IntentCheckResult{Status: intentStatusClassified, IntentClass: ""})
+	engine.recordIntentCheck(ctx, agentB, "HIGH", "async", &IntentCheckResult{Status: intentStatusClassified, IntentClass: "exfiltration_pattern"})
+	engine.recordIntentSkipped(ctx, agentB, "LOW")
+	engine.recordIntentSkipped(ctx, agentA, "LOW")
+
+	byAgreement := map[string]int64{}
+	for _, dp := range collectCounter(t, reader, "fga.intent_checks") {
+		if attrStr(dp.Attributes, "agent.id") != agentB.String() {
+			continue
+		}
+		byAgreement[attrStr(dp.Attributes, "fga.intent_agreement")] += dp.Value
+	}
+	assert.Equal(t, map[string]int64{"agree": 2, "disagree": 1}, byAgreement)
+
+	abstainA := findDP(collectCounter(t, reader, "fga.intent_checks"), "MEDIUM", "async", intentStatusAbstain, false)
+	require.NotNil(t, abstainA)
+	assert.Equal(t, "none", attrStr(abstainA.Attributes, "fga.intent_agreement"))
+
+	skipped := map[string]int64{}
+	for _, dp := range collectCounter(t, reader, "fga.intent_skipped") {
+		assert.Equal(t, "LOW", attrStr(dp.Attributes, "fga.risk_tier"))
+		skipped[attrStr(dp.Attributes, "agent.id")] += dp.Value
+	}
+	assert.Equal(t, map[string]int64{agentA.String(): 1, agentB.String(): 1}, skipped)
 }
 
 // --- helpers ---
