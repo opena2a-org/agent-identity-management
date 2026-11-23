@@ -273,3 +273,11 @@ func TestAnUnrecognisedKeyCostsTheVerificationsOfAnInvalidSignature(t *testing.T
 		}
 	}
 }
+
+// A verifier that does not go through Keys spends the same one Ed25519 verification on a
+// refusal of an unknown agent through DecoyVerifyEd25519.
+func TestDecoyVerifyEd25519CostsOneVerification(t *testing.T) {
+	counted := countVerifications(t)
+	DecoyVerifyEd25519([]byte("message"), make([]byte, ed25519.SignatureSize))
+	require.Equal(t, verifications{ed25519: 1}, *counted)
+}

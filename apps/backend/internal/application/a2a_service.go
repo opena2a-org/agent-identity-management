@@ -533,6 +533,23 @@ type VerifyA2ARequestRequest struct {
 	RequestHash string    `json:"requestHash"`
 }
 
+// a2aDecoyVerify spends the signature verification a known agent's invalid signature
+// costs, for a refusal that has no key to verify against, so the time a refusal takes
+// does not tell a caller holding only an agent id whether that agent exists. A signature
+// or hash that does not decode is refused before verification for every agent, so it
+// verifies nothing here either.
+func a2aDecoyVerify(req VerifyA2ARequestRequest) {
+	signature, err := base64.StdEncoding.DecodeString(req.Signature)
+	if err != nil {
+		return
+	}
+	requestHash, err := hex.DecodeString(req.RequestHash)
+	if err != nil {
+		return
+	}
+	agentauth.DecoyVerifyEd25519(requestHash, signature)
+}
+
 // VerifyA2ARequest verifies an incoming A2A request signature. A result that is
 // not valid is a verdict on the request. A read that fails (the nonce table, the
 // agent row, the agent's grants), or a nonce that cannot be recorded, is
@@ -576,18 +593,21 @@ func (s *A2AService) VerifyA2ARequest(
 		return nil, fmt.Errorf("failed to load agent: %w", err)
 	}
 	if agent == nil {
+		a2aDecoyVerify(req)
 		result.Error = "agent not found"
 		return result, nil
 	}
 
 	if agent.PublicKey == nil || *agent.PublicKey == "" {
+		a2aDecoyVerify(req)
 		result.Error = "agent has no public key"
 		return result, nil
 	}
 
 	// 4. Parse and verify signature
 	publicKey, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
-	if err != nil {
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		a2aDecoyVerify(req)
 		result.Error = "invalid public key format"
 		return result, nil
 	}

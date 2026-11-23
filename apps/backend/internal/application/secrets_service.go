@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
@@ -157,24 +158,31 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 		}
 	}
 
+	// An agent that cannot be verified against still costs one signature
+	// verification, against a decoy key, so the refusal's timing does not say
+	// whether the agent exists.
+	message := []byte(req.Namespace + "|" + req.Operation + "|" + req.Nonce)
+
 	agent, err := s.agentRepo.GetByID(agentID)
 	if err != nil || agent == nil {
+		agentauth.DecoyVerifyEd25519(message, req.Signature)
 		denyReason = "agent not found"
 		return nil, fmt.Errorf("agent not found: %s", agentID)
 	}
 
 	if agent.PublicKey == nil || *agent.PublicKey == "" {
+		agentauth.DecoyVerifyEd25519(message, req.Signature)
 		denyReason = "agent has no public key"
 		return nil, fmt.Errorf("agent %s has no public key", agentID)
 	}
 
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
 	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+		agentauth.DecoyVerifyEd25519(message, req.Signature)
 		denyReason = "invalid agent public key"
 		return nil, fmt.Errorf("invalid agent public key for %s", agentID)
 	}
 
-	message := []byte(req.Namespace + "|" + req.Operation + "|" + req.Nonce)
 	if !ed25519.Verify(ed25519.PublicKey(pubKeyBytes), message, req.Signature) {
 		denyReason = "signature verification failed"
 		return nil, fmt.Errorf("signature verification failed for agent %s", agentID)
