@@ -181,8 +181,18 @@ def run_example(path, tmp_path):
             f"{path.name}: the refused call in Python fence {fence} ends the session, "
             f"so fences {fence + 1} to {len(blocks)} never run"
         )
-        last = ast.parse(script.read_text(encoding="utf-8")).body[-1]
-        assert last.lineno <= raised_on <= last.end_lineno, (
+        statements = ast.parse(script.read_text(encoding="utf-8")).body
+        last = statements[-1]
+        # The refused call is the last statement, a call on a line of its own: a statement
+        # sharing its line (`delete_customer(42); print("after")`) or a compound statement
+        # around it (a `try:` with more lines in it) would hide code that never runs.
+        alone = len(statements) < 2 or statements[-2].end_lineno < last.lineno
+        assert (
+            last.lineno <= raised_on <= last.end_lineno
+            and alone
+            and isinstance(last, ast.Expr)
+            and isinstance(last.value, ast.Call)
+        ), (
             f"{path.name}: the refused call ends the session, so the code after it "
             f"in the last Python fence never runs"
         )
