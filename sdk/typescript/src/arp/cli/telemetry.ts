@@ -455,7 +455,11 @@ export async function runTelemetrySubcommand(
     if (typeof fsCode === 'string' && FS_ERROR_CODES.has(fsCode) && typeof fsPath === 'string') {
       // A bare Node message ("EACCES: permission denied, open '...'") names
       // neither what failed nor what to do about it.
-      console.error(`  ${sub} could not write ${fsPath} (${fsCode}); nothing further was changed.`);
+      if (sub === 'status') {
+        console.error(`  ${sub} could not read ${fsPath} (${fsCode}); nothing was changed.`);
+      } else {
+        console.error(`  ${sub} could not write ${fsPath} (${fsCode}); nothing further was changed.`);
+      }
       if (sub === 'opt-out') {
         console.error('  The opt-out did not take effect. To opt out without this directory: set OPENA2A_TELEMETRY=off');
       }

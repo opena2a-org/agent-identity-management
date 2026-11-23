@@ -113,6 +113,16 @@ describe.skipIf(!canDropPermissions)('an unreadable state directory is reported,
     expect(err()).toContain('OPENA2A_TELEMETRY=off');
     expect(err()).not.toMatch(/^Error: /m);
   });
+
+  it('status with an unreadable state file says "could not read" and exits 1', async () => {
+    mkdirSync(home, { recursive: true });
+    const salt = join(home, 'telemetry-sensor-id');
+    writeFileSync(salt, 'x', { mode: 0o000 });
+    const code = await runTelemetrySubcommand('status', []);
+    expect(code).toBe(1);
+    expect(err()).toContain(`could not read ${salt} (EACCES)`);
+    expect(err()).not.toContain('could not write');
+  });
 });
 
 it('a missing home is not an error and not an opt-out', () => {
