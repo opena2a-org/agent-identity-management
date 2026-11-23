@@ -12,18 +12,18 @@ import type {
   LLMResponse,
   EventCategory,
   EventSeverity,
-} from '../types';
-import { BudgetController } from './budget';
-import { createAdapter } from './adapters';
-import { AnomalyDetector } from './anomaly';
+} from '../types.js';
+import { BudgetController } from './budget.js';
+import { createAdapter } from './adapters.js';
+import { AnomalyDetector } from './anomaly.js';
 import {
   DEFAULT_BEHAVIORAL_RISK_TIMEOUT_MS,
   type BehavioralRiskResult,
   type BehavioralRiskSource,
   type BehavioralRiskUnavailableCode,
-} from './behavioral-risk';
-import type { GuardAnomalySource, GuardAnomalyStatus } from './guard-anomaly';
-import { sanitizeTerminalLine } from '../telemetry/signature/sanitize';
+} from './behavioral-risk.js';
+import type { GuardAnomalySource, GuardAnomalyStatus } from './guard-anomaly.js';
+import { sanitizeTerminalLine } from '../telemetry/signature/sanitize.js';
 
 const SEVERITY_ORDER: EventSeverity[] = ['info', 'low', 'medium', 'high', 'critical'];
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ARPEvent, MonitorType } from '../types';
+import type { ARPEvent, MonitorType } from '../types.js';
 
 interface TimeSeriesPoint {
   timestamp: number;

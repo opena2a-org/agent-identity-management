@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BudgetState, IntelligenceConfig, L2CallFailure } from '../types';
+import type { BudgetState, IntelligenceConfig, L2CallFailure } from '../types.js';
 
 const BUDGET_FILE = 'budget.json';
 const DEFAULT_BUDGET_USD = 5.0;

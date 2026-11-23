@@ -37,7 +37,7 @@ import type {
   HybridSignature,
   HybridVerifyResult,
   MLDsaVariant,
-} from './types';
+} from './types.js';
 
 /**
  * FIPS 204 key and signature sizes (in bytes). Used to validate key material

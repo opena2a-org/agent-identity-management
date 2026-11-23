@@ -52,18 +52,18 @@ import type {
   NanoMindGuardVerifyErrorCode,
   NanoMindGuardVerifyOptions,
   NanoMindGuardVerifyResult,
-} from '../types';
+} from '../types.js';
 import {
   decodeHybridPublicKey,
   decodeHybridSignature,
   hybridVerify,
   validateKeySize,
-} from '../crypto/hybrid-signing';
+} from '../crypto/hybrid-signing.js';
 import type {
   EncodedHybridPublicKey,
   EncodedHybridSignature,
   HybridAlgorithm,
-} from '../crypto/types';
+} from '../crypto/types.js';
 
 /**
  * Only hybrid algorithm accepted for NanoMind-Guard classification results.

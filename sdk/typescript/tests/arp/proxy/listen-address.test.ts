@@ -125,3 +125,45 @@ describe('ARPProxy listening address (loopback sockets)', () => {
     expect(addr.family).toBe('IPv6');
   });
 });
+
+describe('ARPProxy.start() listen failures', () => {
+  it('rejects with EADDRINUSE when the port is taken', async () => {
+    const holder = net.createServer();
+    await new Promise<void>((resolve) => holder.listen(0, '127.0.0.1', resolve));
+    const port = (holder.address() as net.AddressInfo).port;
+    try {
+      const proxy = newProxy({ host: '127.0.0.1', port });
+      await expect(proxy.start()).rejects.toMatchObject({ code: 'EADDRINUSE' });
+      expect(proxy.getPort()).toBe(port);
+      await proxy.stop();
+    } finally {
+      await new Promise<void>((resolve) => holder.close(() => resolve()));
+    }
+  });
+
+  it('rejects for an address the machine does not have', async () => {
+    // 192.0.2.1 is TEST-NET-1 (RFC 5737) and is never assigned to a host. The
+    // kernel answers EADDRNOTAVAIL; a sandboxed process may see EPERM instead.
+    await expect(newProxy({ host: '192.0.2.1' }).start()).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EADDRNOTAVAIL|EPERM)$/),
+    });
+  });
+
+  it('rejects when the host does not resolve', async () => {
+    // .invalid never resolves (RFC 2606).
+    await expect(newProxy({ host: 'no-such-host.invalid' }).start()).rejects.toMatchObject({
+      code: expect.stringMatching(/^(ENOTFOUND|EAI_AGAIN)$/),
+    });
+  });
+
+  it('removes its error listener once the server is listening', async () => {
+    const proxy = newProxy();
+    await proxy.start();
+    try {
+      const server = (proxy as unknown as { server: http.Server }).server;
+      expect(server.listenerCount('error')).toBe(0);
+    } finally {
+      await proxy.stop();
+    }
+  });
+});

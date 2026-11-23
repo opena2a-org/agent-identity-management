@@ -1,6 +1,6 @@
-import type { LLMAdapter, LLMResponse, LLMAdapterType } from '../types';
+import type { LLMAdapter, LLMResponse, LLMAdapterType } from '../types.js';
 import * as https from 'https';
-import { nodeRequire } from '../node-require';
+import { nodeRequire } from '../node-require.js';
 
 const ANTHROPIC_HOST = 'api.anthropic.com';
 const OPENAI_HOST = 'api.openai.com';
