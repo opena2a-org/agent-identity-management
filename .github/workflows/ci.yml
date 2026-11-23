@@ -501,11 +501,12 @@ jobs:
           java-version: "17"
           cache: "maven"
 
-      # Scoped to the atx package: the SDK's Live/RealWorld integration tests
-      # need a live backend and credentials that CI does not have.
-      - name: Java LocalAtxVerifier vs pinned fixtures
+      # Scoped to the atx and client packages: the SDK's Live/RealWorld
+      # integration tests need a live backend and credentials that CI does
+      # not have, so LiveBackendTest is excluded.
+      - name: Java LocalAtxVerifier vs pinned fixtures and client tests
         working-directory: sdk/java
-        run: mvn -B test -Dtest='org.opena2a.aim.atx.*Test'
+        run: mvn -B test -Dtest='org.opena2a.aim.atx.*Test,org.opena2a.aim.client.*Test,!LiveBackendTest'
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
