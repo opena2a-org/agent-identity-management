@@ -228,6 +228,10 @@ const contextUnavailableReason = "ASC summary unavailable"
 //     classification was "abstain", or — for a pre-0.4.0 daemon — it returned an
 //     empty attack class, the legacy fallback). Action proceeds; the abstain is
 //     now distinct from a confident benign, which was the #131 conflation.
+//     A 2xx response that omits attackClass or confidence (or sends null, or a
+//     confidence outside [0, 1]) is also an abstain, recorded with the
+//     fallback IntentClass "unknown" and Confidence 0 whatever its
+//     classification label says.
 //   - "fail_open": the daemon was unreachable, returned a non-2xx status, the
 //     request could not be built, or the response could not be decoded, so the
 //     action proceeds without an intent verdict.
@@ -245,6 +249,11 @@ const (
 	intentStatusAbstain    = "abstain"
 	intentStatusFailOpen   = "fail_open"
 )
+
+// intentClassUnknown is the fallback IntentClass Step 5 records when it has
+// no attack class from the daemon: the daemon was unreachable or failed, or
+// its response omitted attackClass or confidence.
+const intentClassUnknown = "unknown"
 
 // FGAPolicy represents a stored FGA policy.
 type FGAPolicy struct {
@@ -1168,7 +1177,7 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	if err != nil {
 		e.logger.Debug("intent check request build failed", "error", err)
 		return &IntentCheckResult{
-			IntentClass: "unknown",
+			IntentClass: intentClassUnknown,
 			Confidence:  0,
 			Blocked:     false,
 			LatencyMs:   time.Since(start).Milliseconds(),
@@ -1182,7 +1191,7 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	if err != nil {
 		e.logger.Debug("NanoMind daemon unavailable for intent check", "error", err)
 		return &IntentCheckResult{
-			IntentClass: "unknown",
+			IntentClass: intentClassUnknown,
 			Confidence:  0,
 			Blocked:     false, // fail open if daemon unavailable or ctx cancelled
 			LatencyMs:   time.Since(start).Milliseconds(),
@@ -1204,7 +1213,7 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		e.logger.Debug("NanoMind daemon returned non-2xx for intent check", "status", resp.StatusCode)
 		return &IntentCheckResult{
-			IntentClass: "unknown",
+			IntentClass: intentClassUnknown,
 			Confidence:  0,
 			Blocked:     false,
 			LatencyMs:   time.Since(start).Milliseconds(),
@@ -1212,11 +1221,15 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 		}
 	}
 
+	// attackClass and confidence decode into pointers so an absent (or JSON
+	// null) field is distinguishable from a present zero value. Without that, a
+	// response missing either field decoded to attackClass "" / confidence 0 and
+	// — when labelled "classified" — was silently recorded as a confident benign.
 	var inferResp struct {
-		Result         string  `json:"result"`
-		Confidence     float64 `json:"confidence"`
-		AttackClass    string  `json:"attackClass"`
-		Classification string  `json:"classification"`
+		Result         string   `json:"result"`
+		Confidence     *float64 `json:"confidence"`
+		AttackClass    *string  `json:"attackClass"`
+		Classification string   `json:"classification"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&inferResp); err != nil {
 		// Undecodable response is one of the fail-open modes #131 is about.
@@ -1224,13 +1237,36 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 		// rather than nil, so this path is counted instead of vanishing.
 		e.logger.Debug("intent check response decode failed", "error", err)
 		return &IntentCheckResult{
-			IntentClass: "unknown",
+			IntentClass: intentClassUnknown,
 			Confidence:  0,
 			Blocked:     false,
 			LatencyMs:   time.Since(start).Milliseconds(),
 			Status:      intentStatusFailOpen,
 		}
 	}
+
+	// The daemon contract requires attackClass and confidence on every 2xx
+	// response. If either is missing or null, or confidence falls outside
+	// [0, 1], the output is unclassifiable: record the defined fallback
+	// (intent class "unknown", confidence 0, status abstain) regardless of any
+	// classification label, rather than reading the zero values as a verdict.
+	// The daemon did answer, so this is an abstain, not a fail_open. Decision
+	// unchanged: not blocked.
+	if inferResp.AttackClass == nil || inferResp.Confidence == nil ||
+		*inferResp.Confidence < 0 || *inferResp.Confidence > 1 {
+		e.logger.Debug("NanoMind daemon response lacks a usable attackClass or confidence",
+			"hasAttackClass", inferResp.AttackClass != nil,
+			"hasConfidence", inferResp.Confidence != nil)
+		return &IntentCheckResult{
+			IntentClass: intentClassUnknown,
+			Confidence:  0,
+			Blocked:     false,
+			LatencyMs:   time.Since(start).Milliseconds(),
+			Status:      intentStatusAbstain,
+		}
+	}
+	attackClass := *inferResp.AttackClass
+	confidence := *inferResp.Confidence
 
 	// Map the daemon's explicit classification (@nanomind/daemon 0.4.0+) to the
 	// Step 5 status. This is the #131 Stage 1 fix: a confident benign
@@ -1249,7 +1285,7 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 		// Pre-0.4.0 daemon (no classification field, or JSON null): fall back to
 		// the legacy heuristic (empty attackClass == abstain) so a mixed-version
 		// deploy keeps working.
-		if inferResp.AttackClass == "" {
+		if attackClass == "" {
 			status = intentStatusAbstain
 		} else {
 			status = intentStatusClassified
@@ -1257,8 +1293,8 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	}
 
 	return &IntentCheckResult{
-		IntentClass: inferResp.AttackClass,
-		Confidence:  inferResp.Confidence,
+		IntentClass: attackClass,
+		Confidence:  confidence,
 		Blocked:     false,
 		LatencyMs:   time.Since(start).Milliseconds(),
 		Status:      status,
