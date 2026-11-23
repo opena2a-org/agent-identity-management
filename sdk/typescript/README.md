@@ -358,13 +358,12 @@ const client = new AIMClient({
   },
 });
 
-// Per-action inputs (populated by the runtime-protection module, or supplied
-// directly). Ignored unless telemetry is enabled.
+// Per-action inputs you supply. Ignored unless telemetry is enabled.
 await client.verifyAction({
   action: 'file:read',
   resource: '/data/sensitive.json',
   telemetry: {
-    intent: { intentClass: 'exfiltration', confidence: 0.7, blocked: true, source: 'nanomind-intent' },
+    intent: { intentClass: 'exfiltration', confidence: 0.7, blocked: true, source: 'your-intent-check' },
     detection: {
       injectionDetected: true,
       techniqueId: 'T-2002',
@@ -558,9 +557,10 @@ evaluated nothing, and its `detected: false` is not a verdict.
 
 Classification of runtime events is supplied through the injectable
 `ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`
-talks to the local NanoMind-Guard daemon over a Unix socket and only accepts
-signed classification results; when the daemon is absent the annotator degrades
-to "no classification". It never fabricates a label and never blocks.
+sends each event's text to the local NanoMind-Guard daemon over a Unix socket
+and keeps a reply only if it is signed. The NanoMind-Guard daemon does not sign
+its replies today, so the default provider adds no classification, whether or
+not the daemon is running. It never fabricates a label and never blocks.
 
 **Invariant:** the runtime-protection module is a telemetry producer. Its
 detection outputs flow through the `telemetry.detection` seam into the
