@@ -107,33 +107,59 @@ func callWebhookURLCheckRoute(t *testing.T, svc *webhookURLCheckService, method,
 	return webhookURLCheckAnswer{status: resp.StatusCode, body: string(answer), log: logged.String()}
 }
 
-// A webhook created or updated with a URL the server refuses is answered with
-// 400 and a reason that does not say what the URL resolved to. The test pins
-// that a log line was written, not how the service's reason reads.
-func TestWebhookHandler_RefusedURLIsAnsweredWithAFixedReason(t *testing.T) {
-	body := `{"name":"url-check-hook","url":"http://` + webhookURLCheckAddress + `/receive","events":["agent.created"]}`
-	for _, route := range []struct{ name, method, path string }{
-		{"create", http.MethodPost, "/webhooks"},
-		{"update", http.MethodPut, "/webhooks/"},
+// A webhook created or updated with a URL whose address the egress policy
+// refuses is answered with 400 and a reason that names the refused address
+// class, not the address the URL names or resolved to. The test pins that a
+// log line was written, not how the service's reason reads.
+func TestWebhookHandler_RefusedURLIsAnsweredWithItsAddressClass(t *testing.T) {
+	for _, tc := range []struct{ name, url, class, address string }{
+		{"private", "http://" + webhookURLCheckAddress + "/receive", "private", webhookURLCheckAddress},
+		{"loopback", "http://127.0.0.1:8080/receive", "loopback", "127.0.0.1"},
+		{"loopback IPv6", "http://[::1]/receive", "loopback", "::1"},
+		{"localhost", "http://localhost:8080/receive", "loopback", "localhost"},
+		{"link-local", "http://169.254.10.20/receive", "link-local", "169.254.10.20"},
 	} {
-		t.Run(route.name, func(t *testing.T) {
-			svc := newWebhookURLCheckService()
-			path := route.path
-			if route.method == http.MethodPut {
-				path += svc.stored.ID.String()
-			}
-			got := callWebhookURLCheckRoute(t, svc, route.method, path, body)
+		body := `{"name":"url-check-hook","url":"` + tc.url + `","events":["agent.created"]}`
+		for _, route := range []struct{ name, method, path string }{
+			{"create", http.MethodPost, "/webhooks"},
+			{"update", http.MethodPut, "/webhooks/"},
+		} {
+			t.Run(tc.name+"/"+route.name, func(t *testing.T) {
+				svc := newWebhookURLCheckService()
+				path := route.path
+				if route.method == http.MethodPut {
+					path += svc.stored.ID.String()
+				}
+				got := callWebhookURLCheckRoute(t, svc, route.method, path, body)
 
-			if got.status != fiber.StatusBadRequest {
-				t.Errorf("status = %d, body = %s; want %d for a URL the server refuses", got.status, got.body, fiber.StatusBadRequest)
-			}
-			if want := `{"error":"url must be a public http or https URL"}`; got.body != want {
-				t.Errorf("body = %s, want %s", got.body, want)
-			}
-			if strings.TrimSpace(got.log) == "" {
-				t.Error("the server log has no line for the refused URL")
-			}
-		})
+				if got.status != fiber.StatusBadRequest {
+					t.Errorf("status = %d, body = %s; want %d for a URL the server refuses", got.status, got.body, fiber.StatusBadRequest)
+				}
+				want := `{"error":"url must be a public http or https URL (refused address class: ` + tc.class + `)"}`
+				if got.body != want {
+					t.Errorf("body = %s, want %s", got.body, want)
+				}
+				if strings.Contains(got.body, tc.address) {
+					t.Errorf("body = %s; it names the refused address", got.body)
+				}
+				if strings.TrimSpace(got.log) == "" {
+					t.Error("the server log has no line for the refused URL")
+				}
+			})
+		}
+	}
+}
+
+// A webhook URL refused for a reason other than its address (here its scheme)
+// is answered with 400 and the fixed reason.
+func TestWebhookHandler_RefusedSchemeIsAnsweredWithAFixedReason(t *testing.T) {
+	body := `{"name":"url-check-hook","url":"ftp://hook.example/receive","events":["agent.created"]}`
+	got := callWebhookURLCheckRoute(t, newWebhookURLCheckService(), http.MethodPost, "/webhooks", body)
+	if got.status != fiber.StatusBadRequest {
+		t.Errorf("status = %d, body = %s; want %d", got.status, got.body, fiber.StatusBadRequest)
+	}
+	if want := `{"error":"url must be a public http or https URL"}`; got.body != want {
+		t.Errorf("body = %s, want %s", got.body, want)
 	}
 }
 
