@@ -37,9 +37,19 @@ async function login(request: APIRequestContext): Promise<{ accessToken: string;
       'AIM_TEST_ADMIN_PASSWORD (or DEFAULT_ADMIN_PASSWORD) must be set to the seeded admin password.',
     );
   }
-  const res = await request.post('/api/v1/auth/login/local', {
-    data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-  });
+  // The API limits /api/v1/auth/* per client address and every worker shares one, so a sign-in
+  // can be refused 429 while the other specs spend the minute's limit. The route never ran, so
+  // the sign-in is sent again once the Retry-After has passed.
+  const send = () =>
+    request.post('/api/v1/auth/login/local', {
+      data: { email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+    });
+  let res = await send();
+  for (let waits = 0; waits < 2 && res.status() === 429; waits++) {
+    const seconds = Math.max(Number(res.headers()['retry-after']) || 0, 1);
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1_000 + 250));
+    res = await send();
+  }
   if (!res.ok()) {
     throw new Error(`login/local failed: ${res.status()} ${await res.text()}`);
   }
