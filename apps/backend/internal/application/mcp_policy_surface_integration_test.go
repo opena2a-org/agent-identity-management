@@ -50,10 +50,9 @@ var seededPolicyNames = []string{
 // organization and admin user both exist.
 //
 // It fails if a future migration re-enables these rows. That is the intent: re-enabling is only
-// correct once MCPPolicyEvaluator is wired, and #355 still has to decide where enforcement runs,
-// fail-open or fail-closed when the policies cannot be read, whether block_and_alert may block,
-// and whether the seeded defaults come back at all. The rules themselves are ready: migration
-// 114 put rules.minTrustScore on [0,1], and a bare '*' matches every host.
+// correct once MCPPolicyEvaluator is wired, and before that #355 has to decide where enforcement
+// runs, fail-open or fail-closed when the policies cannot be read, whether block_and_alert may
+// block, and whether the seeded defaults come back at all.
 // See https://github.com/opena2a-org/agent-identity-management/issues/355.
 //
 // Build-tag gated: requires Postgres reachable via TEST_DATABASE_URL.
@@ -125,7 +124,8 @@ func TestSeededMCPPoliciesAreNotEnabled(t *testing.T) {
 	require.Equal(t, 0, enabled,
 		"a security policy of a type nothing evaluates is enabled. Either wire MCPPolicyEvaluator "+
 			"(deciding first where enforcement runs, fail-open or fail-closed when the policies "+
-			"cannot be read, and whether block_and_alert may block), or keep these rows disabled. "+
+			"cannot be read, whether block_and_alert may block, and whether the seeded defaults "+
+			"come back at all), or keep these rows disabled. "+
 			"See https://github.com/opena2a-org/agent-identity-management/issues/355")
 
 	// Migration 130: a server on an allowed domain that declares logging or completions passes
