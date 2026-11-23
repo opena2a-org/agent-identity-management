@@ -429,8 +429,8 @@ function AlertsPageContent() {
   return (
     <AuthGuard>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-        <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-3xl font-bold">Security Alerts</h1>
           <p className="text-muted-foreground mt-1">
             Proactive monitoring and notifications
@@ -657,7 +657,7 @@ function AlertsPageContent() {
                 <div
                   key={alert.id}
                   onClick={() => openAlertPanel(alert)}
-                  className={`p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md hover:scale-[1.01] ${
+                  className={`min-w-0 p-4 border-2 rounded-lg cursor-pointer transition-all hover:shadow-md sm:hover:scale-[1.01] ${
                     alert.isAcknowledged
                       ? "opacity-60 bg-muted/30"
                       : config.color
@@ -665,7 +665,11 @@ function AlertsPageContent() {
                 >
                   {/* Below the sm breakpoint the actions sit under the content
                       instead of beside it, and min-w-0 lets the content column
-                      narrow to the card, so a long title wraps inside it. */}
+                      narrow to the card, so a long title wraps inside it.
+                      break-words breaks a word longer than the card (an ID, an
+                      agent name) instead of letting it widen the page. The
+                      hover scale is kept off phones, where it would push the
+                      card past the screen edge. */}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                     <div className="flex items-start gap-3 flex-1 min-w-0">
                       <Icon className="h-5 w-5 mt-0.5 shrink-0" />
@@ -694,7 +698,7 @@ function AlertsPageContent() {
                           }`}>
                             {alert.resourceType === 'mcp_server' || alert.resourceType === 'mcp' ? 'MCP' : alert.resourceType === 'agent' ? 'Agent' : alert.resourceType}
                           </span>
-                          <span className="text-gray-500">
+                          <span className="min-w-0 break-words text-gray-500">
                             {alert.agentName || alert.resourceId.substring(0, 8)}...
                           </span>
                           <span>•</span>
