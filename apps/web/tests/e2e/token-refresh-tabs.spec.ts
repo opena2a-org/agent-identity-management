@@ -128,6 +128,17 @@ for (const { name, webLocks } of CASES) {
         await route.fulfill({ response: await pastTheRateLimit(() => route.fetch()) });
       });
 
+      // Any other request of a tab to /api/v1/auth/* is under the same limit; one refused 429 is
+      // sent again past the Retry-After, so the tab never sees the refusal. Playwright runs the
+      // most recently registered route first, and the refresh route above is the one for that path.
+      await context.route('**/api/v1/auth/**', async (route) => {
+        if (new URL(route.request().url()).pathname === REFRESH_PATH) {
+          await route.fallback();
+          return;
+        }
+        await route.fulfill({ response: await pastTheRateLimit(() => route.fetch()) });
+      });
+
       await Promise.all(tabs.map((tab) => tab.goto(DASHBOARD_PAGE)));
       for (const tab of tabs) {
         expect(await tab.evaluate(() => typeof navigator.locks)).toBe(webLocks ? 'object' : 'undefined');
