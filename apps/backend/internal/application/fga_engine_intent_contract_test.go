@@ -192,3 +192,60 @@ func TestFGAIntentContract(t *testing.T) {
 		})
 	}
 }
+
+// TestFGAIntentContractMissingFields pins Step 5's fallback when a 2xx daemon
+// response lacks a usable attackClass or confidence: the result is an abstain
+// with IntentClass "unknown" and Confidence 0, whatever the classification
+// label says, and never blocks. Before this, a "classified" response that
+// omitted both fields was recorded as a confident benign.
+func TestFGAIntentContractMissingFields(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"both fields missing with classified label", `{"result":"stub","classification":"classified"}`},
+		{"attackClass missing", `{"result":"stub","confidence":0.9,"classification":"classified"}`},
+		{"confidence missing", `{"result":"stub","attackClass":"prompt_injection","classification":"classified"}`},
+		{"attackClass null", `{"result":"stub","attackClass":null,"confidence":0.9,"classification":"classified"}`},
+		{"confidence null", `{"result":"stub","attackClass":"","confidence":null,"classification":"classified"}`},
+		{"both missing legacy daemon", `{"result":"stub"}`},
+		{"empty object", `{}`},
+		{"confidence above one", `{"attackClass":"prompt_injection","confidence":1.5,"classification":"classified"}`},
+		{"confidence below zero", `{"attackClass":"","confidence":-0.1,"classification":"classified"}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(srv.Close)
+
+			engine := NewFGAEngine(nil, nil, nil)
+			engine.SetDaemonURL(srv.URL)
+
+			got := engine.checkIntentSync(context.Background(), &FGARequest{
+				AgentID:    uuid.New(),
+				Capability: "file:read",
+				Resource:   "/tmp/intent-contract-test",
+				Action:     "read",
+			})
+			if got == nil {
+				t.Fatal("checkIntentSync returned nil; expected an IntentCheckResult")
+			}
+			if got.Blocked {
+				t.Errorf("Blocked: got true, want false")
+			}
+			if got.IntentClass != intentClassUnknown {
+				t.Errorf("IntentClass: got %q, want %q", got.IntentClass, intentClassUnknown)
+			}
+			if got.Confidence != 0 {
+				t.Errorf("Confidence: got %v, want 0", got.Confidence)
+			}
+			if got.Status != intentStatusAbstain {
+				t.Errorf("Status: got %q, want %q", got.Status, intentStatusAbstain)
+			}
+		})
+	}
+}
