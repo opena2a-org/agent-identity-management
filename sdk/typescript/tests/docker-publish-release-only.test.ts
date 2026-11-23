@@ -1489,4 +1489,11 @@ describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a p
     expect(texts['docs/demo/stack/images.env']).toContain('ghcr.io/opena2a-org/aim-server:latest');
     expect(texts['sdk/python/README.md']).toContain('1.1.0');
   });
+
+  it('docker-publish.yml names no tracker identifier that resolves to nothing in this repository', () => {
+    const text = readFileSync(WORKFLOW_PATH, 'utf-8');
+    const found = text.split('\n').flatMap((line, i) => (/\b(?:AIM|QGF)-[0-9]/.test(line) ? [`${i + 1}: ${line}`] : []));
+    expect(found, `lines that name a tracker identifier:\n${found.join('\n')}`).toEqual([]);
+    expect(text).toContain('# The cell sdk/typescript/tests/docker-publish-release-only.test.ts holds this\n# shape.\n');
+  });
 });

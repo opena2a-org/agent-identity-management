@@ -1,6 +1,6 @@
 /**
- * Pins README/CHANGELOG claims to delivered behaviour (AIM-11 items 3, 7, and
- * the release invariant).
+ * Pins README/CHANGELOG claims to delivered behaviour: no automatic retries
+ * (item 3), the delegation lower bound (item 7) and the release invariant.
  *
  * Item 3 resolution: the SDK implements no retry logic (measured: no retry
  * loop, no `retries` config key), so the README must not claim automatic
@@ -36,7 +36,7 @@ describe('README delegation window claim (item 7)', () => {
   });
 });
 
-describe('CHANGELOG release invariant (AIM-11)', () => {
+describe('CHANGELOG release invariant', () => {
   it('the Unreleased section carries an entry per shipped P2 item', () => {
     const unreleased = changelog.split(/^## \[Unreleased\]/m)[1]?.split(/^## \[/m)[0] ?? '';
     // One recognizable marker per shipped item (1-9 of the release-test P2 set).

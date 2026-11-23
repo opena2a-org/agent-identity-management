@@ -1,5 +1,5 @@
 /**
- * AIM-06 — one enforcement deadline over the whole verification call (TypeScript).
+ * One enforcement deadline over the whole verification call (TypeScript).
  *
  * AC3: `enforcementTimeout` (milliseconds) in AIMClientConfig, resolved
  * constructor argument → AIM_ENFORCEMENT_TIMEOUT_MS → DEFAULT_ENFORCEMENT_TIMEOUT
@@ -165,7 +165,7 @@ afterAll(() => {
   }
 });
 
-describe('the enforcement deadline (AIM-06)', () => {
+describe('the enforcement deadline', () => {
   it(
     '(a) a stalled verification POST is ended by enforcementTimeout: 500 on the credentialed path',
     async () => {
