@@ -344,9 +344,27 @@ and the modules that decide allow/deny (`aim_sdk.enforcement`,
 **Port stage.** `aim_sdk.telemetry` is stage 1 of 3 of the ARP runtime-protection
 port (tracked in issue #441), ported schema-identical to the TypeScript
 reference in `sdk/typescript/src/telemetry` so both SDKs write the same
-`correlated-events.jsonl`. Stage 2 (the guard-socket client) and stage 3 (the
-engine port: event engine, runtime twin, coordinator, monitors, interceptors)
-are not part of this package. See the module docstring for the boundary.
+`correlated-events.jsonl`. Stage 2, the guard-socket client, is
+`aim_sdk.telemetry.guard` (below). Stage 3 (the engine port: event engine,
+runtime twin, coordinator, monitors, interceptors) is not part of this package.
+See the module docstring for the boundary.
+
+**Guard-socket client.** `NanoMindGuardClient` sends text to the NanoMind-Guard
+daemon as one JSON line over its AF_UNIX socket (`NANOMIND_GUARD_SOCK`, default
+`/tmp/nanomind-guard.sock`) and returns a `GuardVerdict` built only from the
+fields the daemon's Ed25519+ML-DSA-44 signature covers. It returns `None`, never
+a benign verdict, when the socket is absent, symlinked or silent, when the reply
+is unsigned, signed with another algorithm or key, for different text, or older
+than five minutes, and when no guard public key is configured. Checking the
+ML-DSA half needs the `pqc` extra (`liboqs-python`); without it every call
+returns `None`. There is no fallback to downloading the model from HuggingFace.
+
+```python
+from aim_sdk.telemetry import GuardPublicKey, NanoMindGuardClient
+
+guard = NanoMindGuardClient(GuardPublicKey.from_encoded(guard_public_key_json))
+verdict = guard.classify(text)   # GuardVerdict or None
+```
 
 ## Manual mode (no OAuth)
 

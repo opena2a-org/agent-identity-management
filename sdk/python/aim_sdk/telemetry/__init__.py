@@ -17,14 +17,15 @@ input, ported schema-identical to the TypeScript reference
 (``sdk/typescript/src/telemetry``) so both SDKs feed one local log format
 (``~/.opena2a/correlated-events.jsonl``).
 
-The two later stages are deliberately NOT begun here, and neither exists in this
-SDK -- each stage gates the next:
+Each stage gates the next:
 
-* **Stage 2 -- the guard-socket client.** JSON-lines over AF_UNIX to the
-  NanoMind-Guard daemon: null on socket-absent (graceful unavailability, never a
-  benign verdict), signed-fields-or-null, never a direct-HF fallback.
-* **Stage 3 -- the engine port.** Event engine (L0), runtime twin (L1),
-  coordinator (L2), monitors, and the interceptors that patch Python primitives
+* **Stage 2 -- the guard-socket client** (``guard.py``, shipped). JSON-lines over
+  AF_UNIX to the NanoMind-Guard daemon: None on socket-absent (graceful
+  unavailability, never a benign verdict), signed-fields-or-None, never a
+  direct-HF fallback.
+* **Stage 3 -- the engine port**, deliberately NOT begun here and absent from
+  this SDK. Event engine (L0), runtime twin (L1), coordinator (L2), monitors,
+  and the interceptors that patch Python primitives
   (``builtins.open``, ``subprocess``, ``socket``) -- shipped WITH the behavioral
   suite that guards against drift from the TS reference.
 
@@ -78,18 +79,44 @@ from .technique_mapping import (
     map_attack_class,
     interim_technique_fields,
 )
-from .relay import (
-    CorrelatedRelay,
-    FlushResult,
-    DEFAULT_REGISTRY_URL,
-    RUNTIME_TELEMETRY_PATH,
-    RELAY_EVENT_TYPE,
-    SENTINEL_PACKAGE_NAME,
-    open_a2a_home,
-    derive_sensor_token,
-    detect_runtime_env,
-    days_since_install,
+from .guard import (
+    FALLBACK_SOCK_PATH,
+    GUARD_SIGNATURE_ALGORITHM,
+    SIGNED_FIELDS,
+    GuardPublicKey,
+    GuardVerdict,
+    NanoMindGuardClient,
+    canonicalize_guard_result_payload,
+    resolve_socket_path,
+    verify_guard_signature,
 )
+
+# The relay names are loaded on first use (PEP 562). ``relay`` imports
+# ``requests`` for the upload; the rest of this package is stdlib-only, so
+# importing it (and the guard-socket client) must not need ``requests``.
+_RELAY_EXPORTS = (
+    "CorrelatedRelay",
+    "FlushResult",
+    "DEFAULT_REGISTRY_URL",
+    "RUNTIME_TELEMETRY_PATH",
+    "RELAY_EVENT_TYPE",
+    "SENTINEL_PACKAGE_NAME",
+    "open_a2a_home",
+    "derive_sensor_token",
+    "detect_runtime_env",
+    "days_since_install",
+)
+
+
+def __getattr__(name):
+    if name in _RELAY_EXPORTS:
+        from . import relay
+
+        value = getattr(relay, name)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # correlation
@@ -134,6 +161,16 @@ __all__ = [
     "is_technique_id_format",
     "map_attack_class",
     "interim_technique_fields",
+    # guard-socket client
+    "FALLBACK_SOCK_PATH",
+    "GUARD_SIGNATURE_ALGORITHM",
+    "SIGNED_FIELDS",
+    "GuardPublicKey",
+    "GuardVerdict",
+    "NanoMindGuardClient",
+    "canonicalize_guard_result_payload",
+    "resolve_socket_path",
+    "verify_guard_signature",
     # relay
     "CorrelatedRelay",
     "FlushResult",

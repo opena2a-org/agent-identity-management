@@ -7,9 +7,11 @@ AC2: detection output is a telemetry PRODUCER only. It
 never enters ``verify_action`` or any PDP deny path, and the verification
 modules do not import the seam.
 
-AC3: the port stops at stage 1. No guard-socket client (stage 2) and no
-interceptor patching of ``builtins`` / ``subprocess`` / ``socket`` (stage 3),
-and the stage boundary is stated in the package's own docstring.
+AC3: the port stops at stage 2. The guard-socket client (stage 2) is the only
+socket client in the package, and there is no interceptor patching of
+``builtins`` / ``subprocess`` / ``socket`` (stage 3). The stage boundary is
+stated in the package's own docstring. The guard client's own contract is
+tested in test_telemetry_guard_client.py.
 
 AC4: the seam is stdlib-only, matching the TS module's zero-runtime-dep posture.
 """
@@ -235,27 +237,33 @@ def test_detection_output_cannot_change_a_verdict():
 
 
 # --------------------------------------------------------------------------- #
-# AC3 -- stages 2 and 3 are not begun.
+# AC3 -- stage 2 is the guard client alone; stage 3 is not begun.
 # --------------------------------------------------------------------------- #
 def test_stage_boundary_is_documented():
     doc = (seam.__doc__ or "").lower()
     assert "stage 1 of 3" in doc
     assert "guard-socket client" in doc          # stage 2, named
     assert "engine port" in doc                  # stage 3, named
+    assert "not begun" in doc
     assert "issue #441" in doc                   # the public tracker for stages 2-3
     # The internal planning slug must NOT ship in a public docstring — the
     # public issue is the reference external readers can actually follow.
     assert "arp-python-sdk-parity" not in doc
 
 
-def test_no_guard_socket_client_in_the_seam():
-    # No AF_UNIX client anywhere in the telemetry package (the guard socket is
-    # stage 2). Checked on the AST, so the docstring naming it does not count.
+#: The stage-2 guard-socket client, the one module allowed to open a socket.
+GUARD_MODULE = "guard.py"
+
+
+def test_only_the_guard_client_opens_a_socket():
+    # Checked on the AST, so a docstring naming AF_UNIX does not count.
     for path in _python_files(SEAM_DIR):
+        if path.name == GUARD_MODULE:
+            continue
         tree = _parse(path)
         for node in ast.walk(tree):
             if isinstance(node, ast.Attribute) and node.attr == "AF_UNIX":
-                pytest.fail(f"{path.name}: AF_UNIX socket client is stage 2")
+                pytest.fail(f"{path.name}: AF_UNIX socket client belongs in {GUARD_MODULE}")
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
@@ -263,12 +271,15 @@ def test_no_guard_socket_client_in_the_seam():
                 and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "socket"
             ):
-                pytest.fail(f"{path.name}: socket client is stage 2")
+                pytest.fail(f"{path.name}: socket client belongs in {GUARD_MODULE}")
 
-    # And no stage-2/stage-3 module has appeared in the SDK.
+    # The guard client is the telemetry package's module, and no stage-3
+    # module has appeared in the SDK.
+    assert (SEAM_DIR / GUARD_MODULE).is_file()
     assert not (AIM_SDK_DIR / "arp").exists()
     for path in _python_files(AIM_SDK_DIR):
-        assert "guard" not in path.name.lower()
+        if path != SEAM_DIR / GUARD_MODULE:
+            assert "guard" not in path.name.lower()
         assert "interceptor" not in path.name.lower()
 
 
