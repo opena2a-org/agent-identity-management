@@ -315,12 +315,21 @@ services:
     build:
       context: .
       dockerfile: infrastructure/docker/Dockerfile.frontend
+      # The same URL as the container's NEXT_PUBLIC_API_URL below, so a build of this
+      # service is never handed http://localhost:8080 while the backend listens on another
+      # port. Dockerfile.frontend declares no ARG of that name, so next build reads none
+      # and the image holds no URL; the setting that reaches the dashboard is the one in
+      # environment.
+      args:
+        NEXT_PUBLIC_API_URL: ${FRONTEND_API_URL:-http://localhost:${AIM_BACKEND_PORT:-8080}}
     container_name: ${AIM_PROJECT:-aim}-frontend
     environment:
-      # The URL the browser reaches the API at; the dashboard hands it to the browser each
-      # time it renders a page. It follows the backend's host port unless FRONTEND_API_URL
-      # is set, which a dashboard opened from another machine or behind a reverse proxy
-      # needs (docs/DEPLOYMENT.md, Enable HTTPS).
+      # The URL the browser reaches the API at. The dashboard reads it from this
+      # environment each time it renders a page (apps/web/lib/runtime-config.ts), hands it
+      # to the browser and lists its origin in the page's connect-src. It follows the
+      # backend's host port (AIM_BACKEND_PORT) unless FRONTEND_API_URL is set, which a
+      # dashboard opened from another machine or behind a reverse proxy needs
+      # (docs/DEPLOYMENT.md, Enable HTTPS).
       - NEXT_PUBLIC_API_URL=${FRONTEND_API_URL:-http://localhost:${AIM_BACKEND_PORT:-8080}}
       - NODE_ENV=production
     # SECURITY: Published on every interface of the host, as is the backend's port: other
