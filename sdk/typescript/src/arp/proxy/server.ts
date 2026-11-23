@@ -5,22 +5,22 @@ import type {
   ARPEvent,
   CapabilityManifest,
   ManifestRejectionLog,
-} from '../types';
-import type { EventEngine } from '../engine/event-engine';
-import type { PromptInterceptor } from '../interceptors/prompt';
-import type { MCPProtocolInterceptor } from '../interceptors/mcp-protocol';
-import type { A2AProtocolInterceptor } from '../interceptors/a2a-protocol';
-import type { IntelligenceCoordinator } from '../intelligence/coordinator';
+} from '../types.js';
+import type { EventEngine } from '../engine/event-engine.js';
+import type { PromptInterceptor } from '../interceptors/prompt.js';
+import type { MCPProtocolInterceptor } from '../interceptors/mcp-protocol.js';
+import type { A2AProtocolInterceptor } from '../interceptors/a2a-protocol.js';
+import type { IntelligenceCoordinator } from '../intelligence/coordinator.js';
 import {
   ClassificationAnnotator,
   NanoMindGuardClassificationProvider,
-} from '../intelligence/classification-annotator';
-import type { EncodedHybridPublicKey } from '../crypto/types';
+} from '../intelligence/classification-annotator.js';
+import type { EncodedHybridPublicKey } from '../crypto/types.js';
 import {
   CapabilityManifestError,
   loadCapabilityManifest,
-} from '../crypto/manifest-loader';
-import { bufferBody, forwardRequest, sendResponse, sendError } from './forward';
+} from '../crypto/manifest-loader.js';
+import { bufferBody, forwardRequest, sendResponse, sendError } from './forward.js';
 
 export interface ARPProxyDeps {
   engine: EventEngine;
@@ -207,8 +207,8 @@ export class ARPProxy {
       this.wireDetectionCoordinator();
     }
 
-    return new Promise((resolve) => {
-      this.server = http.createServer((req, res) => {
+    return new Promise((resolve, reject) => {
+      const server = http.createServer((req, res) => {
         this.handleRequest(req, res).catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
           const statusCode = message === 'Request body too large' ? 413 : 502;
@@ -218,12 +218,29 @@ export class ARPProxy {
           sendError(res, statusCode, clientMessage);
         });
       });
+      this.server = server;
+
+      // A listen failure (EADDRINUSE, EADDRNOTAVAIL, ENOTFOUND, ...) is emitted
+      // as an 'error' event. Without a listener it would be thrown as an
+      // uncaught exception and exit the process; reject start() instead. The
+      // listener is removed once the server is listening.
+      const onError = (err: Error): void => {
+        server.removeListener('listening', onListening);
+        if (this.server === server) {
+          this.server = null;
+        }
+        reject(err);
+      };
+      const onListening = (): void => {
+        server.removeListener('error', onError);
+        resolve();
+      };
+      server.once('error', onError);
 
       // `||`, not `??`: an empty host falls back to the loopback default too.
+      // The callback is registered as a one-time 'listening' listener.
       const host = this.config.host || DEFAULT_PROXY_HOST;
-      this.server.listen(this.config.port, host, () => {
-        resolve();
-      });
+      server.listen(this.config.port, host, onListening);
     });
   }
 

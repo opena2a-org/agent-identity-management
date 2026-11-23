@@ -53,7 +53,7 @@
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
-import type { ARPEvent } from '../types';
+import type { ARPEvent } from '../types.js';
 
 /**
  * Shape returned by the twin's on-demand scorer. Mirrors RuntimeTwin's

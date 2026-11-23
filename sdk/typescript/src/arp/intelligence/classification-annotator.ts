@@ -41,14 +41,14 @@ import type {
   NanoMindGuardResult,
   NanoMindGuardVerifyOptions,
   NanoMindGuardVerifyResult,
-} from '../types';
-import { applyVerifiedClassification } from './verify-classification';
-import { allowlistEventDataForL2 } from './coordinator';
+} from '../types.js';
+import { applyVerifiedClassification } from './verify-classification.js';
+import { allowlistEventDataForL2 } from './coordinator.js';
 import {
   sendClassify,
   type ClassifyResponse,
   type ClientOptions,
-} from '../guard/nanomind-guard-client';
+} from '../guard/nanomind-guard-client.js';
 
 /**
  * The injectable classification source. The annotator depends only on this

@@ -51,18 +51,18 @@ import type {
   CapabilityManifest,
   CapabilityTier,
   ComplyOnViolation,
-} from '../types';
+} from '../types.js';
 import {
   decodeHybridPublicKey,
   decodeHybridSignature,
   hybridVerify,
   validateKeySize,
-} from './hybrid-signing';
+} from './hybrid-signing.js';
 import type {
   EncodedHybridPublicKey,
   EncodedHybridSignature,
   HybridAlgorithm,
-} from './types';
+} from './types.js';
 
 /** Only wire format version currently accepted. */
 export const MANIFEST_VERSION = '1.0.0' as const;
