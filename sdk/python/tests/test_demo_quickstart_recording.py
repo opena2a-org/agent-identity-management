@@ -42,7 +42,7 @@ def _read_tape():
     """The tape as the recorder plays it: its settings, the lines it shows, the
     pause before each shown Enter, and each step's hold after its last shown Enter."""
     text = TAPE.read_text(encoding="utf-8")
-    settings = dict(re.findall(r"^Set (\w+) (\S+)", text, flags=re.M))
+    settings = dict(re.findall(r"^Set (\w+) (\S+)", text, flags=re.MULTILINE))
     hidden, last, typed = False, None, ""
     shown, pre_enter, steps = [], [], []
     for raw in text.splitlines():
