@@ -331,6 +331,17 @@ LINKED_FROM_OUTSIDE = ["install-aim-self-hosted", "deployment"]
 def links_to_readme_headings():
     """(file, anchor) for each link in a tracked file to a heading of the root README: a
     relative link from markdown, or the README's URL on GitHub from any text file."""
+    # The tracked file list exists only in a git checkout of this repository: a
+    # source archive (`git archive`) has none, and a checkout of another
+    # repository above the archive would answer for that one.
+    try:
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=REPO_ROOT, capture_output=True,
+        )
+    except FileNotFoundError:
+        pytest.skip("git is not installed; this scan reads the repository's tracked files")
+    if toplevel.returncode != 0 or Path(toplevel.stdout.decode().strip()).resolve() != REPO_ROOT:
+        pytest.skip("not a git checkout of this repository; this scan reads its tracked files")
     tracked = subprocess.run(
         ["git", "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, check=True,
     ).stdout.decode().split("\0")

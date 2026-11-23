@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -14,6 +14,13 @@ import { join, resolve } from "node:path";
 const NEXT_ENV = /(^|\/)next-env\.d\.ts$/;
 const repoRoot = resolve(__dirname, "..", "..");
 const probe = "apps/web/next-env.d.ts";
+
+// The checks on this repository run only in a git checkout of it: they read its
+// index and ignore rules, which a source archive (`git archive`) does not carry,
+// and a checkout of another repository above the archive would answer for that
+// one. The checks on scratch repositories run anywhere.
+const toplevel = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: repoRoot, encoding: "utf8" });
+const inCheckout = toplevel.status === 0 && toplevel.stdout.trim() === realpathSync(repoRoot);
 
 // Returns null when `path` is ignored by a rule in the repo-root .gitignore,
 // otherwise what decides it instead.
@@ -47,7 +54,7 @@ function scratchRepo(files: Record<string, string>): string {
 }
 
 describe("Next.js generated type declarations", () => {
-  it("next-env.d.ts is not tracked anywhere in the repository", () => {
+  it.skipIf(!inCheckout)("next-env.d.ts is not tracked anywhere in the repository", () => {
     const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
       .split("\0")
       .filter(Boolean);
@@ -55,7 +62,7 @@ describe("Next.js generated type declarations", () => {
     expect(tracked.filter((file) => NEXT_ENV.test(file))).toEqual([]);
   });
 
-  it("apps/web/next-env.d.ts is ignored by .gitignore", () => {
+  it.skipIf(!inCheckout)("apps/web/next-env.d.ts is ignored by .gitignore", () => {
     expect(notIgnoredByGitignore(repoRoot, probe)).toBeNull();
   });
 

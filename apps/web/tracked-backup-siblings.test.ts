@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { execFileSync, spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Hand-made backup siblings of source files (page.tsx.bak, .bkp, .final, .fmt)
@@ -12,7 +13,13 @@ import { resolve } from "node:path";
 const BACKUP_SIBLING = /\.(bak|bkp|final|fmt)$/;
 const repoRoot = resolve(__dirname, "..", "..");
 
-describe("backup sibling files", () => {
+// Runs only in a git checkout of this repository: the checks read its index and
+// ignore rules, which a source archive (`git archive`) does not carry, and a
+// checkout of another repository above the archive would answer for that one.
+const toplevel = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: repoRoot, encoding: "utf8" });
+const inCheckout = toplevel.status === 0 && toplevel.stdout.trim() === realpathSync(repoRoot);
+
+describe.skipIf(!inCheckout)("backup sibling files", () => {
   it("none are tracked anywhere in the repository", () => {
     const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: repoRoot, encoding: "utf8" })
       .split("\0")

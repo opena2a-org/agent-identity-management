@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 
@@ -39,9 +39,18 @@ function sensitiveLogCalls(path: string, text: string): string[] {
   return hits;
 }
 
-const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" })
-  .split("\0")
-  .filter((path) => SOURCE.test(path));
+// The tracked file list exists only in a git checkout of this repository: a source
+// archive (`git archive`) has none, and a checkout of another repository above the
+// archive would answer for that one. Outside one, the scan of the dashboard is skipped.
+const repoRoot = join(root, "..", "..");
+const toplevel = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: repoRoot, encoding: "utf8" });
+const inCheckout = toplevel.status === 0 && toplevel.stdout.trim() === realpathSync(repoRoot);
+
+const tracked = inCheckout
+  ? execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" })
+      .split("\0")
+      .filter((path) => SOURCE.test(path))
+  : [];
 
 describe("no secret-named value logged to the console", () => {
   it("finds a planted call for each console method, and not a string, a comment or a longer name", () => {
@@ -73,12 +82,12 @@ describe("no secret-named value logged to the console", () => {
     expect(sensitiveLogCalls("components/help.tsx", quoted)).toEqual([]);
   });
 
-  it("reads the dashboard's tracked source, the tab bar included", () => {
+  it.skipIf(!inCheckout)("reads the dashboard's tracked source, the tab bar included", () => {
     expect(tracked).toContain("components/mobile-tab-bar.tsx");
     expect(tracked).toContain("app/dashboard/layout.tsx");
   });
 
-  it("has no console call whose first argument is a password, API key, secret or token", () => {
+  it.skipIf(!inCheckout)("has no console call whose first argument is a password, API key, secret or token", () => {
     const hits = tracked.flatMap((path) => sensitiveLogCalls(path, readFileSync(join(root, path), "utf8")));
     expect(hits).toEqual([]);
   });
