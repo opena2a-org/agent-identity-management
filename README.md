@@ -19,7 +19,7 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-The `[rich]` extra is optional and formats the output shown below; plain `pip install aim-sdk` works and prints the same fields in a panel. Then register an agent, in a Python session, with the capability it holds. What `secure()` prints, trimmed ([full output](docs/captures/quick-start.txt)):
+The `[rich]` extra is optional and formats the output shown below; plain `pip install aim-sdk` works and prints the same fields in a panel. Then register an agent, in a Python session, with the capability it holds. What the SDK built from this repository prints, trimmed ([full output](docs/captures/quick-start.txt)); the release on PyPI prints `✓` where it prints `[OK]`:
 
 ```python
 from aim_sdk import secure
@@ -64,7 +64,7 @@ def delete_customer(customer_id):
 delete_customer(42)
 ```
 
-AIM refuses it before the function body runs. What the call prints, trimmed ([full output](docs/captures/quick-start.txt)):
+AIM refuses it before the function body runs. What the PyPI release printed, trimmed ([full output](docs/captures/quick-start.txt)):
 
 ```
 Capability 'db:write' pending admin approval (strict mode)
@@ -72,8 +72,6 @@ aim_sdk.exceptions.ActionDeniedError: AIM denied 'db:write': Capability violatio
 ```
 
 The decorator files a request for `db:write`, and the agent's audit log records the denial with the same reason. On a stack started from the quickstart defaults, the reason names the built-in `default_policy` instead of 'Capability Violation Detection'.
-
-The SDK built from this repository printed the registration capture, and the release on PyPI printed the refusal; the release on PyPI prints `✓` where this repository's build prints `[OK]`, and adds `✓ Registered db:write (medium)` after the refusal's first line.
 
 The trust score is calculated at registration and recalculated when a manager verifies, suspends or reactivates the agent, grants or revokes a capability, or calls `POST /api/v1/agents/:id/trust-score/recalculate`, and every hour by default by the trust re-evaluation job (`TRUST_REEVALUATION_INTERVAL`). What a verification request does to it: [Trust-gated capabilities](docs/server-features.md#trust-gated-capabilities).
 
