@@ -161,6 +161,10 @@ describe('fleet gradients honor the master opt-out', () => {
  */
 describe('the twin AgentRuntimeProtection builds honors signatureTelemetry: { enabled: false }', () => {
   const FLUSH_INTERVAL = 300;
+  // 300 events through a full ARP, each logged to disk, take well under a
+  // second alone but can pass the default 5s timeout while the whole suite
+  // runs in parallel.
+  const RUN_TIMEOUT_MS = 30_000;
 
   function arpConfig(overrides: Partial<ARPConfig> = {}): ARPConfig {
     return {
@@ -190,11 +194,11 @@ describe('the twin AgentRuntimeProtection builds honors signatureTelemetry: { en
     await runARP(arpConfig());
 
     expect(gradientPosts()).toHaveLength(1);
-  });
+  }, RUN_TIMEOUT_MS);
 
   it('sends nothing when the ARP config carries signatureTelemetry: { enabled: false }', async () => {
     await runARP(arpConfig({ signatureTelemetry: { enabled: false } }));
 
     expect(gradientPosts()).toHaveLength(0);
-  });
+  }, RUN_TIMEOUT_MS);
 });

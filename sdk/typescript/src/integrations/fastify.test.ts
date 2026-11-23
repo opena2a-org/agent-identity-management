@@ -7,7 +7,7 @@
  * - verifyRoute hook
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { aimPlugin, verifyAction, verifyRoute } from './fastify';
 import { ActionDeniedError, AuthenticationError } from '../exceptions';
@@ -453,6 +453,14 @@ describe.each([
   // and TypeScript does not demand declarations for the alias.
   const loadFastify = async () =>
     ((await import(fastifyModule)) as { default: typeof import('fastify').default }).default;
+
+  // The first import of a Fastify major loads and transforms its whole module
+  // graph. On a busy machine (the full suite runs many files at once) that
+  // alone can take longer than a test's 5s timeout, so it is done here, with a
+  // timeout of its own, and each test below gets the cached module.
+  beforeAll(async () => {
+    await loadFastify();
+  }, 60_000);
 
   it('populates request.aim on routes registered outside the plugin', async () => {
     const Fastify = await loadFastify();
