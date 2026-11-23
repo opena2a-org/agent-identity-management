@@ -1165,10 +1165,11 @@ func (s *AgentService) VerifyAgent(ctx context.Context, id uuid.UUID) error {
 	}
 
 	now := time.Now()
+	from := agent.Status
 	agent.Status = to
 	agent.VerifiedAt = &now
 
-	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentVerified); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, from, transition.TriggerAgentVerified); err != nil {
 		return fmt.Errorf("failed to verify agent: %w", err)
 	}
 
@@ -2741,9 +2742,10 @@ func (s *AgentService) SuspendAgent(ctx context.Context, id uuid.UUID) error {
 	if err != nil || !write {
 		return err
 	}
+	from := agent.Status
 	agent.Status = to
 
-	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentSuspended); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, from, transition.TriggerAgentSuspended); err != nil {
 		return fmt.Errorf("failed to suspend agent: %w", err)
 	}
 
@@ -2773,10 +2775,11 @@ func (s *AgentService) ReactivateAgent(ctx context.Context, id uuid.UUID) error 
 	}
 
 	now := time.Now()
+	from := agent.Status
 	agent.Status = to
 	agent.VerifiedAt = &now
 
-	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentReactivated); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, from, transition.TriggerAgentReactivated); err != nil {
 		return fmt.Errorf("failed to reactivate agent: %w", err)
 	}
 
@@ -2804,9 +2807,10 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 	}
 
 	// Set status to revoked
+	from := agent.Status
 	agent.Status = domain.AgentStatusRevoked
 
-	if err := s.changeAgentStatus(ctx, agent, transition.TriggerAgentRevoked); err != nil {
+	if err := s.changeAgentStatus(ctx, agent, from, transition.TriggerAgentRevoked); err != nil {
 		return fmt.Errorf("failed to revoke agent: %w", err)
 	}
 
@@ -2826,8 +2830,10 @@ func (s *AgentService) RevokeAgent(ctx context.Context, id uuid.UUID) error {
 // changeAgentStatus stores agent.Status (and agent.VerifiedAt, for a
 // reactivation or a verification). With a transition recorder it writes only
 // those columns, together with the transition's record; without one it saves
-// the whole row as before.
-func (s *AgentService) changeAgentStatus(ctx context.Context, agent *domain.Agent, trigger transition.Trigger) error {
+// the whole row as before. from is the status the caller read and decided on: the
+// recorder's write is conditional on it, so a status changed since the read is not
+// overwritten (repository.ErrAgentStatusChanged).
+func (s *AgentService) changeAgentStatus(ctx context.Context, agent *domain.Agent, from domain.AgentStatus, trigger transition.Trigger) error {
 	if s.transitions == nil {
 		return s.agentRepo.Update(agent)
 	}
@@ -2837,7 +2843,7 @@ func (s *AgentService) changeAgentStatus(ctx context.Context, agent *domain.Agen
 	}
 	return recordAgentChange(ctx, s.transitions, agent, trigger, transition.System(),
 		func(ctx context.Context, tx *sql.Tx) error {
-			return repository.SetAgentStatusTx(ctx, tx, agent.ID, agent.Status, verifiedAt)
+			return repository.SetAgentStatusTx(ctx, tx, agent.ID, from, agent.Status, verifiedAt)
 		})
 }
 

@@ -17,15 +17,28 @@ import (
 // record commit together and the statement cannot write back a column some
 // other change set meanwhile.
 
-// SetAgentStatusTx sets an agent's status in tx. A non-nil verifiedAt also
-// sets verified_at.
-func SetAgentStatusTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, status domain.AgentStatus, verifiedAt *time.Time) error {
+// ErrAgentStatusChanged is returned by SetAgentStatusTx when the agent's stored status is
+// no longer the one the caller read and decided on.
+var ErrAgentStatusChanged = errors.New("agent status changed since it was read")
+
+// SetAgentStatusTx sets an agent's status in tx, from the status the caller read. The
+// UPDATE is conditional on that status, so a change decided on a stale read (a revoked
+// agent reactivated because the read saw it suspended) writes nothing and returns
+// ErrAgentStatusChanged. A non-nil verifiedAt also sets verified_at.
+func SetAgentStatusTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, from, status domain.AgentStatus, verifiedAt *time.Time) error {
 	res, err := tx.ExecContext(ctx, `
 		UPDATE agents
 		   SET status = $2, verified_at = COALESCE($3, verified_at), updated_at = NOW()
-		 WHERE id = $1`, id, status, verifiedAt)
+		 WHERE id = $1 AND status = $4`, id, status, verifiedAt, from)
 	if err != nil {
 		return fmt.Errorf("set agent status: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set agent status: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("set agent status: %w", ErrAgentStatusChanged)
 	}
 	return oneRow(res, "set agent status")
 }

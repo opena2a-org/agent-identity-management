@@ -463,6 +463,10 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   member, manager and admin session through the route table `mountAPIRoutes` builds; on the base commit all 65 of
   those requests were answered `404`.
 
+### Fixed — an agent's verify, suspend, reactivate and revoke write the status only while it is the one that was read (#617)
+
+`AgentService` read an agent's status, decided the transition from it, and then wrote the new status with an `UPDATE` that matched the agent by id alone. A revoke that landed between a reactivate's read and its write was overwritten with `verified`. The write now also requires the status the caller read; when the stored status has changed the transaction rolls back and the call fails with `repository.ErrAgentStatusChanged`. The low-trust-score suspension is conditional in the same way. Test: `apps/backend/internal/infrastructure/repository/agent_status_write_condition_test.go`.
+
 ### Fixed — the server refuses to start with a signing key the card attestation conformance vector publishes (#617)
 
 `docs/specs/card-attestation-v2-vector.json` publishes two Ed25519 seeds so that anyone can reproduce its signatures, and so anyone can sign with them. The server now stops at startup when `AIM_SIGNING_KEY_CARD_ATTESTATION` or `AIM_SIGNING_KEY_ATC_ISSUER` holds either seed, or when `AIM_SIGNING_KEY_CARD_ATTESTATION_RETIRED` or `AIM_SIGNING_KEY_ATC_ISSUER_RETIRED` lists the public key of either seed, with an error that names the variable and not its value. A seed of your own loads as before.
