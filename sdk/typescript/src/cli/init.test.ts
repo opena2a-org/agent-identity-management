@@ -36,6 +36,7 @@ import {
   EXCHANGE_PATH,
   initHelpText,
   invalidServerUrlReason,
+  REFUSED_TOKEN_FLAG,
   reportedDashboardUrl,
   runInit,
   scrubToken,
@@ -248,12 +249,16 @@ describe('flags', () => {
   it('a token given as a flag is refused before any request, in every form, without echoing it', async () => {
     // A flag value is visible in the process list and shell history, so the
     // token is read from the environment only; the flag is refused even when
-    // the environment holds a token too, and even without a value.
+    // the environment holds a token too, and even without a value. The argv
+    // is built from the exported flag name so the refused flag and this test
+    // cannot drift apart.
+    const flag = REFUSED_TOKEN_FLAG;
     const forms = [
-      ['--token', TOKEN, '--url', baseUrl],
-      [['--token', TOKEN].join('='), '--url', baseUrl],
-      ['--url', baseUrl, '--token'],
+      [flag, TOKEN, '--url', baseUrl],
+      [`${flag}=${TOKEN}`, '--url', baseUrl],
+      ['--url', baseUrl, flag],
     ];
+    expect(forms.every((argv) => argv.every((a) => typeof a === 'string'))).toBe(true);
     for (const argv of forms) {
       errLines = [];
       expect(await runInit(argv, deps({ AIM_BOOTSTRAP_TOKEN: TOKEN })), argv.join(' ')).toBe(1);
@@ -264,7 +269,7 @@ describe('flags', () => {
       expect(allOutput()).not.toContain(TOKEN);
     }
     expect(seen).toHaveLength(0);
-    expect(initHelpText()).not.toContain('--token');
+    expect(initHelpText()).not.toContain(flag);
   });
 
   it('a name that is a path is refused before the token is sent (#755)', async () => {
