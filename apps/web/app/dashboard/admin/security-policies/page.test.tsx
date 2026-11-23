@@ -24,6 +24,15 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({ ...(await importOriginal<object>()), api }));
 
+// Wraps the real conversion so a test can see what the page passes to it and substitute what
+// it returns; every other test runs the real function.
+const trustScore = vi.hoisted(() => ({ percentToMinTrustScore: vi.fn() }));
+vi.mock("@/lib/mcp-policy-trust-score", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/mcp-policy-trust-score")>();
+  trustScore.percentToMinTrustScore.mockImplementation(actual.percentToMinTrustScore);
+  return { ...actual, percentToMinTrustScore: trustScore.percentToMinTrustScore };
+});
+
 const adminToken = `header.${btoa(JSON.stringify({ role: "admin" }))}.signature`;
 
 const allowlistPolicy = {
@@ -118,6 +127,24 @@ describe("Security policies page, MCP policy editing", () => {
 
     await waitFor(() => expect(api.createSecurityPolicy).toHaveBeenCalledTimes(1));
     expect(api.createSecurityPolicy.mock.calls[0][0].rules).toMatchObject({ minTrustScore: 0.7 });
+  });
+
+  it("submits percentToMinTrustScore(minTrustScore) as the rule's minTrustScore", async () => {
+    // A value no inline arithmetic on 70 produces, so only the conversion can have made it.
+    const sentinel = 0.123456;
+    const real = trustScore.percentToMinTrustScore.getMockImplementation();
+    trustScore.percentToMinTrustScore.mockImplementation(() => sentinel);
+    try {
+      const dialog = await openEditDialog();
+      fireEvent.change(inputUnder(dialog, "Min Trust Score (%)"), { target: { value: "70" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Update Policy" }));
+
+      await waitFor(() => expect(api.updateSecurityPolicy).toHaveBeenCalledTimes(1));
+      expect(trustScore.percentToMinTrustScore).toHaveBeenCalledWith(70);
+      expect(api.updateSecurityPolicy.mock.calls[0][1].rules.minTrustScore).toBe(sentinel);
+    } finally {
+      if (real) trustScore.percentToMinTrustScore.mockImplementation(real);
+    }
   });
 });
 
