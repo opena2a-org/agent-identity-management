@@ -40,6 +40,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mints a bootstrap token; the paragraph now says that a signed-in member, manager or admin mints one with
   `POST /api/v1/onboarding/bootstrap-tokens`, and links to that route in `docs/API.md`.
 
+### Fixed: `secure()` and `register_agent()` send the stored sign-in's token only to the server that sign-in is for
+
+- With a sign-in stored on this machine (from `aim-sdk login`, a dashboard download or the sign-in `secure()` runs),
+  `secure()` registers with that sign-in's access token, which is obtained and refreshed at the server the sign-in is
+  for, its `aimUrl` (`http://localhost:8080` when it stores none). An `aim_url` naming another server, compared
+  without a trailing `/`, is now refused before any request with a `ConfigurationError`:
+  `The sign-in stored on this machine is for another server, so its token is not sent to <server>.` and
+  `To register there, sign in to it first: aim-sdk login --force --url <server>`. The stored address is not repeated.
+  An `aim_url` naming the sign-in's server, and no `aim_url`, register as before.
+- Before, `secure("my-agent", aim_url=<another server>)` sent the registration, with the stored sign-in's bearer
+  token, to the server `aim_url` named.
+- Tests: `tests/test_secure_sends_the_token_to_the_signed_in_server_only.py`.
+
 ### Fixed: `aim-sdk demo --cleanup` sends the stored sign-in's token only to the server that sign-in is for
 
 - `aim-sdk demo --cleanup` looks the demo agent up and deletes it with the access token of the sign-in stored on this

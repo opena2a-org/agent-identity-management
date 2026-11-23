@@ -5336,7 +5336,21 @@ def register_agent(
         # SDK MODE: Use embedded OAuth credentials
         auth_mode = "oauth"
         # Support both camelCase and snake_case for backward compatibility
-        aim_url = aim_url or sdk_creds.get("aimUrl") or sdk_creds.get("aim_url")
+        signed_in_url = sdk_creds.get("aimUrl") or sdk_creds.get("aim_url")
+        # Before any request: OAuthTokenManager obtains and refreshes the
+        # token at the stored sign-in's server (http://localhost:8080 when the
+        # sign-in stores none), so the token is sent to that server only. An
+        # aim_url naming another server is refused, as `aim-sdk demo
+        # --cleanup` refuses one; the stored address, which may hold a user
+        # name or password, is compared and not repeated.
+        if aim_url:
+            wanted = aim_url.strip().rstrip("/")
+            if wanted != (signed_in_url or "http://localhost:8080").strip().rstrip("/"):
+                raise ConfigurationError(
+                    f"The sign-in stored on this machine is for another server, so its token is not sent to {wanted}.\n"
+                    f"To register there, sign in to it first: aim-sdk login --force --url {wanted}"
+                )
+        aim_url = aim_url or signed_in_url
         sdk_token_id = sdk_token_id or sdk_creds.get("sdkTokenId") or sdk_creds.get("sdk_token_id")
 
         from .credentials import STORED_ADDRESS_HAS_USER_INFO, has_user_info
