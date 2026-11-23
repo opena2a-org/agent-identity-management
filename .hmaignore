@@ -42,6 +42,7 @@ apps/backend/internal/application/agent_service_test.go:AST-CRED-003 # the place
 apps/backend/internal/application/api_key_service_test.go:AST-CRED-003 # the `aim_live_` prefix an API key is asserted to start with
 apps/backend/internal/application/device_auth_service_session_test.go:AST-CRED-003 # a labelled test-only JWT secret set with t.Setenv, and device codes minted in-process
 apps/backend/internal/application/device_auth_service_single_use_test.go:AST-CRED-003 # device codes minted in-process by the shared test helper
+sdk/typescript/src/cli/init.test.ts:AST-CRED-003 # the made-up bootstrap token `aim_ob_Xk3q...` the test sends to its own in-process server and asserts is never printed
 
 # The server's blocklist of known development secrets and template
 # placeholders, such as the JWT_SECRET placeholder in .env.example. The
