@@ -174,6 +174,12 @@ docs(readme): update installation instructions
 test(agents): add integration tests for agent registration
 ```
 
+**Cherry-picked commits**: a commit landed on `main` from a private branch carries no
+`(cherry picked from commit <sha>)` line. That line names a commit nobody outside the private branch can see, so it
+tells a reader of the public history nothing. Cherry-pick without `-x`, and if a commit already carries the line,
+remove it with `git commit --amend` before the commit lands. Published history is not rewritten for this: the commits
+already on `main` that carry the line keep it.
+
 ## Tag conventions
 
 This repository ships multiple independently versioned artifacts (the platform itself and three language SDKs). Tags use per-package prefixes so each artifact has its own release timeline and so the release workflow can filter cleanly.
