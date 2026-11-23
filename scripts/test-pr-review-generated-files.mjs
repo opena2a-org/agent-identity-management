@@ -14,6 +14,10 @@
 // requests composed as the workflow composes them, and the workflow's resolve
 // and post steps executed verbatim with bash.
 //
+// The HUGE-PAYLOAD cells cover the data-URI image payloads the composer
+// replaces with a marker, and the files over the gather step's full-file limit
+// it leaves out of the context list.
+//
 // Each case name carries its criterion id as its first token.
 
 import assert from 'node:assert/strict';
@@ -1590,4 +1594,164 @@ test('OVER-BUDGET.AC8 the workflow wires the over-budget path: the header writte
   assert.ok(script.includes('\nconst REVIEW_TOKEN_BUDGET = 180000;\n'));
   assert.ok(script.includes('\nconst REVIEW_MAX_BATCHES = 8;\n'));
   assert.ok(script.includes('\nconst PACK_TARGET_TOKENS = 120000;\n'));
+});
+
+// ---------------------------------------------------------------------------
+// HUGE-PAYLOAD: data-URI image payloads are elided from the diff, and a file
+// over the gather step's full-file limit is left out of the context list.
+// ---------------------------------------------------------------------------
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// Deterministic bytes of the given length after the given signature.
+function imageBytes(signature, length, seed = 'payload') {
+  const out = [signature];
+  let have = signature.length;
+  for (let i = 0; have < length; i += 1) {
+    const chunk = createHash('sha256').update(`${seed}-${i}`).digest();
+    out.push(chunk);
+    have += chunk.length;
+  }
+  return Buffer.concat(out).subarray(0, length);
+}
+
+const svgWith = (mediaType, payload) =>
+  `<svg xmlns="http://www.w3.org/2000/svg"><image href="data:${mediaType};base64,${payload}" width="10"/></svg>`;
+
+const elisionMarker = (mediaType, bytes) =>
+  `data:${mediaType};base64,[${mediaType} payload elided before review by scripts/pr-review-generated-files.mjs: ` +
+  `${bytes.toString('base64').length} base64 characters, ${bytes.length} decoded bytes with the ${mediaType} signature, sha256 ${sha256(bytes)}]`;
+
+test('HUGE-PAYLOAD.AC1 a base64 image payload whose bytes carry its media type\'s signature is replaced in its own line by a marker with its length, size and digest, in added, modified and deleted sections, and recorded', (t) => {
+  const png = imageBytes(PNG_SIGNATURE, 6000, 'png');
+  const jpeg = imageBytes(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), 3000, 'jpeg');
+  const gif = imageBytes(Buffer.from('GIF89a', 'latin1'), 3000, 'gif');
+  const webpHead = Buffer.concat([Buffer.from('RIFF', 'latin1'), Buffer.alloc(4), Buffer.from('WEBP', 'latin1')]);
+  const webp = imageBytes(webpHead, 3000, 'webp');
+  const oldPng = imageBytes(PNG_SIGNATURE, 6000, 'old');
+
+  const sections = {
+    added: addedSection('apps/web/public/logo.svg', ['<?xml version="1.0"?>', svgWith('image/png', png.toString('base64'))]),
+    modified: modifiedSection(
+      'apps/web/src/icons.ts',
+      [`export const ICON = 'data:image/jpeg;base64,${jpeg.toString('base64')}';`],
+      [`export const ICON = 'data:image/gif;base64,${gif.toString('base64')}'; const B = 'data:image/webp;base64,${webp.toString('base64')}';`],
+    ),
+    deleted: deletedSection('docs/old.svg', [svgWith('image/png', oldPng.toString('base64'))]),
+    readme: modifiedSection('README.md', ['old title'], ['new title']),
+  };
+  const diff = Object.values(sections).join('');
+  const r = compose(t, {
+    tree: tmpdir(t),
+    changedFiles: 'apps/web/public/logo.svg\napps/web/src/icons.ts\ndocs/old.svg\nREADME.md\n',
+    diff,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const out = fs.readFileSync(r.outputs.diff, 'utf8');
+  const expected =
+    addedSection('apps/web/public/logo.svg', [
+      '<?xml version="1.0"?>',
+      svgWith('image/png', 'X').replace('data:image/png;base64,X', elisionMarker('image/png', png)),
+    ]) +
+    modifiedSection(
+      'apps/web/src/icons.ts',
+      [`export const ICON = '${elisionMarker('image/jpeg', jpeg)}';`],
+      [`export const ICON = '${elisionMarker('image/gif', gif)}'; const B = '${elisionMarker('image/webp', webp)}';`],
+    ) +
+    deletedSection('docs/old.svg', [svgWith('image/png', 'X').replace('data:image/png;base64,X', elisionMarker('image/png', oldPng))]) +
+    sections.readme;
+  assert.equal(out, expected);
+  assert.equal(countLines(out), countLines(diff), 'every line of every section is kept');
+  assert.match(r.stdout, /, 5 data-URI payload\(s\) elided, 0 path\(s\) over the full-file limit\n$/);
+
+  const report = readJson(r.outputs.report);
+  const record = (p, sectionLine, mediaType, bytes) => ({
+    path: p,
+    sectionLine,
+    mediaType,
+    chars: bytes.toString('base64').length,
+    bytes: bytes.length,
+    sha256: sha256(bytes),
+  });
+  assert.deepEqual(report.payloads, [
+    record('apps/web/public/logo.svg', 8, 'image/png', png),
+    record('apps/web/src/icons.ts', 7, 'image/jpeg', jpeg),
+    record('apps/web/src/icons.ts', 8, 'image/gif', gif),
+    record('apps/web/src/icons.ts', 8, 'image/webp', webp),
+    record('docs/old.svg', 7, 'image/png', oldPng),
+  ]);
+  assert.deepEqual(report.substituted, []);
+  assert.deepEqual(report.contextExcluded, []);
+});
+
+test('HUGE-PAYLOAD.AC2 a payload that is short, not canonical base64, not carrying its declared signature, svg+xml, or in an unclassified section is sent byte-identical', (t) => {
+  const png = imageBytes(PNG_SIGNATURE, 6000, 'png');
+  const b64 = png.toString('base64');
+  const short = imageBytes(PNG_SIGNATURE, 600, 'short').toString('base64');
+  assert.ok(short.length < 1024);
+  const text = Buffer.from('<script>alert(1)</script>'.repeat(200)).toString('base64');
+  const svg = Buffer.from(`<svg>${'<script>alert(1)</script>'.repeat(200)}</svg>`).toString('base64');
+  const jpegLabelOnPng = b64;
+  const notCanonical = `${b64.slice(0, -4)}AAA=`.replace(/=$/, 'B=');
+  assert.notEqual(Buffer.from(notCanonical, 'base64').toString('base64'), notCanonical);
+  const quoted =
+    `diff --git "a/docs/sp ace.svg" "b/docs/sp ace.svg"\nindex 1111111..2222222 100644\n--- "a/docs/sp ace.svg"\n+++ "b/docs/sp ace.svg"\n` +
+    `@@ -1 +1 @@\n-old\n+${svgWith('image/png', b64)}\n`;
+  const diff =
+    addedSection('a.svg', [svgWith('image/png', short)]) +
+    addedSection('b.svg', [svgWith('image/png', text)]) +
+    addedSection('c.svg', [svgWith('image/svg+xml', svg)]) +
+    addedSection('d.svg', [svgWith('image/jpeg', jpegLabelOnPng)]) +
+    addedSection('e.svg', [svgWith('image/png', notCanonical)]) +
+    quoted;
+  const r = compose(t, { tree: tmpdir(t), changedFiles: 'a.svg\nb.svg\nc.svg\nd.svg\ne.svg\ndocs/sp ace.svg\n', diff });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(r.outputs.diff, 'utf8'), diff);
+  const report = readJson(r.outputs.report);
+  assert.deepEqual(report.payloads, []);
+  assert.equal(report.unclassified.length, 1);
+});
+
+test('HUGE-PAYLOAD.AC3 a path whose file is larger than the gather step\'s MAX_FULL_SIZE is left out of the context list and recorded; the files after it, a file at the limit and an absent path are kept', (t) => {
+  const workflow = fs.readFileSync(PR_REVIEW, 'utf8');
+  assert.ok(runText(workflow, 'Gather review context').includes('\nMAX_FULL_SIZE=200000\n'));
+  assert.ok(fs.readFileSync(SCRIPT, 'utf8').includes('\nconst FULL_FILE_CONTEXT_MAX_BYTES = 200000;\n'));
+
+  const tree = tmpdir(t);
+  writeFiles(tree, {
+    'README.md': '# title\n',
+    'apps/web/public/big.svg': 'x'.repeat(200001),
+    'at-limit.txt': 'y'.repeat(200000),
+    'apps/backend/main.go': 'package main\n',
+  });
+  fs.symlinkSync('big.svg', path.join(tree, 'apps/web/public/link.svg'));
+  const changedFiles = 'README.md\napps/web/public/big.svg\napps/web/public/link.svg\nat-limit.txt\nabsent.go\napps/backend/main.go\n';
+  const r = compose(t, { tree, changedFiles, diff: '' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(r.outputs.context, 'utf8'), 'README.md\nat-limit.txt\nabsent.go\napps/backend/main.go\n');
+  const reason = 'larger than the 200000-byte full-file context';
+  assert.deepEqual(readJson(r.outputs.report).contextExcluded, [
+    { path: 'apps/web/public/big.svg', bytes: 200001, reason },
+    { path: 'apps/web/public/link.svg', bytes: 200001, reason },
+  ]);
+});
+
+test('HUGE-PAYLOAD.AC4 a pull request replacing a 1 MB PNG-in-SVG logo with a small vector reaches the reviewer as a diff of a few kilobytes and no full-file block for the old file', (t) => {
+  const png = imageBytes(PNG_SIGNATURE, 763576, 'logo');
+  const oldSvg = svgWith('image/png', png.toString('base64'));
+  assert.ok(oldSvg.length > 1000000);
+  const newSvg = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">', '<path d="M0 0h512v512H0z"/>', '</svg>'];
+  const diff =
+    `diff --git a/apps/web/public/opena2a-logo.svg b/apps/web/public/opena2a-logo.svg\nindex 1111111..2222222 100644\n` +
+    `--- a/apps/web/public/opena2a-logo.svg\n+++ b/apps/web/public/opena2a-logo.svg\n@@ -1 +1,3 @@\n-${oldSvg}\n\\ No newline at end of file\n` +
+    `${newSvg.map((l) => `+${l}`).join('\n')}\n`;
+  const tree = tmpdir(t);
+  writeFiles(tree, { 'apps/web/public/opena2a-logo.svg': `${newSvg.join('\n')}\n` });
+  const r = compose(t, { tree, changedFiles: 'apps/web/public/opena2a-logo.svg\n', diff });
+  assert.equal(r.status, 0, r.stderr);
+  const out = fs.readFileSync(r.outputs.diff, 'utf8');
+  assert.ok(out.length < 2000, `composed diff is ${out.length} bytes`);
+  assert.ok(out.includes(elisionMarker('image/png', png)));
+  assert.ok(out.endsWith(`${newSvg.map((l) => `+${l}`).join('\n')}\n`));
+  assert.equal(fs.readFileSync(r.outputs.context, 'utf8'), 'apps/web/public/opena2a-logo.svg\n');
 });

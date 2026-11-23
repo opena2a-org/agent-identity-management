@@ -27,6 +27,21 @@
 //      an unmeasured header shape) is kept whole and named under `unclassified`,
 //      so nothing is ever folded into a neighbour's placeholder and nothing is
 //      silently shortened.
+//
+//      A raster image carried as a base64 data URI is the other change a
+//      reader cannot review by eye, and one such image (a 1 MB PNG inside the
+//      logo SVG, on one line) made any pull request touching its file
+//      INCONCLUSIVE. In every section kept whole, a data-URI payload is
+//      replaced, inside its own line, by a marker that keeps the media type
+//      and carries the payload's length, decoded size and digest, and only
+//      when its decoded bytes begin with that media type's signature. The
+//      section keeps every line, and each elision is named in the report's
+//      `payloads` array. Unclassified sections are not touched.
+//
+//      The full-file context list also leaves out every path whose file
+//      under --tree is larger than the gather step's full-file limit, named
+//      in the report's `contextExcluded` array: the step's loop could never
+//      show such a file, and stopped at it, dropping every file after it.
 //   3. Writes a JSON report of what it did, and, invoked with --enforce-report,
 //      reads that report back and fails on any red predicate. The job's
 //      conclusion on a red predicate comes from this record, never from the
@@ -88,6 +103,29 @@ const LOCK_SUFFIX = '.lock';
 // whole and recorded, never substituted: a placeholder that only says
 // "unevaluated" is a truncation notice, and that is what this gate refuses.
 const NPM_BASENAMES = new Set(['package-lock.json', 'npm-shrinkwrap.json']);
+
+// The gather step's MAX_FULL_SIZE. Its loop stops at the first file that
+// would take the full-file context past this many bytes and drops every file
+// listed after it, so a file larger than this on its own is left out of the
+// list here instead: it could never be shown, and it must not take the files
+// behind it down with it. Its diff section is still sent.
+const FULL_FILE_CONTEXT_MAX_BYTES = 200000;
+
+// Data-URI payloads that are elided from the diff: base64 raster images, the
+// one kind a reader cannot review by eye and that is routinely larger than the
+// review budget (the logo SVG carried a 1,018,104-character PNG on one line).
+// A payload is elided only when it is at least DATA_URI_MIN_CHARS long, is
+// canonical base64, and decodes to bytes that begin with the signature of the
+// media type it declares, so no other content can pass as an image and leave
+// the reviewer's sight. Anything else, svg+xml included, is sent as it is.
+const DATA_URI_MIN_CHARS = 1024;
+const DATA_URI_PAYLOAD = /data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/]+={0,2})/g;
+const IMAGE_SIGNATURES = {
+  'image/png': (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/jpeg': (b) => b.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff])),
+  'image/gif': (b) => ['GIF87a', 'GIF89a'].includes(b.subarray(0, 6).toString('latin1')),
+  'image/webp': (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+};
 
 const DELTA_FIELDS = [
   'version',
@@ -167,6 +205,17 @@ function treeFile(treeDir, relLatin1) {
     Buffer.from(path.sep),
     Buffer.from(relLatin1, 'latin1'),
   ]);
+}
+
+// The size of a regular file, following symlinks as the gather step's
+// `[ -f ]` does; null when there is no regular file at the path.
+function fileSize(bufPath) {
+  try {
+    const st = fs.statSync(bufPath);
+    return st.isFile() ? st.size : null;
+  } catch {
+    return null;
+  }
 }
 
 function fileExists(bufPath) {
@@ -594,6 +643,41 @@ function substituteNpmSection(section, treeDir, baseTreeDir) {
 }
 
 // ---------------------------------------------------------------------------
+// Data-URI payloads.
+// ---------------------------------------------------------------------------
+
+// Replaces every elidable data-URI payload in a section with a marker that
+// keeps the media type and carries the payload's length, decoded size and
+// digest. Only the payload characters are replaced, inside the line they sit
+// on, so the section keeps every line, every hunk header stays true, and the
+// line still reads `data:image/png;base64,` before the marker. Returns the
+// section unchanged, and no records, when nothing is elidable.
+function elideDataUriPayloads(text, sectionPath) {
+  const records = [];
+  const out = text.replace(DATA_URI_PAYLOAD, (match, mediaType, payload, offset) => {
+    if (payload.length < DATA_URI_MIN_CHARS || payload.length % 4 !== 0) return match;
+    const bytes = Buffer.from(payload, 'base64');
+    if (bytes.toString('base64') !== payload) return match;
+    if (!IMAGE_SIGNATURES[mediaType](bytes)) return match;
+    const digest = sha256Hex(bytes);
+    const line = countLines(text.slice(0, offset));
+    records.push({
+      path: fromLatin1(sectionPath),
+      sectionLine: line,
+      mediaType,
+      chars: payload.length,
+      bytes: bytes.length,
+      sha256: digest,
+    });
+    return (
+      `data:${mediaType};base64,[${mediaType} payload elided before review by ${INSTRUMENT_PATH}: ` +
+      `${payload.length} base64 characters, ${bytes.length} decoded bytes with the ${mediaType} signature, sha256 ${digest}]`
+    );
+  });
+  return { text: out, records };
+}
+
+// ---------------------------------------------------------------------------
 // Compose mode.
 // ---------------------------------------------------------------------------
 
@@ -614,22 +698,40 @@ function compose(args) {
   const diff = readInput('diff');
 
   // 1. The full-file context list: every non-generated line, in input order,
-  //    byte for byte.
+  //    byte for byte, less every path whose file under --tree is larger than
+  //    the gather step's full-file limit.
   const contextLines = [];
   const generated = [];
+  const contextExcluded = [];
   for (const line of splitLines(changed)) {
     const p = line.endsWith('\n') ? line.slice(0, -1) : line;
-    if (generatedKind(p) === null) contextLines.push(line);
-    else generated.push(fromLatin1(p));
+    if (generatedKind(p) !== null) {
+      generated.push(fromLatin1(p));
+      continue;
+    }
+    const size = p === '' ? null : fileSize(treeFile(treeDir, p));
+    if (size !== null && size > FULL_FILE_CONTEXT_MAX_BYTES) {
+      contextExcluded.push({
+        path: fromLatin1(p),
+        bytes: size,
+        reason: `larger than the ${FULL_FILE_CONTEXT_MAX_BYTES}-byte full-file context`,
+      });
+      continue;
+    }
+    contextLines.push(line);
   }
 
-  // 2. The diff. Every section is preserved byte-identical and in its original
-  //    order unless it is an npm-family lockfile section, which is replaced.
+  // 2. The diff. Every section is preserved in its original order. An
+  //    npm-family lockfile section is replaced by its placeholder; in every
+  //    other section whose path is read, each elidable data-URI payload is
+  //    replaced by its marker and every other byte is preserved. A section
+  //    with nothing to elide, and every unclassified section, is byte-identical.
   const { preamble, sections } = splitSections(diff);
   const outParts = [preamble];
   const substituted = [];
   const retained = [];
   const unclassified = [];
+  const payloads = [];
   for (const text of sections) {
     const section = classifySection(text);
     if (section.kind === 'unclassified') {
@@ -647,7 +749,9 @@ function compose(args) {
       const { record, text: placeholder } = substituteNpmSection(section, treeDir, baseTreeDir);
       substituted.push(record);
       outParts.push(placeholder);
-    } else if (kind !== null) {
+      continue;
+    }
+    if (kind !== null) {
       retained.push({
         path: fromLatin1(section.path),
         kind,
@@ -655,10 +759,10 @@ function compose(args) {
         bytes: section.bytes,
         reason: 'no instrument for this kind',
       });
-      outParts.push(text);
-    } else {
-      outParts.push(text);
     }
+    const elided = elideDataUriPayloads(text, section.path);
+    payloads.push(...elided.records);
+    outParts.push(elided.text);
   }
 
   // 3. The record of what was done, naming the instrument by path and by the
@@ -672,6 +776,8 @@ function compose(args) {
     substituted,
     retained,
     unclassified,
+    payloads,
+    contextExcluded,
   };
 
   // 4. Only now, with every section composed, are the outputs written.
@@ -680,7 +786,8 @@ function compose(args) {
   fs.writeFileSync(args['out-report'], `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(
     `${PROG}: ${generated.length} generated path(s) excluded from the full-file context, ` +
-      `${substituted.length} section(s) substituted, ${retained.length} retained, ${unclassified.length} unclassified\n`,
+      `${substituted.length} section(s) substituted, ${retained.length} retained, ${unclassified.length} unclassified, ` +
+      `${payloads.length} data-URI payload(s) elided, ${contextExcluded.length} path(s) over the full-file limit\n`,
   );
   return 0;
 }
