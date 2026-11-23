@@ -61,9 +61,26 @@ export async function runAimArp(argv: string[]): Promise<number> {
       showHelp();
       return 0;
     default:
-      // A bootstrap token pasted as the argument is printed redacted.
-      console.error(`${command.startsWith('-') ? 'Unknown option' : 'Unknown command'}: ${scrubToken(command)}`);
+      // A bootstrap token pasted as the argument is printed redacted; an
+      // empty argument is shown as "", as init shows one.
+      console.error(
+        `${command.startsWith('-') ? 'Unknown option' : 'Unknown command'}: ${command === '' ? '""' : scrubToken(command)}`,
+      );
       console.error('Run: aim-arp --help');
       return 1;
   }
+}
+
+// Run directly (`npx tsx src/arp/cli/aim-arp-main.ts ...`), this file behaves
+// as the bin does. The check is on the script path, not `require.main`: the
+// built bin bundles this module, and it must not dispatch twice there.
+if (/[\\/]aim-arp-main\.[cm]?[jt]s$/.test(process.argv[1] ?? '')) {
+  runAimArp(process.argv.slice(2))
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((err) => {
+      console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 1;
+    });
 }
