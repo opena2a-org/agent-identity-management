@@ -267,7 +267,7 @@ def _validate_aim_url(aim_url: str) -> None:
     so is one with a user name or password, a query string or a fragment: the
     message then does not repeat the address (#859).
     """
-    from .credentials import has_user_info, server_address_part_refusal
+    from .credentials import may_hold_user_info, server_address_part_refusal
 
     part = server_address_part_refusal(aim_url)
     if part:
@@ -276,7 +276,7 @@ def _validate_aim_url(aim_url: str) -> None:
             f"https://aim.example.com"
         )
     if not _is_usable_aim_url(aim_url):
-        got = "" if has_user_info(aim_url) else f" -- got {aim_url!r}"
+        got = "" if may_hold_user_info(aim_url) else f" -- got {aim_url!r}"
         raise ConfigurationError(
             f"aim_url must be an http or https URL with a host, e.g. "
             f"https://aim.example.com{got}"
@@ -5168,10 +5168,11 @@ def register_agent(
             # Before any request: an address with a user name or password in
             # the agent's file is not used, and the message does not repeat it
             # (#859). The file's address is read in preference to a given
-            # aim_url, so passing another one does not help.
-            from .credentials import get_agent_credentials_path, has_user_info
+            # aim_url, so passing another one does not help. Any '@' counts,
+            # whatever the slashes, so a malformed spelling is not quoted.
+            from .credentials import get_agent_credentials_path, may_hold_user_info
 
-            if has_user_info(existing_creds.get('aim_url')):
+            if may_hold_user_info(existing_creds.get('aim_url')):
                 raise ConfigurationError(
                     f"The server address saved for agent '{name}' in "
                     f"{get_agent_credentials_path(name)} has a user name or "
