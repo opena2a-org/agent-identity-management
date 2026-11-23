@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import AlertsPage from "./page";
 import { api } from "@/lib/api";
@@ -139,6 +139,41 @@ describe("AlertsPage alert list", () => {
         expect(el.className.split(" ")).toContain("min-w-0");
       }
     }
+  });
+
+  it("breaks a long description and agent name inside the card and scales the card on hover only from sm", async () => {
+    const longWords = {
+      ...repeated,
+      description: "x".repeat(200),
+      agentName: "agent-with-a-name-that-has-no-spaces-and-is-longer-than-a-phone",
+    };
+    serveAlerts([longWords]);
+    render(<AlertsPage />);
+
+    await screen.findByText(longWords.title);
+    const card = cardOf(longWords.title);
+    const classes = card.className.split(/\s+/);
+    expect(classes).toContain("min-w-0");
+    expect(classes).toContain("sm:hover:scale-[1.01]");
+    expect(classes).not.toContain("hover:scale-[1.01]");
+
+    const description = within(card).getByText(longWords.description);
+    expect(description.className.split(" ")).toContain("break-words");
+
+    const agent = within(card).getByText(new RegExp(`^${longWords.agentName}`));
+    expect(agent.className.split(" ")).toEqual(expect.arrayContaining(["min-w-0", "break-words"]));
+  });
+
+  it("stacks the page header's acknowledge-all button under the heading below the sm breakpoint", async () => {
+    serveAlerts([repeated]);
+    render(<AlertsPage />);
+
+    const heading = await screen.findByRole("heading", { name: "Security Alerts" });
+    const header = heading.parentElement?.parentElement as HTMLElement;
+    expect(header.className.split(" ")).toEqual(
+      expect.arrayContaining(["flex", "flex-col", "sm:flex-row", "sm:justify-between"]),
+    );
+    expect(header.contains(screen.getByRole("button", { name: /Acknowledge All/ }))).toBe(true);
   });
 
   it("mounts the detail panel outside the space-y-6 container", async () => {
