@@ -103,18 +103,44 @@ jobs:
   secret-scan:
     name: Secret Detection
     runs-on: ubuntu-latest
-    # We dogfood our own scanner. HackMyAgent's quick-mode scan
-    # (config + creds) is a superset of what gitleaks gave us: same
-    # credential pattern coverage, plus MCP config integrity and
-    # governance checks. Single source of truth for credential
-    # detection across the CLI (`opena2a scan` / `opena2a protect`),
-    # the local pre-push gate (Phase 4), and this CI pipeline.
-    # Intentional placeholder files (e.g. .env.example) are
-    # allowlisted via .hmaignore at the repo root.
+    # Two scanners, because neither covers the tree alone.
+    #
+    # gitleaks reads every file in the checked-out tree, source included
+    # (.go, .ts, .py, ...), against its default provider patterns: GitHub
+    # tokens (ghp_...), AWS keys, private key blocks, Slack, Stripe and the
+    # rest. A real credential committed in a .go file fails this job here.
+    # .gitleaks.toml at the repo root turns off two of its rules and says why.
+    #
+    # HackMyAgent (we dogfood our own scanner) runs in quick mode, which runs
+    # only its credential and git-hygiene checks, over config and credential
+    # files, and does NOT read source files: with a ghp_ token in a .go file
+    # it still scores 100/100 (its summary reports 2 files read on this tree).
+    # Its other check groups (MCP, governance, ...) are skipped at this depth.
+    # Intentional placeholder files (e.g. .env.example) are allowlisted via
+    # .hmaignore.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache: false
+
+      # Pinned to an exact version so the rule set changes only with a commit
+      # here. v8.30.1 is the first version checked to honour
+      # `[extend] disabledRules` in .gitleaks.toml (v8.21.2 ignores it and
+      # fails on the test fixtures that file explains). Bump it deliberately:
+      # run `gitleaks dir .` with the new version locally first.
+      - name: Install gitleaks
+        run: go install github.com/zricethezav/gitleaks/v8@v8.30.1
+
+      # `dir` scans the working tree as checked out, not the history, so a
+      # credential removed in an earlier commit does not fail every later run.
+      # --redact keeps any finding's value out of the public job log.
+      - name: Run gitleaks over the source tree
+        run: gitleaks dir . --config .gitleaks.toml --redact --no-banner --exit-code 1
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -122,13 +148,14 @@ jobs:
           node-version: '20'
 
       - name: Run HackMyAgent secret + credential scan
-        # --scan-depth quick     : config + creds only (gitleaks-equivalent scope)
+        # --scan-depth quick     : config + credential files only; source
+        #                          files are not read (the gitleaks step
+        #                          above covers those).
         # --static-only          : disable NanoMind semantic analysis for
         #                          deterministic, GPU-free CI runs.
         # --fail-below 90        : fail on net HIGH/CRITICAL findings;
-        #                          baseline today is 100/100 with the
-        #                          .env.example allowlist + .gitleaks.toml
-        #                          deletion landed.
+        #                          baseline is 100/100 with the
+        #                          .env.example allowlist.
         # hackmyagent is pinned to an exact version so the gate changes
         # only with a commit here. Bump it deliberately: run the new
         # version with these flags locally and confirm the score first.
