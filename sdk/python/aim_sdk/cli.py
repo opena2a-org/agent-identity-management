@@ -214,7 +214,7 @@ def invalid_server_url_reason(aim_url, option="--url"):
     address _url_text_refusal refuses is left to it: a backslash before an '@'
     is reported as the backslash.
     """
-    from .credentials import server_address_part_refusal
+    from .credentials import may_hold_user_info, server_address_part_refusal
 
     url = (aim_url or "").strip()
     if not url:
@@ -222,7 +222,7 @@ def invalid_server_url_reason(aim_url, option="--url"):
     part = None if _url_text_refusal(url) else server_address_part_refusal(url)
     if part:
         return f"{option} {part}"
-    shown = option if "@" in url else f"{option} {url!r}"
+    shown = option if may_hold_user_info(url) else f"{option} {url!r}"
     try:
         parts = urlsplit(url)
     except ValueError:

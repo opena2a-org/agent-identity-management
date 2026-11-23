@@ -164,14 +164,57 @@ def test_aim_client_refuses_the_address(url, problem):
     assert _shows_no_user_info(str(raised.value))
 
 
+# Spellings where the '@' is not in the part after '//', or there is no '//'.
+MALFORMED = [
+    "http:/FAKEUSER:FAKEPASS@127.0.0.1:8080",
+    "http:FAKEUSER:FAKEPASS@127.0.0.1:8080",
+    "http:///FAKEUSER:FAKEPASS@127.0.0.1:8080",
+    "http:\\\\FAKEUSER:FAKEPASS@127.0.0.1:8080",
+    "http:/\\FAKEUSER:FAKEPASS@127.0.0.1:8080",
+    "FAKEUSER:FAKEPASS@127.0.0.1:8080",
+    "//FAKEUSER:FAKEPASS@127.0.0.1:8080",
+]
+
+
 @pytest.mark.parametrize("url", [
     "http:/FAKEUSER:FAKEPASS@",
     "http://FAKEUSER:FAKEPASS@",
+    *MALFORMED,
 ])
 def test_an_unusable_address_with_user_info_is_not_quoted(url):
     reason = cli.invalid_server_url_reason(url)
     assert reason is not None
     assert _shows_no_user_info(reason)
+
+
+@pytest.mark.parametrize("url", [
+    "http:/FAKEUSER:FAKEPASS@",
+    "http://FAKEUSER:FAKEPASS@",
+    *MALFORMED,
+])
+def test_validate_aim_url_does_not_quote_an_address_with_user_info(url):
+    from aim_sdk.client import _validate_aim_url
+
+    with pytest.raises(ConfigurationError) as raised:
+        _validate_aim_url(url)
+    assert _shows_no_user_info(str(raised.value))
+
+
+@pytest.mark.parametrize("url", MALFORMED)
+def test_aim_client_does_not_quote_a_malformed_address_with_user_info(url):
+    from aim_sdk.client import AIMClient
+
+    with pytest.raises(ConfigurationError) as raised:
+        AIMClient(agent_id="issue-859", api_key="not-a-real-key", aim_url=url)
+    assert _shows_no_user_info(str(raised.value))
+
+
+def test_validate_aim_url_still_quotes_an_unusable_address_without_an_at_sign():
+    from aim_sdk.client import _validate_aim_url
+
+    with pytest.raises(ConfigurationError) as raised:
+        _validate_aim_url("ftp:/aim.example.com")
+    assert "got 'ftp:/aim.example.com'" in str(raised.value)
 
 
 @pytest.mark.parametrize("url", ["http://localhost:8080", "https://aim.example.com/aim", " https://aim.example.com/ "])
@@ -320,6 +363,27 @@ def test_secure_sends_nothing_to_the_address_in_the_agent_file(no_network, home,
     )
     out = capsys.readouterr()
     assert _shows_no_user_info(str(raised.value) + out.out + out.err)
+    assert no_network == []
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("url", [WITH_USER_INFO, *MALFORMED])
+def test_loading_an_agent_file_with_any_address_spelling_does_not_quote_it(no_network, home, capsys, url):
+    from aim_sdk.client import AIMClient, register_agent
+
+    path = _store_agent(home, url)
+    before = path.read_bytes()
+    with pytest.raises(ConfigurationError) as raised:
+        register_agent(AGENT)
+    assert str(raised.value) == (
+        f"The server address saved for agent '{AGENT}' in {path} has a user name or password, so it is "
+        "not used for a request; set the file's \"aim_url\" to the server's address alone, e.g. "
+        "https://aim.example.com"
+    )
+    with pytest.raises(ConfigurationError) as loaded:
+        AIMClient.from_credentials(AGENT)
+    out = capsys.readouterr()
+    assert _shows_no_user_info(str(raised.value) + str(loaded.value) + out.out + out.err)
     assert no_network == []
     assert path.read_bytes() == before
 

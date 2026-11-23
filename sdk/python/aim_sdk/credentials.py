@@ -107,6 +107,16 @@ def has_user_info(aim_url: Any) -> bool:
     return "@" in authority
 
 
+def may_hold_user_info(aim_url: Any) -> bool:
+    """
+    Whether the address text has an '@' anywhere, so it may hold a user name
+    or password however it is spelled: one, three or no slashes after the
+    scheme, backslashes, or no scheme at all. has_user_info only finds an '@'
+    in the part after '//'. Such an address is never quoted in a message.
+    """
+    return isinstance(aim_url, str) and "@" in aim_url
+
+
 def server_address_part_refusal(aim_url: Any) -> Optional[str]:
     """
     What a server address holds besides the scheme, host, port and path, as
