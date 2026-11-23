@@ -310,12 +310,12 @@ client = AIMClient(
     },
 )
 
-# The injection detector / intent classifier populate the optional seam:
+# Optional per-action inputs you supply:
 client.verify_capability(
     "net:connect", resource="https://example/data",
     telemetry={
         "intent": IntentInput(intent_class="exfiltration", confidence=0.7,
-                              blocked=True, source="nanomind-intent"),
+                              blocked=True, source="your-intent-check"),
         "detection": DetectionInput(injection_detected=True, confidence=0.84,
                                     detector="nanomind-guard",
                                     technique_source="interim-mapping",
