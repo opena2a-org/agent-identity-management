@@ -107,12 +107,29 @@ Spans whose check denies set status `codes.Error` with the deny reason.
 |---|---|---|---|---|
 | `fga.decisions` | counter | `fga.outcome`, `fga.denied_by` | `fga_decisions_total` | Incremented on every Authorize return. The `_total` suffix is added by Prometheus's OTLP receiver per OpenMetrics convention; do NOT include it in the OTel name (Prometheus rejects with "invalid temporality and type combination"). |
 | `fga.latency_ms` | histogram | none | `fga_latency_ms_bucket`, `_count`, `_sum` | Total Authorize latency in ms |
-| `fga.intent_checks` | counter | `fga.risk_tier`, `fga.intent_mode`, `fga.intent_status`, `fga.intent_blocked` | `fga_intent_checks_total` | Step 5 (NanoMind intent) evaluations that reached the daemon call. `intent_mode` is `async` for HIGH and MEDIUM alike (series recorded before Step 5 stopped denying may carry `sync` for HIGH); `intent_status` is `classified` (daemon returned a non-empty attack class), `abstain` (clean response, no class: the common case until NanoMind is fine-tuned on the FGA prompt), or `fail_open` (daemon unreachable, request build error, or undecodable body: the action proceeds without an intent verdict). `intent_blocked` is always `false` now: the classifier's verdict is recorded, never acted on. |
-| `fga.intent_skipped` | counter | `fga.risk_tier` | `fga_intent_skipped_total` | Authorizes where Step 5 was skipped (LOW risk, or any non-HIGH/MEDIUM level). Pair with `fga.intent_checks` to get the skip rate. |
+| `fga.intent_checks` | counter | `agent.id`, `fga.risk_tier`, `fga.intent_mode`, `fga.intent_status`, `fga.intent_agreement`, `fga.intent_blocked` | `fga_intent_checks_total` | Step 5 (NanoMind intent) evaluations that reached the daemon call, per agent. `intent_mode` is `async` for HIGH and MEDIUM alike (series recorded before Step 5 stopped denying may carry `sync` for HIGH); `intent_status` is `classified` (the daemon returned a usable verdict: a confident benign or an attack class), `abstain` (the daemon answered without a usable verdict: the common case until NanoMind is fine-tuned on the FGA prompt), or `fail_open` (daemon unreachable, request build error, non-2xx, or undecodable body: the action proceeds without an intent verdict). `intent_agreement` says whether a `classified` verdict agrees with the allow steps 1 to 4 reached (Step 5 runs only after they allow): `agree` for a confident benign (no attack class), `disagree` for an attack class, `none` for `abstain` and `fail_open`. `intent_blocked` is always `false` now: the classifier's verdict is recorded, never acted on. |
+| `fga.intent_skipped` | counter | `agent.id`, `fga.risk_tier` | `fga_intent_skipped_total` | Authorizes where Step 5 was skipped (LOW risk, or any non-HIGH/MEDIUM level), per agent. Pair with `fga.intent_checks` to get the skip rate. |
 | `fga.async_intent_dropped` | counter | `fga.async_drop_reason` | `fga_async_intent_dropped_total` | HIGH- and MEDIUM-risk async intent dispatches dropped before running. `async_drop_reason` is `queue_full` (worker pool saturated) or `shutdown` (engine draining). A dropped dispatch never increments `fga.intent_checks`; sum both for total HIGH and MEDIUM dispatch attempts. |
 | `agent.drift_score` | gauge | `agent.id` | `agent_drift_score` | Saturated 0-1 score from `tanh(drift_count / 2)`. Emitted on every DetectDrift call (including 0 when no drift) so dashboards distinguish "clean" from "silent". |
 
 Attributes are flattened to label names (`fga_outcome`, `agent_id`, etc.) per the OTLP-to-Prometheus convention.
+
+### Step 5 totals on `/metrics`
+
+The backend's own `/metrics` endpoint carries the Step 5 counts summed across agents, since no series there identifies an agent. Use the OTel metrics above for the per-agent breakdown.
+
+- `aim_fga_intent_checks_total{risk_tier, status, agreement}`: one per Step 5 evaluation that reached the daemon call. `status` and `agreement` take the values of `fga.intent_status` and `fga.intent_agreement`.
+- `aim_fga_intent_skipped_total{risk_tier}`: one per Authorize where Step 5 was skipped.
+
+`risk_tier` is `high`, `medium` or `low` for the policy risk level, and `other` for any other stored value. Every series exists from start at 0.
+
+```promql
+# Classification rate, agreement rate and skip rate across agents
+sum(rate(aim_fga_intent_checks_total{status="classified"}[5m])) / sum(rate(aim_fga_intent_checks_total[5m]))
+sum(rate(aim_fga_intent_checks_total{agreement="agree"}[5m])) / sum(rate(aim_fga_intent_checks_total{status="classified"}[5m]))
+sum(rate(aim_fga_intent_skipped_total[5m]))
+  / (sum(rate(aim_fga_intent_skipped_total[5m])) + sum(rate(aim_fga_intent_checks_total[5m])))
+```
 
 ### Logs
 
@@ -259,11 +276,18 @@ P99 Authorize latency over last 5m:
 histogram_quantile(0.99, sum by (le) (rate(fga_latency_ms_bucket[5m])))
 ```
 
-Step 5 classification rate (share of evaluations that produced a real class). Today this sits near zero, which is the evidence behind issue #131:
+Step 5 classification rate per agent (share of evaluations that produced a usable verdict). The rate across agents, evidence behind issue #131, drops the `by (agent_id)`:
 
 ```promql
-sum(rate(fga_intent_checks_total{fga_intent_status="classified"}[5m]))
-  / sum(rate(fga_intent_checks_total[5m]))
+sum by (agent_id) (rate(fga_intent_checks_total{fga_intent_status="classified"}[5m]))
+  / sum by (agent_id) (rate(fga_intent_checks_total[5m]))
+```
+
+Step 5 agreement rate per agent (share of classified verdicts that agree with the allow of steps 1 to 4):
+
+```promql
+sum by (agent_id) (rate(fga_intent_checks_total{fga_intent_agreement="agree"}[5m]))
+  / sum by (agent_id) (rate(fga_intent_checks_total{fga_intent_status="classified"}[5m]))
 ```
 
 Step 5 fail-open rate by risk tier (daemon unreachable or undecodable):
@@ -273,11 +297,11 @@ sum by (fga_risk_tier) (rate(fga_intent_checks_total{fga_intent_status="fail_ope
   / sum by (fga_risk_tier) (rate(fga_intent_checks_total[5m]))
 ```
 
-Step 5 skip rate (share of authorizes that never ran the intent check):
+Step 5 skip rate per agent (share of authorizes that never ran the intent check):
 
 ```promql
-sum(rate(fga_intent_skipped_total[5m]))
-  / (sum(rate(fga_intent_skipped_total[5m])) + sum(rate(fga_intent_checks_total[5m])))
+sum by (agent_id) (rate(fga_intent_skipped_total[5m]))
+  / (sum by (agent_id) (rate(fga_intent_skipped_total[5m])) + sum by (agent_id) (rate(fga_intent_checks_total[5m])))
 ```
 
 Requests the classifier attached an attack class to, by risk tier (recorded only; none of them is denied on it):

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/metrics"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/telemetry"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/util/sqlarray"
 	"go.opentelemetry.io/otel"
@@ -319,14 +320,14 @@ func NewFGAEngine(db *sql.DB, agentSvc *AgentService, logger *slog.Logger) *FGAE
 	}
 	// Step 5 observability (issue #131, Stage 3). intentChecks is incremented
 	// once per Step 5 evaluation that reached the daemon call, attributed by
-	// risk tier, sync/async mode, and outcome status (classified / abstain /
-	// fail_open). intentSkipped counts Authorizes where Step 5 never ran (LOW
-	// risk). Together they let operators compute Step 5's classification rate,
-	// fail-open rate, and skip rate per tier — today these show that Step 5
-	// almost never produces a real classification (it abstains or fails open),
-	// which is the evidence #131 exists to quantify. Per-agent breakdown stays
-	// in the structured fga.decision log (agent.id + trace correlation), NOT in
-	// metric labels, to keep Prometheus cardinality bounded.
+	// agent, risk tier, sync/async mode, outcome status (classified / abstain /
+	// fail_open) and agreement with the allow of steps 1 to 4 (agree /
+	// disagree / none). intentSkipped counts Authorizes where Step 5 never ran
+	// (LOW risk), by agent and risk tier. Together they let operators compute
+	// Step 5's classification rate, agreement rate, fail-open rate, and skip
+	// rate per agent and per tier. The backend's own /metrics endpoint carries
+	// the same counts without the agent (aim_fga_intent_checks_total,
+	// aim_fga_intent_skipped_total): no series there identifies an agent.
 	intentChecks, err := meter.Int64Counter(
 		"fga.intent_checks",
 		metric.WithDescription("FGA Step 5 intent evaluations that reached the NanoMind daemon, by risk tier, mode, and outcome status"),
@@ -767,11 +768,7 @@ func (e *FGAEngine) Authorize(ctx context.Context, req *FGARequest) (result *FGA
 		// without it, a skipped check is indistinguishable from one that ran
 		// and abstained. riskTier is the raw policy value so an unexpected
 		// level shows up as its own series rather than being silently bucketed.
-		if e.intentSkipped != nil {
-			e.intentSkipped.Add(ctx, 1, metric.WithAttributes(
-				attribute.String("fga.risk_tier", policy.RiskLevel),
-			))
-		}
+		e.recordIntentSkipped(ctx, req.AgentID, policy.RiskLevel)
 	}
 
 	// All checks passed
@@ -1301,28 +1298,52 @@ func (e *FGAEngine) checkIntentSync(ctx context.Context, req *FGARequest) *Inten
 	}
 }
 
-// recordIntentCheck emits the fga.intent_checks counter for one Step 5
-// evaluation. mode is "async" (Step 5 runs detached for HIGH and MEDIUM);
-// riskTier is the policy risk level that triggered the check. result carries the status set by
-// checkIntentSync. Safe to call with a nil result (counted as fail_open) or a
-// nil instrument (no-op).
-func (e *FGAEngine) recordIntentCheck(ctx context.Context, riskTier, mode string, result *IntentCheckResult) {
-	if e.intentChecks == nil {
-		return
-	}
+// recordIntentCheck counts one Step 5 evaluation for agentID: the
+// fga.intent_checks OTel counter, per agent, and aim_fga_intent_checks_total on
+// /metrics, across agents. mode is "async" (Step 5 runs detached for HIGH and
+// MEDIUM); riskTier is the policy risk level that triggered the check. result
+// carries the status and attack class set by checkIntentSync. The agreement
+// label says whether a classified verdict agrees with the allow steps 1 to 4
+// reached: agree for a confident benign, disagree for an attack class, none
+// for an abstain or fail_open. Safe to call with a nil result (counted as
+// fail_open) or a nil instrument (the OTel count is skipped).
+func (e *FGAEngine) recordIntentCheck(ctx context.Context, agentID uuid.UUID, riskTier, mode string, result *IntentCheckResult) {
 	status := intentStatusFailOpen
 	blocked := false
+	attackClass := ""
 	if result != nil {
 		if result.Status != "" {
 			status = result.Status
 		}
 		blocked = result.Blocked
+		attackClass = result.IntentClass
+	}
+	metrics.RecordFGAIntentCheck(riskTier, status, attackClass)
+	if e.intentChecks == nil {
+		return
 	}
 	e.intentChecks.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("agent.id", agentID.String()),
 		attribute.String("fga.risk_tier", riskTier),
 		attribute.String("fga.intent_mode", mode),
 		attribute.String("fga.intent_status", status),
+		attribute.String("fga.intent_agreement", metrics.FGAIntentAgreement(status, attackClass)),
 		attribute.Bool("fga.intent_blocked", blocked),
+	))
+}
+
+// recordIntentSkipped counts one Authorize for agentID where Step 5 was
+// skipped: the fga.intent_skipped OTel counter, per agent, and
+// aim_fga_intent_skipped_total on /metrics, across agents. riskTier is the raw
+// policy value, so an unexpected level shows up as its own OTel series.
+func (e *FGAEngine) recordIntentSkipped(ctx context.Context, agentID uuid.UUID, riskTier string) {
+	metrics.RecordFGAIntentSkipped(riskTier)
+	if e.intentSkipped == nil {
+		return
+	}
+	e.intentSkipped.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("agent.id", agentID.String()),
+		attribute.String("fga.risk_tier", riskTier),
 	))
 }
 
@@ -1330,7 +1351,7 @@ func (e *FGAEngine) recordIntentCheck(ctx context.Context, riskTier, mode string
 // request and records it under riskTier. The outcome is counted, never acted on.
 func (e *FGAEngine) checkIntentAsync(ctx context.Context, req *FGARequest, riskTier string) {
 	result := e.checkIntentSync(ctx, req)
-	e.recordIntentCheck(ctx, riskTier, "async", result)
+	e.recordIntentCheck(ctx, req.AgentID, riskTier, "async", result)
 }
 
 // ============================================================================
