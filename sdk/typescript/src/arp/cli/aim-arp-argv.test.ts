@@ -171,6 +171,12 @@ describe('an argument aim-arp does not know is named on stderr with a pointer to
     expect(logLines).toEqual([]);
   });
 
+  it('an empty argument is shown as "", as init shows one', async () => {
+    expect(await runAimArp([''])).toBe(1);
+    expect(errLines).toEqual(['Unknown command: ""', 'Run: aim-arp --help']);
+    expect(logLines).toEqual([]);
+  });
+
   it('a bootstrap token given as the argument is echoed redacted', async () => {
     const fake = 'aim_ob_FAKE';
     expect(await runAimArp([fake])).toBe(1);
