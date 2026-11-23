@@ -17,17 +17,30 @@ import (
 // record commit together and the statement cannot write back a column some
 // other change set meanwhile.
 
-// SetAgentStatusTx sets an agent's status in tx. A non-nil verifiedAt also
-// sets verified_at.
-func SetAgentStatusTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, status domain.AgentStatus, verifiedAt *time.Time) error {
+// ErrAgentStatusChanged is returned by SetAgentStatusTx for an agent whose
+// status is no longer the one the caller read.
+var ErrAgentStatusChanged = errors.New("agent status changed since it was read")
+
+// SetAgentStatusTx moves an agent's status from the status the caller read to
+// status in tx. A non-nil verifiedAt also sets verified_at. An agent whose
+// status is no longer from, for instance one revoked since it was read, is left
+// as it is and the error wraps ErrAgentStatusChanged.
+func SetAgentStatusTx(ctx context.Context, tx *sql.Tx, id uuid.UUID, from, status domain.AgentStatus, verifiedAt *time.Time) error {
 	res, err := tx.ExecContext(ctx, `
 		UPDATE agents
 		   SET status = $2, verified_at = COALESCE($3, verified_at), updated_at = NOW()
-		 WHERE id = $1`, id, status, verifiedAt)
+		 WHERE id = $1 AND status = $4`, id, status, verifiedAt, from)
 	if err != nil {
 		return fmt.Errorf("set agent status: %w", err)
 	}
-	return oneRow(res, "set agent status")
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("set agent status: %w", err)
+	}
+	if n != 1 {
+		return fmt.Errorf("set agent status of %s: %w", id, ErrAgentStatusChanged)
+	}
+	return nil
 }
 
 // RotateAgentKeyTx stores agent's new Ed25519 key in tx. The key it replaces
