@@ -292,6 +292,13 @@ func decoyVerifyEd25519(message, signature []byte) {
 	_ = ed25519Verify(decoyEd25519Key(), message, signature)
 }
 
+// DecoyVerifyEd25519 is decoyVerifyEd25519 for a verifier that does not go through Keys:
+// it spends the cost of one Ed25519 verification, so a refusal of an unknown agent or an
+// agent with no usable registered key costs what a known agent's invalid signature costs.
+func DecoyVerifyEd25519(message, signature []byte) {
+	decoyVerifyEd25519(message, signature)
+}
+
 // decoyVerifyMLDSA verifies signature against the decoy key of alg's level. An algorithm
 // that is no ML-DSA level has no decoy, and no registered key of that algorithm either,
 // so neither path verifies anything.
