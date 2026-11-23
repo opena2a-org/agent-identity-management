@@ -57,7 +57,7 @@ func (r *Recorder) RequestParent(ctx context.Context, organizationID, agentID, r
 	if err := json.Unmarshal(payload, &h); err != nil {
 		return Parent{}, false, fmt.Errorf("transition: the request's record: %w", err)
 	}
-	if recordType != RecordType || h.Type != RecordType || h.Trigger.Type != string(TriggerCapabilityRequested) {
+	if recordType != RecordType || h.Trigger.Type != string(TriggerCapabilityRequested) {
 		return Parent{}, false, fmt.Errorf("transition: the record at request %s's event id is not a %s record", requestID, TriggerCapabilityRequested)
 	}
 	if tenant == nil {
