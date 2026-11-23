@@ -7011,9 +7011,9 @@ The PQC and Ed25519 agent-signature middlewares, the OAuth jwt-bearer token endp
 ### Fixed — MCP security policy rules mean what the admin page says
 
 - `rules.minTrustScore` on the `mcp_*` security policies is on the [0,1] scale of an MCP server's
-  trust score. Migration 114 divides every stored JSON number above 1 and up to 100 by 100,
-  including the seeded floors of 50 and 30, which sat above every possible trust score, and sets a
-  number above 100 to 1. A number from 0 to 1 is kept as a fraction, so a floor the old form saved
+  trust score. Migration 114 divides every stored JSON number above 1 by 100, capping it
+  at 100 first so a number above 100 becomes 1, including the seeded floors of 50 and 30, which sat
+  above every possible trust score. A number from 0 to 1 is kept as a fraction, so a floor the old form saved
   as 1, meaning 1%, now reads as 100%: the migration's NOTICE lines name each `mcp_*` policy whose
   floor lies above 0 and at most 1, and each whose floor is not a JSON number, which it leaves
   unchanged. A JSON `null` floor reads as no floor and stays `null`. The admin security-policies
