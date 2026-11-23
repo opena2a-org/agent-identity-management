@@ -13,9 +13,17 @@ const MAX_LOG_SIZE = 50 * 1024 * 1024; // 50MB
 export class LocalLogger {
   private readonly dataDir: string;
 
+  /**
+   * Creates nothing on disk: the data directory is created by
+   * `ensureDataDir()` or by the first write.
+   */
   constructor(dataDir: string) {
     this.dataDir = dataDir;
-    fs.mkdirSync(dataDir, { recursive: true });
+  }
+
+  /** Create the data directory, and any missing parent, if it does not exist. */
+  ensureDataDir(): void {
+    fs.mkdirSync(this.dataDir, { recursive: true });
   }
 
   /** Log an ARP event */
@@ -90,7 +98,14 @@ export class LocalLogger {
     }
 
     const line = JSON.stringify(data) + '\n';
-    fs.appendFileSync(filePath, line, 'utf-8');
+    try {
+      fs.appendFileSync(filePath, line, 'utf-8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      // The data directory does not exist yet: create it and write again.
+      this.ensureDataDir();
+      fs.appendFileSync(filePath, line, 'utf-8');
+    }
   }
 
   private readLog<T>(filename: string, limit?: number): T[] {

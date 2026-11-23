@@ -29,6 +29,12 @@ export interface ARPEvent {
 }
 
 export type MonitorType = 'process' | 'network' | 'filesystem' | 'skill' | 'heartbeat' | 'prompt' | 'mcp-protocol' | 'a2a-protocol';
+/**
+ * How `getStatus()` tells two entries of the same `type` apart: `monitor` for
+ * an entry built from `monitors` in the config, `interceptor` for one built
+ * from `interceptors` or `aiLayer`.
+ */
+export type MonitorKind = 'monitor' | 'interceptor';
 export type EventCategory = 'normal' | 'anomaly' | 'violation' | 'threat';
 export type EventSeverity = 'info' | 'low' | 'medium' | 'high' | 'critical';
 
