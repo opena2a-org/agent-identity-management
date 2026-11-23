@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added: `aim_sdk.telemetry.guard`, the NanoMind-Guard socket client (stage 2 of #441)
+
+- `NanoMindGuardClient.classify(text)` sends `{"op": "classify", "text": ...}` as one JSON line over the daemon's
+  AF_UNIX socket (`NANOMIND_GUARD_SOCK`, default `/tmp/nanomind-guard.sock`) and returns a `GuardVerdict` holding only
+  the fields the daemon's Ed25519+ML-DSA-44 signature covers: classification, confidence, model version, content hash
+  and timestamp. Unsigned fields in the reply are dropped.
+- It returns `None`, never a benign verdict, when the socket is absent, symlinked, not a socket or silent; when the
+  reply is malformed, a daemon error, unsigned, signed with another algorithm or key, hashed over different text, or
+  outside the five-minute freshness window; and when no guard public key is configured. Checking the ML-DSA half
+  needs the `pqc` extra, so without `liboqs-python` every call returns `None`.
+- The client opens AF_UNIX sockets only and has no HuggingFace or other model-download fallback. Its module imports
+  the standard library only; PyNaCl and `aim_sdk.crypto.pqc` are imported when a signature is checked.
+- `import aim_sdk.telemetry` no longer imports `requests`: the relay names load on first use.
+- Tests: `tests/test_telemetry_guard_client.py`, `tests/test_arp_telemetry_seam_isolation.py`.
+
 ### Changed: `aim-sdk --version`, `aim-sdk -V` and `aim-sdk version` say when the copy is a source build
 
 - The three version lines print `aim-sdk <version>+source (built from source; not the published <version>)` unless
