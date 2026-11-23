@@ -103,11 +103,47 @@ function skipSpace(text: string, i: number): number {
 }
 
 const fixtures = loadFixtures();
+
+/**
+ * Fixtures whose expected.verifyResult LocalVerifier does not return yet, each with
+ * the reason. Every fixture not listed here must get its expected verdict; a listed
+ * one must still get the other verdict, so the entry is removed once it is met.
+ */
+const KNOWN_UNMET: ReadonlyMap<string, string> = new Map<string, string>([]);
+
+const met = fixtures.filter((f) => !KNOWN_UNMET.has(f.file));
+const unmet = fixtures.filter((f) => KNOWN_UNMET.has(f.file));
+
+async function verdictOf(f: Fixture): Promise<'ACCEPT' | 'REJECT'> {
+  const result = await verifierFor(f).verifyCredential(f.rawAtx);
+  return result.valid ? 'ACCEPT' : 'REJECT';
+}
+
 // The reference verifiers report a strict-parse rejection as PARSE_ERROR; the SDK's
 // RejectCategory union has no such member and reports MALFORMED, its structural-parse
 // category (the Java SDK's conformance test pins the same mapping).
-const strictParse = fixtures.filter((f) => f.expected.rejectCategory === 'PARSE_ERROR');
+const strictParse = met.filter((f) => f.expected.rejectCategory === 'PARSE_ERROR');
 const others = fixtures.filter((f) => f.expected.rejectCategory !== 'PARSE_ERROR');
+const metOthers = others.filter((f) => !KNOWN_UNMET.has(f.file));
+
+describe('LocalVerifier verdict on every vendored ATX conformance fixture', () => {
+  it('lists as known-unmet only fixtures that exist', () => {
+    const files = new Set(fixtures.map((f) => f.file));
+    expect([...KNOWN_UNMET.keys()].filter((file) => !files.has(file))).toEqual([]);
+  });
+
+  it.each(met)('$file: returns expected.verifyResult', async (f) => {
+    expect(await verdictOf(f)).toBe(f.expected.verifyResult);
+  });
+
+  it('still misses the verdict of every known-unmet fixture', async () => {
+    for (const f of unmet) {
+      expect(await verdictOf(f), `${f.file} now meets its verdict; remove it from KNOWN_UNMET`).not.toBe(
+        f.expected.verifyResult,
+      );
+    }
+  });
+});
 
 describe('LocalVerifier raw-text entry against the vendored ATX conformance fixtures', () => {
   it('finds the vendored fixtures, including the strict-parse ones', () => {
@@ -150,15 +186,16 @@ describe('LocalVerifier raw-text entry against the vendored ATX conformance fixt
 
 // The machine contract (verifyResult and rejectCategory), as the Java SDK's
 // conformance test asserts it; reasonContains is the reference verifiers' wording.
+// Known-unmet fixtures are left to the verdict check above.
 describe('LocalVerifier against the vendored ATX conformance fixtures', () => {
-  it.each(others.filter((f) => f.expected.verifyResult === 'ACCEPT'))('$file: accepts', async (f) => {
+  it.each(metOthers.filter((f) => f.expected.verifyResult === 'ACCEPT'))('$file: accepts', async (f) => {
     const result = await verifierFor(f).verifyCredential(f.rawAtx);
 
     expect(result.reason).toBeUndefined();
     expect(result.valid).toBe(true);
   });
 
-  it.each(others.filter((f) => f.expected.verifyResult === 'REJECT'))(
+  it.each(metOthers.filter((f) => f.expected.verifyResult === 'REJECT'))(
     '$file: rejects with the expected category',
     async (f) => {
       const result = await verifierFor(f).verifyCredential(f.rawAtx);
@@ -170,7 +207,7 @@ describe('LocalVerifier against the vendored ATX conformance fixtures', () => {
 
   // Every hybrid fixture's ML-DSA-65 signature is checked, not only recorded:
   // the tampered one above rejects, and these accept with the flag set.
-  it.each(fixtures.filter((f) => f.file.includes('baseline-valid-hybrid')))(
+  it.each(met.filter((f) => f.file.includes('baseline-valid-hybrid')))(
     '$file: reports the verified ML-DSA-65 signature',
     async (f) => {
       const result = await verifierFor(f).verifyCredential(f.rawAtx);
