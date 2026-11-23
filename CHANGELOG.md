@@ -4853,6 +4853,9 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
   `apps/backend/cmd/bootstrap/aim_backend_script_test.go`, `apps/backend/cmd/server/database_conn_string_test.go` and
   `apps/backend/cmd/server/quickstart_admin_seed_test.go`. Their passwords are made-up values for the test, and each
   line exempts its file from AST-CRED-003 only.
+- `.hmaignore` also names `sdk/typescript/src/cli/init.test.ts`, whose three AST-CRED-003 findings in `hackmyagent secure --ci .`
+  are the made-up bootstrap token the test sends to its own in-process server and asserts is never printed. The line
+  exempts that file from AST-CRED-003 only.
 - The header of `.hmaignore` also documents the `expires:YYYY-MM-DD` attribute a rule can end in. The rule applies
   through that UTC day; from the next day the scan lists the line under `hmaignore.errors`, stops applying it and
   reports its findings again.
