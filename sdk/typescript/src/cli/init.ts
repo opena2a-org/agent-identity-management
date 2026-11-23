@@ -100,6 +100,12 @@ const VALUE_FLAGS = new Set(['--url', '--name']);
 /** Longest unexpected argument an error message shows. */
 const SHOWN_ARGUMENT_MAX_CHARS = 128;
 
+/**
+ * The flag refused in every form (`--token <value>`, `--token=<value>`, bare
+ * `--token`): a bootstrap token is read from BOOTSTRAP_TOKEN_ENV only.
+ */
+export const REFUSED_TOKEN_FLAG = '--token';
+
 /** Why a token on the command line is refused; the value is never read. */
 const TOKEN_FLAG_REFUSED =
   `the bootstrap token is read from ${BOOTSTRAP_TOKEN_ENV}, not from a flag ` +
@@ -115,7 +121,7 @@ function parseArgs(argv: string[]): ParseResult {
     }
     const eq = raw.indexOf('=');
     const flag = raw.startsWith('--') && eq > 0 ? raw.slice(0, eq) : raw;
-    if (flag === '--token') {
+    if (flag === REFUSED_TOKEN_FLAG) {
       return { ok: false, error: TOKEN_FLAG_REFUSED };
     }
     if (!VALUE_FLAGS.has(flag)) {
