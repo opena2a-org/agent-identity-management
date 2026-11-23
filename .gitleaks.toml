@@ -1,0 +1,16 @@
+# gitleaks configuration for the Secret Detection job in
+# .github/workflows/security.yml, which runs `gitleaks dir` over the checked-out
+# tree. Every rule in gitleaks' default set stays on (GitHub tokens such as
+# ghp_..., AWS keys, private key blocks, Slack, Stripe and the rest of its
+# provider patterns), in every file type, .go included, except the two below.
+[extend]
+useDefault = true
+# generic-api-key matches any high-entropy string assigned to a name containing
+# "key", "token" or "secret". On this tree it fires only on made-up test inputs
+# and fixtures (bearer tokens the tests mint, record key IDs in testdata, the
+# PrivateKeySize constant in internal/crypto/pqc). HackMyAgent's AST-CRED-003,
+# which runs in the same job, covers that class, with its exceptions listed
+# one file at a time in .hmaignore.
+#
+# curl-auth-header matches curl examples in docs/ whose tokens are placeholders.
+disabledRules = ["generic-api-key", "curl-auth-header"]
