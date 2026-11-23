@@ -255,22 +255,18 @@ export class A2AClient {
    * Verify an incoming A2A request signature.
    */
   async verifyRequest(
-    signature: string,
-    publicKey: string,
+    agentId: string,
     timestamp: number,
     nonce: string,
-    method: string,
-    path: string,
-    body?: string
+    signature: string,
+    requestHash: string
   ): Promise<{ valid: boolean; agentId?: string; error?: string }> {
     return this.post('/api/v1/a2a/verify', {
-      signature,
-      publicKey,
+      agentId,
       timestamp,
       nonce,
-      method,
-      path,
-      body,
+      signature,
+      requestHash,
     });
   }
 

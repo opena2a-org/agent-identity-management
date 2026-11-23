@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit;
  * A2ARequestSignature sig = a2a.signRequest("POST", "/tasks/send", requestBody);
  *
  * // Verify incoming A2A requests
- * boolean valid = a2a.verifyRequest(signature, publicKey, timestamp, nonce, method, path, body);
+ * boolean valid = a2a.verifyRequest(agentId, timestamp, nonce, signature, requestHash);
  *
  * // Get trust score for another agent
  * A2ATrustScore trust = a2a.getTrustScore(targetAgentId);
@@ -397,30 +397,24 @@ public class A2AClient {
     /**
      * Verify an incoming A2A request signature.
      *
-     * @param signature The signature to verify
-     * @param publicKey The signer's public key (base64)
-     * @param timestamp Request timestamp (epoch millis)
-     * @param nonce Request nonce
-     * @param method HTTP method
-     * @param path Request path
-     * @param body Request body
+     * @param agentId ID of the agent that signed the request
+     * @param timestamp Unix timestamp from the signature
+     * @param nonce Nonce from the signature
+     * @param signature Base64-encoded signature
+     * @param requestHash SHA256 hash of the request (hex)
      * @return Verification result containing valid status and details
      * @throws A2AException if verification fails
      */
-    public Map<String, Object> verifyRequest(String signature, String publicKey, long timestamp,
-                                              String nonce, String method, String path, String body)
+    public Map<String, Object> verifyRequest(String agentId, long timestamp, String nonce,
+                                              String signature, String requestHash)
             throws A2AException {
         try {
             ObjectNode reqBody = objectMapper.createObjectNode();
-            reqBody.put("signature", signature);
-            reqBody.put("publicKey", publicKey);
+            reqBody.put("agentId", agentId);
             reqBody.put("timestamp", timestamp);
             reqBody.put("nonce", nonce);
-            reqBody.put("method", method);
-            reqBody.put("path", path);
-            if (body != null) {
-                reqBody.put("body", body);
-            }
+            reqBody.put("signature", signature);
+            reqBody.put("requestHash", requestHash);
 
             String response = post("/api/v1/a2a/verify", objectMapper.writeValueAsString(reqBody));
             return objectMapper.readValue(response, new TypeReference<Map<String, Object>>() {});

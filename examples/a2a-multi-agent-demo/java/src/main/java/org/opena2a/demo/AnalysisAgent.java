@@ -108,22 +108,17 @@ public class AnalysisAgent {
             long timestamp,
             String nonce,
             String signature,
-            String publicKey,
-            String method,
-            String path,
-            String body
+            String requestHash
     ) {
         System.out.println("[Analysis Agent] Verifying request from " + agentId.substring(0, 8) + "...");
 
         try {
             Map<String, Object> result = a2a.verifyRequest(
-                    signature,
-                    publicKey,
+                    agentId,
                     timestamp,
                     nonce,
-                    method,
-                    path,
-                    body
+                    signature,
+                    requestHash
             );
 
             if (Boolean.TRUE.equals(result.get("valid"))) {
