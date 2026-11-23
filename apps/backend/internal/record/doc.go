@@ -54,10 +54,10 @@
 // sequence to walk. VerifyChainSet reports on a deployment's chains
 // together: the walks of the chains the deployment holds, the checkpoints
 // held outside it, and tombstones, each of which states that a chain was
-// removed whole at a final head. A chain a held checkpoint names that is
-// neither present and verifying nor accounted for by exactly one tombstone,
-// at or above every held checkpoint of the chain, is reported as removed
-// without record.
+// removed whole at a final head. A present chain that does not verify is
+// reported as failed. An absent chain that a held checkpoint names and that
+// no single tombstone accounts for, at or above every held checkpoint of the
+// chain, is reported as removed without record.
 //
 // The package is pure: it reads and writes no database and serves no route.
 // Its subpackage store keeps chains in PostgreSQL: it starts a chain, appends
