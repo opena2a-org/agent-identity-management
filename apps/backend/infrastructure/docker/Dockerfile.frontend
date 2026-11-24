@@ -17,7 +17,7 @@ WORKDIR /app
 # in this file are `ci` and `run build`
 # (sdk/typescript/tests/frontend-lockfile-install.test.ts holds that shape).
 COPY apps/web/package.json apps/web/package-lock.json ./
-RUN npm ci --ignore-scripts --include=dev --legacy-peer-deps
+RUN npm ci --ignore-scripts --include=dev
 
 # Rebuild the source code only when needed
 FROM base AS builder

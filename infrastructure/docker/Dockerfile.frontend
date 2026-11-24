@@ -29,7 +29,7 @@ COPY apps/web/package.json apps/web/package-lock.json ./
 # `--ignore-scripts` keeps a dependency's postinstall out of the build. The
 # only admitted npm verbs in this file are `ci` and `run build`
 # (sdk/typescript/tests/frontend-lockfile-install.test.ts holds that shape).
-RUN npm ci --ignore-scripts --legacy-peer-deps
+RUN npm ci --ignore-scripts
 
 # Copy source code from web app
 COPY apps/web/ ./
