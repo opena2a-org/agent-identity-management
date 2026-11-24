@@ -14,6 +14,21 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
   and now also print one line with `console.warn` naming the fix: `Call await start() on the <interceptor> first.`
   Each instance prints it once, and again only after a later `start()` and `stop()`.
 
+### Changed — ARP scans text past 65,536 characters, and each `scanToolCall` argument on its own (#856)
+
+- `scanText`, and so every ARP analyzer, scanned only the first 65,536 characters of a text: an injection after them
+  was not detected. It now scans in windows of 65,536 characters, each overlapping the one before by 1,024, up to a
+  total of 1,048,576 characters (`MAX_SCAN_TOTAL`, exported with `SCAN_WINDOW_LENGTH` and `SCAN_WINDOW_OVERLAP` from
+  `src/arp/patterns/ai-threats.ts`). No pattern runs on more than one window at a time. `truncated` is now true only for
+  a text longer than the total; a match within the total is still reported, and the interceptor still emits its event.
+- `MCPProtocolInterceptor.scanToolCall` joined all argument values into one text, so a long first argument used up the
+  scan length and the arguments after it were not scanned, and text from two arguments could form one match. Each
+  top-level argument is now scanned on its own, with its own total. Each match names its argument in `argument`, and
+  the event in `data.argument`; a pattern that matches in two arguments is reported for each. `truncated` is true when
+  any one argument is longer than the total.
+- Tests: `tests/arp/patterns/ai-threats.test.ts`, `tests/arp/interceptors/mcp-protocol.test.ts`,
+  `tests/arp/interceptors/a2a-protocol.test.ts`.
+
 ### Changed: the README's `init` section says what `init` needs from the server and how a bootstrap token is minted
 
 - "Register a first agent from the terminal" says that `init` needs an AIM server that has onboarding tokens, which
