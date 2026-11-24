@@ -596,14 +596,18 @@ export class A2AClient {
     return credentials.agentId;
   }
 
-  private getHeaders(): Record<string, string> {
+  /**
+   * The bearer is the agent's OAuth access token. The agent ID is not a
+   * credential: the server rejects it as a bearer, so it is never sent as one.
+   */
+  private async getHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    const credentials = this.aimClient.getCredentials();
-    if (credentials) {
-      headers['Authorization'] = `Bearer ${credentials.agentId}`;
+    const token = await this.aimClient.getAccessToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     return headers;
@@ -613,7 +617,7 @@ export class A2AClient {
     const baseUrl = (this.aimClient as unknown as { config: { baseUrl: string } }).config.baseUrl;
     const response = await fetch(`${baseUrl}${path}`, {
       method: 'GET',
-      headers: this.getHeaders(),
+      headers: await this.getHeaders(),
     });
 
     if (!response.ok) {
@@ -627,7 +631,7 @@ export class A2AClient {
     const baseUrl = (this.aimClient as unknown as { config: { baseUrl: string } }).config.baseUrl;
     const response = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
-      headers: this.getHeaders(),
+      headers: await this.getHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -642,7 +646,7 @@ export class A2AClient {
     const baseUrl = (this.aimClient as unknown as { config: { baseUrl: string } }).config.baseUrl;
     const response = await fetch(`${baseUrl}${path}`, {
       method: 'PUT',
-      headers: this.getHeaders(),
+      headers: await this.getHeaders(),
       body: JSON.stringify(body),
     });
 
@@ -657,7 +661,7 @@ export class A2AClient {
     const baseUrl = (this.aimClient as unknown as { config: { baseUrl: string } }).config.baseUrl;
     const response = await fetch(`${baseUrl}${path}`, {
       method: 'DELETE',
-      headers: this.getHeaders(),
+      headers: await this.getHeaders(),
     });
 
     if (!response.ok) {

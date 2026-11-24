@@ -12,6 +12,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AIMClient, createClient, registerAgent } from './AIMClient';
 import { AuthenticationError, NetworkError } from '../exceptions';
+import { OAuthTokenManager } from '../auth/oauth';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -171,6 +172,34 @@ describe('AIMClient', () => {
 
       expect(client.isAuthenticated()).toBe(true);
       expect(client.getCredentials()).not.toBeNull();
+    });
+  });
+
+  describe('getAccessToken', () => {
+    it('returns null when the client has no agent credentials', async () => {
+      const client = new AIMClient();
+      expect(await client.getAccessToken()).toBeNull();
+    });
+
+    it("returns the token manager's access token once credentials are set", async () => {
+      const spy = vi
+        .spyOn(OAuthTokenManager.prototype, 'getAccessToken')
+        .mockResolvedValue('oauth-access-token');
+      try {
+        const client = new AIMClient();
+        client.setCredentials({
+          agentId: 'agent-123',
+          privateKey: 'base64-private-key',
+          publicKey: 'base64-public-key',
+          organizationId: 'org-456',
+          createdAt: new Date().toISOString(),
+        });
+
+        expect(await client.getAccessToken()).toBe('oauth-access-token');
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

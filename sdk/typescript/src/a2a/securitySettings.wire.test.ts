@@ -84,6 +84,7 @@ describe('A2A security settings are sent with the members the server reads', () 
     const aimClient = {
       config: { baseUrl: 'http://test.example.com' },
       getCredentials: vi.fn().mockReturnValue({ agentId: 'test-agent-id' }),
+      getAccessToken: vi.fn().mockResolvedValue('test-access-token'),
     } as unknown as AIMClient;
 
     await new A2AClient(aimClient).updateSecuritySettings(fixture.body as Partial<A2ASecuritySettings>);
