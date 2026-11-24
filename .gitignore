@@ -138,7 +138,9 @@ sdk-page
 !docs/demo/*.gif
 !docs/demo/*.png
 
-# Allow logo files in public folder
+# Allow logo files in public folder. Nothing in the repository loads
+# opena2a-logo.svg; it stays at this path, as a small vector trace of the mark,
+# so pages outside the repository that link to its URL do not break.
 !apps/web/public/opena2a-logo.png
 !apps/web/public/opena2a-logo.svg
 *-page

@@ -1,7 +1,8 @@
 """Inline OpenA2A brand assets for self-contained UI (e.g. the OAuth login
 callback page served by the local CLI server). The logo is the OpenA2A shield/brain
 mark, downscaled to 128px and embedded as a data URI so the page renders offline with
-no external request. Source: apps/web/public/opena2a-logo.svg."""
+no external request. Source: the 1024px raster that apps/web/public/opena2a-logo.svg
+embedded until that file was replaced, at the same path, by a vector trace of the mark."""
 
 # OpenA2A logo (128x128 PNG, transparent) as a data URI.
 LOGO_DATA_URI = (

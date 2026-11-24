@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: the logo SVG is a 6 KB vector trace at the same path
+
+- `apps/web/public/opena2a-logo.svg` no longer embeds a 1024px PNG as base64 text (1 MB). It is a vector trace of
+  the same shield and brain mark: one even-odd path filled with the blue-to-teal gradient, about 6 KB, with the same
+  `width`, `height` and `viewBox`, so it lays out as before. The square around the mark is now transparent rather than
+  white. Nothing in the repository loads the file; it stays at its path so pages that link to its URL keep working.
+- The `.gitignore` rule that re-includes the file says why it is kept, and the docstring of
+  `sdk/python/aim_sdk/_branding.py` says its 128px logo was downscaled from the raster the SVG used to embed.
+
 ### Fixed: the logo IDAT entry names the scan its base64 text matched
 
 - The entry `The logo SVG's embedded PNG is split into one more IDAT chunk` below names the scan that matched the
