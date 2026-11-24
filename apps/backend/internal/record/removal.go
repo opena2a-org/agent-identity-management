@@ -41,6 +41,10 @@ const (
 	// sits below a held checkpoint of the chain, or names another final
 	// record than a held checkpoint at its final sequence.
 	OutcomeRemovedWithoutRecord ChainOutcome = "removed_without_record"
+	// OutcomeUnresolved: the chain would be OutcomeVerified or OutcomeRemoved,
+	// and a held checkpoint could not be read. An unread checkpoint names no
+	// chain, so it may be one of this chain that the finding did not weigh.
+	OutcomeUnresolved ChainOutcome = "unresolved"
 )
 
 // ChainFinding is VerifyChainSet's finding about one chain.
@@ -56,7 +60,8 @@ type ChainFinding struct {
 	// sequence order, that does not agree with the walk.
 	Failure *Failure
 	// Detail says why the removal is not accounted for when Outcome is
-	// OutcomeRemovedWithoutRecord, and is empty otherwise.
+	// OutcomeRemovedWithoutRecord, and why the chain is not judged when
+	// Outcome is OutcomeUnresolved, and is empty otherwise.
 	Detail string
 }
 
@@ -75,7 +80,9 @@ type ChainSetReport struct {
 	// names.
 	Chains []ChainFinding
 	// Unread holds each held checkpoint that did not open as a checkpoint, in
-	// the order given. It names no chain, so it accounts for none.
+	// the order given. It names no chain, so it may be a checkpoint of any:
+	// while Unread is non-empty, no finding is OutcomeVerified or
+	// OutcomeRemoved.
 	Unread []UnreadCheckpoint
 }
 
@@ -108,6 +115,12 @@ type ChainSetReport struct {
 // at that sequence. Any other absent chain is OutcomeRemovedWithoutRecord:
 // a chain a held checkpoint names that is neither present and verifying nor
 // accounted for by exactly one tombstone is reported, never left out.
+//
+// A held checkpoint in Unread names no chain, so no finding weighs it, and it
+// may be a checkpoint of any chain: one that records were removed from the
+// end of after a key rotation the remaining records do not reach, say. While
+// Unread is non-empty, a finding that would be OutcomeVerified or
+// OutcomeRemoved is OutcomeUnresolved instead; one that fails stays as it is.
 //
 // It returns an error and no report when a chain id in present is not a
 // lowercase hyphenated UUID, and when a tombstone's final head has a chain
@@ -172,6 +185,15 @@ func VerifyChainSet(present map[string]Result, held []Envelope, keys SignatureVe
 			continue
 		}
 		report.Chains = append(report.Chains, absentFinding(id, heldOf[id], tombstones[id]))
+	}
+	if len(report.Unread) > 0 {
+		detail := fmt.Sprintf("%d held checkpoint(s) could not be read, and any of them may be of this chain", len(report.Unread))
+		for i, f := range report.Chains {
+			if f.Outcome == OutcomeVerified || f.Outcome == OutcomeRemoved {
+				report.Chains[i].Outcome = OutcomeUnresolved
+				report.Chains[i].Detail = detail
+			}
+		}
 	}
 	return report, nil
 }

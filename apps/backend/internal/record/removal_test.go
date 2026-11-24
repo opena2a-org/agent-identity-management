@@ -294,7 +294,7 @@ func TestVerifyChainSet_ATombstoneOfAPresentChainChangesNoFinding(t *testing.T) 
 }
 
 // A held checkpoint that does not open names no chain. It is reported, never
-// dropped, and changes no finding.
+// dropped, and while it is, no chain is reported verified.
 func TestVerifyChainSet_ReportsAHeldCheckpointItCannotRead(t *testing.T) {
 	s := newChainSet(t)
 	stranger := newMemoryKeyProvider(t)
@@ -309,9 +309,60 @@ func TestVerifyChainSet_ReportsAHeldCheckpointItCannotRead(t *testing.T) {
 	if !reflect.DeepEqual(report.Unread, want) {
 		t.Fatalf("unread %+v; want %+v", report.Unread, want)
 	}
-	if b := findingOf(t, report, setChainB); b.Outcome != OutcomeVerified || b.Checkpoints != 2 {
-		t.Fatalf("chain B: %+v; want verified against its 2 held checkpoints", b)
+	for _, id := range []string{setChainA, setChainB, setChainC} {
+		f := findingOf(t, report, id)
+		wantOutcome(t, f, OutcomeUnresolved, "2 held checkpoint(s) could not be read")
+		if f.Checkpoints != 2 || f.Failure != nil {
+			t.Fatalf("chain %s: %+v; want its 2 held checkpoints counted and no failure", id, f)
+		}
 	}
+}
+
+// Golden case: records are removed from the end of a chain back to before
+// its second key rotation, and the checkpoint held of its head is signed by
+// the third key. The remaining records never name that key, so the
+// checkpoint opens under no key and names no chain. The chain's records
+// verify on their own, and it is not reported verified while the checkpoint
+// is unread.
+func TestVerifyChainSet_AChainIsNotVerifiedWhileAHeldCheckpointIsUnread(t *testing.T) {
+	records, keys := signedTwiceRotatedChain(t)
+	first := keys[0].key(t)
+	full := mustVerify(t, records, first)
+	held := []Envelope{checkpointOf(t, *full.Head, fixtureCheckpointAt, keys[2])}
+	truncated := mustVerify(t, records[:2], first)
+	if !truncated.OK() {
+		t.Fatalf("the truncated chain does not verify on its own: %+v", truncated.Failure)
+	}
+
+	for name, verifierKeys := range map[string]SignatureVerifier{"the first key": first, "no key": nil} {
+		t.Run(name, func(t *testing.T) {
+			report := mustVerifyChainSet(t, map[string]Result{fixtureChainID: truncated}, held, verifierKeys, nil)
+			if want := []UnreadCheckpoint{{Index: 0, Reason: ReasonUnknownKey}}; !reflect.DeepEqual(report.Unread, want) {
+				t.Fatalf("unread %+v; want %+v", report.Unread, want)
+			}
+			for _, f := range report.Chains {
+				if f.Outcome == OutcomeVerified || f.Outcome == OutcomeRemoved {
+					t.Fatalf("chain %s: %+v while a held checkpoint is unread", f.ChainID, f)
+				}
+			}
+			wantOutcome(t, findingOf(t, report, fixtureChainID), OutcomeUnresolved, "could not be read")
+		})
+	}
+}
+
+// A chain removed with a tombstone at its head is not reported removed while
+// a held checkpoint is unread, and a chain that fails stays failed.
+func TestVerifyChainSet_AnUnreadCheckpointLeavesNoChainRemovedAndNoFailureChanged(t *testing.T) {
+	s := newChainSet(t)
+	present := s.without(setChainB)
+	present[setChainC] = mustVerify(t, s.records[setChainC][:2], s.kp.key(t))
+	held := append(append([]Envelope(nil), s.held...),
+		checkpointOf(t, *s.walks[setChainA].Head, fixtureCheckpointAt, newMemoryKeyProvider(t)))
+	report := mustVerifyChainSet(t, present, held, s.kp.key(t), []RemovedChain{s.tombstoneOf(setChainB)})
+
+	wantOutcome(t, findingOf(t, report, setChainA), OutcomeUnresolved, "could not be read")
+	wantOutcome(t, findingOf(t, report, setChainB), OutcomeUnresolved, "could not be read")
+	wantPresentFailure(t, findingOf(t, report, setChainC), 3, FailureTruncated, "records that verified end at sequence 1")
 }
 
 // After a key rotation the next key signs a chain's checkpoints. A verifier
