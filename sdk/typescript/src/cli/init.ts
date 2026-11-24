@@ -2,8 +2,9 @@
  * `npx @opena2a/aim-sdk init` — register a first agent with an onboarding
  * bootstrap token, from a terminal, in one command.
  *
- * The onboarding screen mints a 15-minute, single-use token scoped to
- * `agents:register` (POST /api/v1/onboarding/bootstrap-tokens). This command:
+ * A signed-in member, manager or admin mints a 15-minute, single-use token
+ * scoped to `agents:register` with POST /api/v1/onboarding/bootstrap-tokens
+ * (no dashboard screen mints one). This command:
  *
  *   1. reads the token from AIM_BOOTSTRAP_TOKEN (a flag that carries it is
  *      refused: a flag value is visible in `ps` and shell history);
@@ -41,6 +42,8 @@ export const BOOTSTRAP_TOKEN_ENV = 'AIM_BOOTSTRAP_TOKEN';
 export const BOOTSTRAP_TOKEN_HEADER = 'X-AIM-Bootstrap-Token';
 export const BOOTSTRAP_TOKEN_PREFIX = 'aim_ob_';
 export const EXCHANGE_PATH = '/api/v1/onboarding/bootstrap-tokens/exchange';
+/** The API call that mints a bootstrap token. No dashboard screen mints one. */
+const BOOTSTRAP_TOKEN_MINT_CALL = 'POST /api/v1/onboarding/bootstrap-tokens';
 export const DEFAULT_AIM_URL = 'https://aim.opena2a.org';
 export const DEFAULT_AGENT_NAME = 'my-first-agent';
 /** Same on-disk schema the Python SDK stamps on agent credential files. */
@@ -76,7 +79,8 @@ type ParseResult = { ok: true; args: InitArgs } | { ok: false; error: string };
 
 export function initHelpText(): string {
   return `
-  Register your first agent with a bootstrap token from the onboarding screen.
+  Register your first agent with a bootstrap token. A signed-in member,
+  manager or admin mints one with ${BOOTSTRAP_TOKEN_MINT_CALL}.
 
   USAGE
     ${BOOTSTRAP_TOKEN_ENV}=<token> npx @opena2a/aim-sdk init [options]
@@ -393,13 +397,14 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
   const token = (env[BOOTSTRAP_TOKEN_ENV] ?? '').trim();
   if (!token) {
     err('Error: no bootstrap token.');
-    err('Copy the command from the onboarding screen, or set the token yourself:');
+    err(`Mint one with ${BOOTSTRAP_TOKEN_MINT_CALL} (signed in as a member, manager or admin),`);
+    err('then set it in the environment:');
     err(`  ${BOOTSTRAP_TOKEN_ENV}=<token> npx @opena2a/aim-sdk init`);
     return 1;
   }
   if (!token.startsWith(BOOTSTRAP_TOKEN_PREFIX)) {
     err(`Error: that is not a bootstrap token (bootstrap tokens start with ${BOOTSTRAP_TOKEN_PREFIX}).`);
-    err('Generate one from the onboarding screen in the dashboard.');
+    err(`Mint one with ${BOOTSTRAP_TOKEN_MINT_CALL} (signed in as a member, manager or admin).`);
     return 1;
   }
 
@@ -526,7 +531,8 @@ export async function runInit(argv: string[], deps: InitDeps = {}): Promise<numb
     const fix = answer.code ? REFUSAL_FIX[answer.code] : undefined;
     if (fix) {
       err(`Error: ${fix}`);
-      err('Generate a new token from the onboarding screen and run the command again.');
+      err(`Mint a new token with ${BOOTSTRAP_TOKEN_MINT_CALL} (signed in as a member, manager or admin)`);
+      err('and run the command again.');
     } else if (response.status === 409) {
       err(`Error: your organization already has an agent named "${name}".`);
       err('Run again with --name <another-name>; the token is still valid.');

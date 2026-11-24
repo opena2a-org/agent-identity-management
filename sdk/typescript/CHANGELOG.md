@@ -7,6 +7,14 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed: `init` and `aim-arp --help` name the call that mints a bootstrap token
+
+- `npx @opena2a/aim-sdk init --help`, `aim-arp --help` and the errors `init` prints for a missing token, a value that
+  is not a bootstrap token and a token the server refused said to get a token from the onboarding screen. The
+  dashboard has no screen that mints one; they now say that a signed-in member, manager or admin mints one with
+  `POST /api/v1/onboarding/bootstrap-tokens`. The server's refusals and the description an agent registered with a
+  bootstrap token gets when it names none say the same.
+
 ### Changed: an interceptor scanned before `start()` says so once
 
 - `PromptInterceptor.scanInput` and `scanOutput`, `MCPProtocolInterceptor.scanToolCall` and

@@ -1,6 +1,7 @@
 """
-`aim-sdk init` registers a first agent with the bootstrap token minted on the
-dashboard's onboarding screen: it generates the Ed25519 key pair locally,
+`aim-sdk init` registers a first agent with a bootstrap token that a signed-in
+member, manager or admin mints with POST /api/v1/onboarding/bootstrap-tokens:
+it generates the Ed25519 key pair locally,
 posts only the public key to POST /api/v1/onboarding/bootstrap-tokens/exchange
 with the token in the X-AIM-Bootstrap-Token header, saves the credentials to
 ~/.aim/agents/<name>.json with 0600 permissions and prints the dashboard URL.
@@ -328,8 +329,8 @@ def test_existing_credentials_are_kept_and_the_token_is_not_spent(fake_server, a
 # --- server refusals -----------------------------------------------------------
 
 @pytest.mark.parametrize("code,message", [
-    ("bootstrap_token_used", "The bootstrap token has already registered an agent. Generate a new one from the onboarding screen."),
-    ("bootstrap_token_expired", "The bootstrap token has expired. Generate a new one from the onboarding screen."),
+    ("bootstrap_token_used", "The bootstrap token has already registered an agent. Mint a new one with POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)."),
+    ("bootstrap_token_expired", "The bootstrap token has expired. Mint a new one with POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)."),
 ])
 def test_refused_token_prints_the_server_reason_and_saves_nothing(fake_server, agents_dir, capsys, code, message):
     server = fake_server(lambda r: (401, {"error": message, "code": code}, None))
@@ -471,6 +472,27 @@ def test_help_documents_the_environment_variable(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert cli.BOOTSTRAP_TOKEN_ENV in out
     assert "--url" in out and "--name" in out
+
+
+def test_help_and_refusals_name_the_mint_call_not_a_dashboard_screen(fake_server, agents_dir, monkeypatch, capsys):
+    # No dashboard screen mints a bootstrap token; the API call does.
+    monkeypatch.setattr(sys, "argv", ["aim-sdk", "--help"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    monkeypatch.setattr(sys, "argv", ["aim-sdk", "init", "--help"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    server = fake_server(lambda r: (401, {}, None))
+    assert run_init(server.url) == 1
+    assert run_init(server.url, token="not-a-bootstrap-token") == 1
+    assert run_init(server.url, token=TOKEN) == 1
+    out = capsys.readouterr().out
+    flat = " ".join(out.split())
+
+    assert "screen" not in out
+    assert "Register a first agent with a bootstrap token minted by POST /api/v1/onboarding/bootstrap-tokens" in flat
+    assert flat.count("POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)") == 3
+    assert "screen" not in cli.__doc__ and "screen" not in cli.init.__doc__
 
 
 # --- the exchange answer: fields are checked, server text is one plain line ------

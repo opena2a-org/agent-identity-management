@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed: `aim-sdk init` names the call that mints a bootstrap token
+
+- `aim-sdk init --help`, `aim-sdk --help` and the errors `init` prints for a missing token, a value that is not a
+  bootstrap token and a `401` without a reason said to get a token from the onboarding screen. The dashboard has no
+  screen that mints one; they now say that a signed-in member, manager or admin mints one with
+  `POST /api/v1/onboarding/bootstrap-tokens`. The server's refusals and the description an agent registered with a
+  bootstrap token gets when it names none say the same.
+
 ### Added: `aim_sdk.telemetry.guard`, the NanoMind-Guard socket client (stage 2 of #441)
 
 - `NanoMindGuardClient.classify(text)` sends `{"op": "classify", "text": ...}` as one JSON line over the daemon's

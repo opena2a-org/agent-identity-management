@@ -671,6 +671,32 @@ describe('the shipped bin dispatches init', () => {
   });
 });
 
+describe('help and refusals name the call that mints a bootstrap token, not a dashboard screen', () => {
+  const MINT = 'POST /api/v1/onboarding/bootstrap-tokens';
+  const ROLES = `${MINT} (signed in as a member, manager or admin)`;
+
+  it('init --help and aim-arp --help', async () => {
+    expect(initHelpText()).not.toMatch(/screen/i);
+    expect(initHelpText().split(/\s+/).join(' ')).toContain(`A signed-in member, manager or admin mints one with ${MINT}.`);
+    const log: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...a: unknown[]) => {
+      log.push(a.join(' '));
+    });
+    expect(await runAimArp(['--help'])).toBe(0);
+    expect(log.join('\n')).not.toMatch(/screen/i);
+    expect(log.join('\n')).toContain(MINT);
+  });
+
+  it('no token, a value that is not a token, and a refused token', async () => {
+    expect(await runInit(['--url', baseUrl], deps({}))).toBe(1);
+    expect(await runInit(['--url', baseUrl], deps({ AIM_BOOTSTRAP_TOKEN: 'not-a-bootstrap-token' }))).toBe(1);
+    handler = refuse(401, { error: 'expired', code: 'bootstrap_token_expired' });
+    expect(await runInit(['--url', baseUrl], deps())).toBe(1);
+    expect(allOutput()).not.toMatch(/screen/i);
+    expect(allOutput().split(ROLES)).toHaveLength(4);
+  });
+});
+
 describe('the exchange answer: fields are checked and server text is printed as one plain line', () => {
   const ESC = '\u001b';
   const RLO = '\u202e';
