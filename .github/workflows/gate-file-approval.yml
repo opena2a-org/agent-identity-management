@@ -64,13 +64,14 @@ jobs:
       - name: Evaluate and post the check run
         run: |
           set -euo pipefail
-          # The approver set: whitespace-separated logins, the owner and the
-          # gate-reviewer App's bot. Changing it is itself a gate-file change,
+          # The approver set: whitespace-separated logins, the owner, the
+          # gate-reviewer App's bot and the CI reviewer App's bot. Changing it
+          # is itself a gate-file change,
           # so the change is judged by the current set. This ONE variable
           # feeds both the review-event early exit and the evaluation filter
           # below, through the one membership definition in approver_jq, so
           # the two predicates cannot diverge: they share both.
-          approvers="thebenignhacker benign-gate-reviewer[bot]"
+          approvers="thebenignhacker benign-gate-reviewer[bot] lication-reviewer[bot]"
 
           # Membership, defined once in jq; both predicates below call it with
           # the same $approvers. A login is a member only when it equals one
