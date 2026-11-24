@@ -40,17 +40,21 @@ behaviors:
         - "Card has required fields"
 
     - id: update_agent_card
-      description: "Update existing agent card"
+      description: "Replace the agent card with a new card document"
       preconditions:
         - "Agent card already published"
       input:
-        skills:
-          - id: "new-skill"
-            name: "New Skill"
-            description: "Added capability"
+        cardData:
+          name: "Report Writer"
+          url: "https://agent.example.com"
+          version: "1.1.0"
+          skills:
+            - id: "new-skill"
+              name: "New Skill"
+              description: "Added capability"
       assertions:
-        - "Card is updated"
-        - "New skill is included"
+        - "Card is replaced"
+        - "Answer lists skills as strings, new-skill included"
 
   # === Skills ===
   skills:

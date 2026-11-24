@@ -1,5 +1,7 @@
 package org.opena2a.aim.a2a;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -10,11 +12,16 @@ import java.util.Map;
 /**
  * A2A Agent Card - Self-describing manifest for A2A protocol.
  * Based on Google's A2A specification with AIM security enhancements.
+ *
+ * <p>Read from the server's answer to a card registration or replacement, {@code cardId} is read
+ * as {@code id}, {@code attestationExpires} as {@code aimAttestationExpiresAt}, and each skill,
+ * which that answer gives as its identifier, as a {@link Skill} with only its ID.</p>
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class A2AAgentCard {
 
     @JsonProperty("id")
+    @JsonAlias("cardId")
     private String id;
 
     @JsonProperty("agentId")
@@ -57,6 +64,7 @@ public class A2AAgentCard {
     private String aimAttestation;
 
     @JsonProperty("aimAttestationExpiresAt")
+    @JsonAlias("attestationExpires")
     private Instant aimAttestationExpiresAt;
 
     @JsonProperty("publicKey")
@@ -199,6 +207,17 @@ public class A2AAgentCard {
         private List<String> outputModes;
 
         public Skill() {}
+
+        /**
+         * A skill named by its identifier, as the server answers a card registration or
+         * replacement.
+         *
+         * @param id the skill's identifier
+         */
+        @JsonCreator(mode = JsonCreator.Mode.DELEGATING)
+        public Skill(String id) {
+            this.id = id;
+        }
 
         public String getAgentId() { return agentId; }
         public void setAgentId(String agentId) { this.agentId = agentId; }

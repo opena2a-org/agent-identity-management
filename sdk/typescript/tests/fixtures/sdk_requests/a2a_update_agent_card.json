@@ -1,0 +1,22 @@
+{
+  "description": "The request A2AClient.updateAgentCard sends, in the TypeScript and Java SDKs, for a card document with one skill: the document as cardData, which PUT /api/v1/a2a/cards/:id stores in place of the agent's card, answering the identifiers of its skills as strings. {agentId} is the agent's ID.",
+  "method": "PUT",
+  "path": "/api/v1/a2a/cards/{agentId}",
+  "requestType": "A2AAgentCardParsed",
+  "body": {
+    "cardData": {
+      "name": "Report Writer",
+      "description": "Writes the nightly report",
+      "url": "https://agent.example.com",
+      "version": "1.1.0",
+      "skills": [
+        {
+          "id": "summarize",
+          "name": "Summarize",
+          "description": "Summarizes a report",
+          "tags": ["text"]
+        }
+      ]
+    }
+  }
+}

@@ -1107,6 +1107,21 @@ they stay in scope if one ever grows an observational side-channel.
   opt-out marker, with a positive control in which an `AgentRuntimeProtection` with no opt-out posts one gradient
   after 300 events.
 
+### Fixed: `A2AClient.updateAgentCard` sends the card document, and reads its skills as strings (#652)
+
+- `PUT /api/v1/a2a/cards/:id` reads `cardUrl` or `cardData` and replaces the agent's card with that document; it
+  answers the identifiers of the card's skills as strings. `updateAgentCard` sent the card fields themselves, skills
+  as objects, which the route does not read, and it answered `400`. It now takes `{ agentId?, cardUrl?, cardData? }`
+  (`A2AAgentCardUpdate`), sends `cardUrl` or the document as `cardData`, and returns the server's answer as
+  `A2AAgentCardRegistration`: `cardId`, `agentId`, `cardUrl`, `attestationExpires` and `skills: string[]`. A card
+  with a skill sent this way is stored and answered `200`.
+- **Breaking change for code that passed card fields.** An update with neither `cardUrl` nor `cardData` rejects
+  without sending a request, with the server's message naming the fields it carried. Put them in `cardData`, the
+  whole document: the route replaces the card, it does not edit it.
+- Added the types `A2ACardDocument`, `A2ACardSkill`, `A2AAgentCardUpdate` and `A2AAgentCardRegistration`.
+- The request is pinned in `tests/fixtures/sdk_requests/a2a_update_agent_card.json`, which the backend's handler test
+  PUTs to the route and the Java SDK's tests hold its client to. Tests: `src/a2a/updateAgentCard.wire.test.ts`.
+
 ## [1.3.1] - 2026-09-02
 
 ### Added

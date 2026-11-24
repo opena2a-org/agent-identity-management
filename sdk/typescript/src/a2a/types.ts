@@ -23,6 +23,60 @@ export interface A2AAgentCard {
 }
 
 /**
+ * An A2A card document, as `updateAgentCard` sends it in `cardData`. The server
+ * reads the members below and stores the whole document, other A2A members
+ * (`provider`, `capabilities`, ...) included.
+ */
+export interface A2ACardDocument {
+  name: string;
+  description?: string;
+  url: string;
+  version: string;
+  skills?: A2ACardSkill[];
+  securitySchemes?: Record<string, unknown>;
+  defaultInputModes?: string[];
+  defaultOutputModes?: string[];
+  [member: string]: unknown;
+}
+
+/**
+ * A skill as a card document declares it.
+ */
+export interface A2ACardSkill {
+  id: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  inputModes?: string[];
+  outputModes?: string[];
+  examples?: string[];
+}
+
+/**
+ * What `updateAgentCard` sends: the card document itself (`cardData`) or the
+ * URL the server fetches it from (`cardUrl`). `agentId` names the agent whose
+ * card is replaced, the current agent when left out.
+ */
+export interface A2AAgentCardUpdate {
+  agentId?: string;
+  cardUrl?: string;
+  cardData?: A2ACardDocument;
+}
+
+/**
+ * The server's answer to a card registration or replacement: the stored card,
+ * the identifiers of the skills it declares, and the expiry of its new
+ * attestation.
+ */
+export interface A2AAgentCardRegistration {
+  cardId: string;
+  agentId: string;
+  cardUrl: string;
+  attestationExpires: string;
+  skills: string[];
+}
+
+/**
  * A2A Skill - A capability an agent can perform
  */
 export interface A2ASkill {

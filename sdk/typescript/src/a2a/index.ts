@@ -13,6 +13,10 @@
 export { A2AClient, createA2AClient, findAgentForIntent } from './A2AClient';
 export type {
   A2AAgentCard,
+  A2AAgentCardUpdate,
+  A2AAgentCardRegistration,
+  A2ACardDocument,
+  A2ACardSkill,
   A2ASkill,
   A2ASkillExample,
   A2AAttestation,
