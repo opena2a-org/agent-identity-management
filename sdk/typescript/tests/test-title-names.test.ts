@@ -107,10 +107,10 @@ describe('test titles open with what the test checks', () => {
     expect(titlesOf(join('src', 'client', 'AIMClient.validation.test.ts'))).toContain('timeout: -5 throws ConfigurationError');
   });
 
-  it('reports a title that opens with an identifier in each call and quote form, and nothing else', () => {
+  it('reports a title that opens with an identifier in each call, spacing and quote form, and nothing else', () => {
     const source = [
-      "describe('CR-002: fail-closed enforcement', () => {",
-      "  it('AIM-11.AC4 a 429 yields RateLimitError', () => {});",
+      "describe ('CR-002: fail-closed enforcement', () => {",
+      "  it( 'AIM-11.AC4 a 429 yields RateLimitError', () => {});",
       '  it("AIM-20.AC1 the doc table totals", () => {});',
       '  it(`AIM-19.AC3 refuses ${entry} with exit 2`, () => {});',
       "  it.skipIf(!available)('AIM-06.AC4 the default timeout', () => {});",
@@ -126,7 +126,7 @@ describe('test titles open with what the test checks', () => {
       "  it('Delegation temporal lower bound (AIM-11 item 7)', () => {});",
       "  test('the publish shape (QGF-273)', () => {});",
       '  // it(\'AIM-01.AC1 in a comment\', () => {});',
-      "  const sample = \"it('AIM-02.AC1 in a string')\";",
+      "  const sample = \"it( 'AIM-02.AC1 in a string')\";",
       "  expect(sample).toBe('AIM-03.AC1');",
       "  expect(/AIM-04/.test('AIM-04.AC1')).toBe(true);",
       '});',
