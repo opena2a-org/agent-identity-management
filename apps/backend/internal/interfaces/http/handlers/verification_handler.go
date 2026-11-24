@@ -46,6 +46,29 @@ type VerificationHandler struct {
 	// actionRequestNonces admits the nonces of signed action-request
 	// statements. Without it every statement is refused with no write.
 	actionRequestNonces ActionRequestNonceAdmitter
+
+	// decisionAudit, when set, takes the audit entries of the verification
+	// decisions and refusals off the request path: it writes them in batches
+	// and loses none (see application.AuditQueue). Without it they are
+	// written through the audit service before the response.
+	decisionAudit *application.AuditQueue
+}
+
+// WithAuditQueue writes the audit entries of verification decisions and
+// refusals through queue, and returns the handler. A nil queue leaves them
+// written through the audit service.
+func (h *VerificationHandler) WithAuditQueue(queue *application.AuditQueue) *VerificationHandler {
+	h.decisionAudit = queue
+	return h
+}
+
+// logDecision records the audit entry of a verification decision or refusal,
+// through the queue when the handler has one.
+func (h *VerificationHandler) logDecision(ctx context.Context, entry *domain.AuditLog) error {
+	if h.decisionAudit != nil {
+		return h.decisionAudit.Log(ctx, entry)
+	}
+	return h.getAuditService().Log(ctx, entry)
 }
 
 // WithActionRequestNonces sets the admission store for signed action-request
@@ -274,7 +297,7 @@ func (h *VerificationHandler) CreateVerification(c fiber.Ctx) error {
 	if !domain.AgentStatusPermitsAuth(agent.Status) {
 		// The refusal is recorded, so the organisation sees a suspended agent that keeps
 		// trying. A failed write still refuses.
-		_ = h.getAuditService().Log(c.Context(), h.statusRefusalAuditEntry(c, agent, agentID, req.Capability, req.Resource, fiber.StatusForbidden))
+		_ = h.logDecision(c.Context(), h.statusRefusalAuditEntry(c, agent, agentID, req.Capability, req.Resource, fiber.StatusForbidden))
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error": fmt.Sprintf("Agent status is %s, cannot perform actions", agent.Status),
 		})
@@ -587,9 +610,10 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 		auditEntry.Metadata[k] = v
 	}
 
-	// Save audit log - errors don't block the request
+	// Save audit log - errors don't block the request. With a queue the
+	// entry is written after the response, in a batch, and is not lost.
 	// SECURITY: No error logging to prevent information leakage
-	_ = h.getAuditService().Log(c.Context(), auditEntry)
+	_ = h.logDecision(c.Context(), auditEntry)
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {

@@ -453,6 +453,9 @@ func main() {
 	// End the alert channel deliveries: a wait before a retry ends, an attempt
 	// in flight ends within its 10-second timeout, and queued alerts are not sent.
 	services.AlertChannel.Stop()
+	// Write the audit entries of the verification decisions still queued.
+	// They go to the SIEM as they are written, so this comes before its flush.
+	closeVerificationAudit(services.VerificationAudit, verificationAuditDrainTimeout)
 	// Deliver the audit log entries still queued for the SIEM.
 	if siemForwarder != nil {
 		flushSIEMForwarding(siemForwarder)
@@ -844,6 +847,8 @@ type Services struct {
 	ActionRequestNonces *application.ActionRequestNonceService
 	// Records a user's request for the deletion of their own account, and deletes the account when it is due
 	AccountDeletion *application.AccountDeletionService
+	// Writes the audit entries of verification decisions in batches, off the request path; closed at shutdown
+	VerificationAudit *application.AuditQueue
 }
 
 func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -1402,6 +1407,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 
 		// Account deletion requests and the purge that deletes the accounts when due
 		AccountDeletion: application.NewAccountDeletionService(repos.User, auditService),
+		// The verification route records every decision; the queue writes
+		// those records after the response, in batches, and Close writes the
+		// ones still queued at shutdown.
+		VerificationAudit: application.NewAuditQueue(repos.AuditLog, application.AuditQueueConfig{}),
 	}, keyVault
 }
 
@@ -1559,7 +1568,8 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.VerificationEvent,
 			repos.Organization,
 			services.FGA,
-		).WithActionRequestNonces(services.ActionRequestNonces),
+		).WithActionRequestNonces(services.ActionRequestNonces).
+			WithAuditQueue(services.VerificationAudit),
 		VerificationEvent: handlers.NewVerificationEventHandler(
 			services.VerificationEvent,
 			repos.Agent,     // A3d-iv: agent-keyed verification-event reads verify agent.OrganizationID via LoadOwned

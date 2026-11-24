@@ -3,6 +3,8 @@ package repository
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,12 +28,20 @@ func (r *AuditLogRepository) OnCreate(fn func(*domain.AuditLog)) {
 	r.onCreate = fn
 }
 
-func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
-	query := `
-		INSERT INTO audit_logs (id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-	`
+// auditLogInsertColumns is the column list of an audit_logs insert, and
+// auditLogInsertColumnCount the number of values each row binds.
+const (
+	auditLogInsertColumns     = `id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp`
+	auditLogInsertColumnCount = 11
+)
 
+// auditLogBatchRows bounds the rows one CreateBatch statement inserts, well
+// under the 65535 bind parameters a Postgres statement may carry.
+const auditLogBatchRows = 500
+
+// auditLogInsertValues fills in the id and the time of an entry that has
+// none, and returns the values its row binds, in auditLogInsertColumns order.
+func auditLogInsertValues(log *domain.AuditLog) ([]interface{}, error) {
 	if log.ID == uuid.Nil {
 		log.ID = uuid.New()
 	}
@@ -46,10 +56,9 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 
 	metadataJSON, err := json.Marshal(log.Metadata)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	_, err = r.db.Exec(query,
+	return []interface{}{
 		log.ID,
 		log.OrganizationID,
 		log.UserID,
@@ -61,12 +70,76 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 		log.UserAgent,
 		metadataJSON,
 		log.Timestamp,
-	)
+	}, nil
+}
+
+func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
+	query := `
+		INSERT INTO audit_logs (` + auditLogInsertColumns + `)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+
+	values, err := auditLogInsertValues(log)
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.Exec(query, values...)
 	if err != nil {
 		return err
 	}
 	if r.onCreate != nil {
 		r.onCreate(log)
+	}
+	return nil
+}
+
+// CreateBatch writes logs with one insert statement for each
+// auditLogBatchRows of them, each statement all or nothing, and gives each
+// written entry to onCreate as Create does. A row whose id is already stored
+// is skipped, so a batch retried after a write whose outcome was not known
+// does not fail on the rows that write stored. When a statement fails, the
+// statements before it have been written and their entries given to onCreate;
+// the error names how many entries were written.
+func (r *AuditLogRepository) CreateBatch(logs []*domain.AuditLog) error {
+	for start := 0; start < len(logs); start += auditLogBatchRows {
+		end := start + auditLogBatchRows
+		if end > len(logs) {
+			end = len(logs)
+		}
+		chunk := logs[start:end]
+
+		var query strings.Builder
+		query.WriteString(`INSERT INTO audit_logs (` + auditLogInsertColumns + `) VALUES `)
+		args := make([]interface{}, 0, len(chunk)*auditLogInsertColumnCount)
+		for i, log := range chunk {
+			values, err := auditLogInsertValues(log)
+			if err != nil {
+				return fmt.Errorf("audit log batch: entry %d: %w (%d of %d written)", start+i, err, start, len(logs))
+			}
+			if i > 0 {
+				query.WriteString(", ")
+			}
+			query.WriteString("(")
+			for j := range values {
+				if j > 0 {
+					query.WriteString(", ")
+				}
+				fmt.Fprintf(&query, "$%d", len(args)+j+1)
+			}
+			query.WriteString(")")
+			args = append(args, values...)
+		}
+		query.WriteString(` ON CONFLICT (id) DO NOTHING`)
+
+		if _, err := r.db.Exec(query.String(), args...); err != nil {
+			return fmt.Errorf("audit log batch: %w (%d of %d written)", err, start, len(logs))
+		}
+		if r.onCreate != nil {
+			for _, log := range chunk {
+				r.onCreate(log)
+			}
+		}
 	}
 	return nil
 }

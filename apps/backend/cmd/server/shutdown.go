@@ -51,3 +51,27 @@ func shutdownGracefully(api apiServer, apiTimeout time.Duration, fga asyncDraine
 		}
 	}
 }
+
+// verificationAuditDrainTimeout bounds the writing, at shutdown, of the audit
+// entries of verification decisions still queued. Batches of up to 100 rows
+// write in milliseconds; the bound is for a database that has stopped
+// answering, when each entry left is written to the server log instead.
+const verificationAuditDrainTimeout = 2 * time.Second
+
+// auditQueueCloser is the part of *application.AuditQueue that shutdown uses.
+type auditQueueCloser interface {
+	Close(ctx context.Context) error
+}
+
+// closeVerificationAudit writes the queued audit entries of verification
+// decisions within timeout. A failure is logged and never exits the process.
+func closeVerificationAudit(queue auditQueueCloser, timeout time.Duration) {
+	if queue == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := queue.Close(ctx); err != nil {
+		log.Printf("Verification audit queue: %v", err)
+	}
+}

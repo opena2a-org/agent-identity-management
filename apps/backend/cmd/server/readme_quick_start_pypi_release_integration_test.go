@@ -143,6 +143,9 @@ func TestReadmeQuickStartAsThePyPIReleaseSendsIt(t *testing.T) {
 	t.Cleanup(func() {
 		services.AlertChannel.Stop()
 		_ = services.FGA.Shutdown(ctx)
+		// The verification decisions' audit rows are written before the
+		// organization's rows are deleted.
+		_ = services.VerificationAudit.Close(ctx)
 	})
 	h := initHandlers(services, repos, jwtService, keyVault, cfg, db)
 	app := fiber.New(fiber.Config{ErrorHandler: customErrorHandler})
