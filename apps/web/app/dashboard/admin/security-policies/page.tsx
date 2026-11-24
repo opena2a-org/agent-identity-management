@@ -884,7 +884,7 @@ export default function SecurityPoliciesPage() {
                   }`}
                 />
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-xl">{policy.name}</h3>
                   <Badge
@@ -906,7 +906,7 @@ export default function SecurityPoliciesPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pl-14">
+            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground min-w-0 pl-14">
               <div>
                 <span className="font-medium">Applies to:</span>{" "}
                 <span className="capitalize">{policy.appliesTo.replace("_", " ")}</span>
@@ -916,7 +916,7 @@ export default function SecurityPoliciesPage() {
                 <span className="capitalize">{policy.severityThreshold}</span>
               </div>
               {policy.policyType === "trust_score_low" && (
-                <div>
+                <div className="min-w-0 break-words">
                   <span className="font-medium">Trust score below:</span>{" "}
                   <span>{describeAppliedTrustThreshold(policy.rules)}</span>
                 </div>
@@ -1021,7 +1021,7 @@ export default function SecurityPoliciesPage() {
               <div className={`p-2 rounded-lg ${typeConfig.bgColor}`}>
                 <TypeIcon className={`h-5 w-5 ${typeConfig.color}`} />
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-semibold text-xl">{policy.name}</h3>
                   <Badge

@@ -247,6 +247,19 @@ describe("Security policies page on a narrow screen", () => {
     }
   });
 
+  it("lets the trust threshold note wrap inside a min-w-0 column", async () => {
+    api.getSecurityPolicies.mockResolvedValue([
+      agentPolicy("Percent", "trust_score_low", { trust_threshold: 70 }),
+    ]);
+    render(<SecurityPoliciesPage />);
+    const label = await screen.findByText("Trust score below:");
+    const note = label.parentElement;
+    expect(note?.classList.contains("min-w-0")).toBe(true);
+    expect(note?.classList.contains("break-words")).toBe(true);
+    expect(note?.parentElement?.classList.contains("min-w-0")).toBe(true);
+    expect(note?.parentElement?.classList.contains("flex-wrap")).toBe(true);
+  });
+
   it("wraps the header and the global enforcement row", async () => {
     render(<SecurityPoliciesPage />);
     const title = await screen.findByRole("heading", { level: 1, name: /Security Policies/ });
