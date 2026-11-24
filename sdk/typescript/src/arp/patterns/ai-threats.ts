@@ -220,8 +220,25 @@ export const PATTERN_SETS = {
   a2aPatterns: [...a2aAttack],
 } as const;
 
-/** Maximum text length to scan (64 KB) — prevents ReDoS on large payloads */
-const MAX_SCAN_LENGTH = 64 * 1024;
+/**
+ * Length of one scan window (65,536 characters). Each pattern runs on one
+ * window at a time, never on more text than this, which bounds the cost of a
+ * pattern on a large payload.
+ */
+export const SCAN_WINDOW_LENGTH = 64 * 1024;
+
+/**
+ * Characters each window shares with the one before it, so that a match of up
+ * to this length that crosses a window boundary is still found.
+ */
+export const SCAN_WINDOW_OVERLAP = 1024;
+
+/**
+ * Most characters of one text that `scanText` scans (1,048,576). The rest of a
+ * longer text is not scanned, and the result has `truncated: true`; a match in
+ * the scanned part is still reported.
+ */
+export const MAX_SCAN_TOTAL = 1024 * 1024;
 
 /** Scan result from matching */
 export interface ScanResult {
@@ -229,8 +246,16 @@ export interface ScanResult {
   matches: Array<{
     pattern: ThreatPattern;
     matchedText: string;
+    /**
+     * The top-level argument whose value matched. Set by
+     * `MCPProtocolInterceptor.scanToolCall`, which scans each argument on its own.
+     */
+    argument?: string;
   }>;
-  /** True if input was truncated before scanning */
+  /**
+   * True if the text, or for `scanToolCall` any one argument, is longer than
+   * `MAX_SCAN_TOTAL` characters and only its first `MAX_SCAN_TOTAL` were scanned.
+   */
   truncated?: boolean;
   /**
    * False when the analyzer is not started and evaluated nothing; its
@@ -256,9 +281,27 @@ export interface ScanResult {
 }
 
 /**
+ * Split `text` into windows of `SCAN_WINDOW_LENGTH` characters, each starting
+ * `SCAN_WINDOW_OVERLAP` characters before the end of the one before it.
+ */
+function scanWindows(text: string): string[] {
+  if (text.length <= SCAN_WINDOW_LENGTH) return [text];
+  const step = SCAN_WINDOW_LENGTH - SCAN_WINDOW_OVERLAP;
+  const windows: string[] = [];
+  for (let start = 0; ; start += step) {
+    windows.push(text.slice(start, start + SCAN_WINDOW_LENGTH));
+    if (start + SCAN_WINDOW_LENGTH >= text.length) break;
+  }
+  return windows;
+}
+
+/**
  * Scan text against a set of threat patterns.
- * Returns all matches (not just first) for comprehensive reporting.
- * Input is truncated to MAX_SCAN_LENGTH to prevent ReDoS.
+ * Returns all matches (not just first) for comprehensive reporting: for each
+ * pattern, its first match.
+ * The first `MAX_SCAN_TOTAL` characters are scanned in windows of
+ * `SCAN_WINDOW_LENGTH` characters, so no pattern runs on more than one window
+ * at a time; `truncated` is true when the text is longer than that total.
  * The result's `scope` lists the ids of `patterns` under `set`.
  */
 export function scanText(
@@ -266,17 +309,20 @@ export function scanText(
   patterns: readonly ThreatPattern[],
   set: NonNullable<ScanResult['scope']>['set'] = 'custom',
 ): ScanResult {
-  const truncated = text.length > MAX_SCAN_LENGTH;
-  const scannable = truncated ? text.slice(0, MAX_SCAN_LENGTH) : text;
+  const truncated = text.length > MAX_SCAN_TOTAL;
+  const windows = scanWindows(truncated ? text.slice(0, MAX_SCAN_TOTAL) : text);
   const matches: ScanResult['matches'] = [];
 
   for (const pattern of patterns) {
-    const match = pattern.pattern.exec(scannable);
-    if (match) {
-      matches.push({
-        pattern,
-        matchedText: match[0].slice(0, 200),
-      });
+    for (const window of windows) {
+      const match = pattern.pattern.exec(window);
+      if (match) {
+        matches.push({
+          pattern,
+          matchedText: match[0].slice(0, 200),
+        });
+        break;
+      }
     }
   }
 

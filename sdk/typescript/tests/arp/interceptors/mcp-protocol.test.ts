@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MCPProtocolInterceptor } from '../../../src/arp/interceptors/mcp-protocol';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
-import { PATTERN_SETS } from '../../../src/arp/patterns/ai-threats';
+import { PATTERN_SETS, MAX_SCAN_TOTAL, SCAN_WINDOW_LENGTH } from '../../../src/arp/patterns/ai-threats';
 import type { ARPEvent } from '../../../src/arp/types';
 
 describe('MCPProtocolInterceptor', () => {
@@ -89,6 +89,74 @@ describe('MCPProtocolInterceptor', () => {
         arg: 'safe value',
       });
       expect(result.detected).toBe(false);
+    });
+  });
+
+  describe('each argument scanned on its own', () => {
+    it('scans an argument after one longer than 65,536 characters', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('writeFile', {
+        content: 'x'.repeat(SCAN_WINDOW_LENGTH + 1),
+        path: '../../etc/passwd',
+      });
+      expect(result.detected).toBe(true);
+      expect(result.truncated).toBe(false);
+      expect(result.matches).toHaveLength(1);
+      expect(result.matches[0].argument).toBe('path');
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].data.patternId).toBe('MCP-001');
+      expect(emittedEvents[0].data.argument).toBe('path');
+    });
+
+    it('scans an argument after one longer than the scan total', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('writeFile', {
+        content: 'x'.repeat(MAX_SCAN_TOTAL + 1),
+        path: '../../etc/passwd',
+      });
+      expect(result.detected).toBe(true);
+      expect(result.truncated).toBe(true);
+      expect(emittedEvents.map((e) => e.data.argument)).toEqual(['path']);
+    });
+
+    it('detects command injection past 65,536 characters within one argument', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('execute', {
+        command: 'echo ' + 'x'.repeat(SCAN_WINDOW_LENGTH * 2) + '; cat /etc/passwd',
+      });
+      expect(result.detected).toBe(true);
+      expect(result.truncated).toBe(false);
+      expect(emittedEvents[0].data.patternId).toBe('MCP-002');
+      expect(emittedEvents[0].data.argument).toBe('command');
+    });
+
+    it('fires the event for a match within the total of an argument longer than the total', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('execute', {
+        command: 'x'.repeat(SCAN_WINDOW_LENGTH) + '; cat /etc/passwd ' + 'x'.repeat(MAX_SCAN_TOTAL),
+      });
+      expect(result.detected).toBe(true);
+      expect(result.truncated).toBe(true);
+      expect(emittedEvents).toHaveLength(1);
+      expect(emittedEvents[0].data.patternId).toBe('MCP-002');
+    });
+
+    it('does not join two arguments into one match', async () => {
+      const interceptor = await createInterceptor();
+      // Joined, the text between the two backticks would match MCP-002 as a shell command substitution.
+      const result = interceptor.scanToolCall('note', { title: 'Ann`s notes', body: 'Bob`s notes' });
+      expect(result.detected).toBe(false);
+      expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('reports a pattern once for each argument it matches in', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('copy', { from: '../a', to: '../b' });
+      expect(result.matches.map((m) => [m.pattern.id, m.argument])).toEqual([
+        ['MCP-001', 'from'],
+        ['MCP-001', 'to'],
+      ]);
+      expect(emittedEvents).toHaveLength(2);
     });
   });
 

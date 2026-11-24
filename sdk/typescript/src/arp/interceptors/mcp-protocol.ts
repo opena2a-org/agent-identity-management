@@ -84,31 +84,52 @@ export class MCPProtocolInterceptor implements Monitor {
       };
     }
 
-    // Flatten all parameter values into a single string for scanning
-    const paramText = flattenArgs(args);
-    const result = scanText(paramText, PATTERN_SETS.mcpPatterns, 'mcp');
-    result.scope = { set: 'mcp', patternIds: [...checkedIds, ...(result.scope?.patternIds ?? [])] };
-
-    if (result.detected) {
-      for (const match of result.matches) {
-        this.engine.emit({
-          source: 'mcp-protocol',
-          category: 'threat',
-          severity: match.pattern.severity,
-          description: `[${match.pattern.id}] ${match.pattern.description} in tool "${toolName}"`,
-          data: {
-            patternId: match.pattern.id,
-            patternCategory: match.pattern.category,
-            toolName,
-            matchedText: match.matchedText,
-            args: sanitizeArgs(args),
-          },
-        });
+    // Scan each top-level argument on its own, so that one long argument
+    // cannot use up the scan total of the others, and text from two
+    // arguments is never joined into one match.
+    const matches: ScanResult['matches'] = [];
+    let truncated = false;
+    for (const [argument, value] of Object.entries(args)) {
+      const argResult = scanText(flattenValue(value), PATTERN_SETS.mcpPatterns, 'mcp');
+      truncated ||= Boolean(argResult.truncated);
+      for (const match of argResult.matches) {
+        matches.push({ ...match, argument });
       }
     }
 
-    return result;
+    for (const match of matches) {
+      this.engine.emit({
+        source: 'mcp-protocol',
+        category: 'threat',
+        severity: match.pattern.severity,
+        description: `[${match.pattern.id}] ${match.pattern.description} in tool "${toolName}"`,
+        data: {
+          patternId: match.pattern.id,
+          patternCategory: match.pattern.category,
+          toolName,
+          argument: match.argument,
+          matchedText: match.matchedText,
+          args: sanitizeArgs(args),
+        },
+      });
+    }
+
+    return {
+      detected: matches.length > 0,
+      matches,
+      truncated,
+      scanned: true,
+      scope: { set: 'mcp', patternIds: [...checkedIds, ...PATTERN_SETS.mcpPatterns.map((p) => p.id)] },
+    };
   }
+}
+
+/** Flatten one argument value into a string for scanning */
+function flattenValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'object' && value !== null) return flattenArgs({ value });
+  return '';
 }
 
 /** Recursively flatten object values into a single string for scanning */
