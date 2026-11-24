@@ -11,6 +11,13 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the logo IDAT entry names the scan its base64 text matched
+
+- The entry `The logo SVG's embedded PNG is split into one more IDAT chunk` below names the scan that matched the
+  base64 text of `apps/web/public/opena2a-logo.svg`: the tree-wide reference scan, whose internal-path-reference class
+  comes from the census-format forbidden file kept outside the repository and was applied to every tracked file as
+  plain text, without the data-URI blanking `scripts/lint-public-surface.mjs` does.
+
 ### Changed: webhook create and update name the refused address class when they refuse a URL
 
 - `POST /api/v1/webhooks` and `PUT /api/v1/webhooks/:id` answer a URL whose host is, or resolves to, an address the
@@ -6108,7 +6115,10 @@ The bodies `register_mcp`, `report_execution_status` and `_register_single_mcp` 
 ### Fixed — The logo SVG's embedded PNG is split into one more IDAT chunk
 
 - The PNG embedded in `apps/web/public/opena2a-logo.svg` carries one more IDAT chunk, split inside the one run of its
-  base64 text that reads, ignoring case, as an internal directory name followed by `/`.
+  base64 text that reads, ignoring case, as an internal directory name followed by `/`. That run was matched by the
+  tree-wide reference scan: the internal-path-reference class of the census-format forbidden file
+  (`class<TAB>regex<TAB>canary` lines, kept outside the repository, read by `docs/demo/lib/census.mjs` and by
+  `scripts/lint-public-surface.mjs --forbidden`), applied case-insensitively to every tracked file as plain text.
   `scripts/lint-public-surface.mjs` blanks data-URI payloads before matching, so it does not report the run, and its
   built-in `local-home-path` class does not match the unsplit file either. The concatenated IDAT bytes and every other
   chunk are byte-identical, so the decoded pixels are unchanged.
