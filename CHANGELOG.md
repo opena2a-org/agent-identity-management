@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: `.hmaignore` exempts the Python SDK's pickle round-trip test from NEMO-009
+
+- `hackmyagent@0.33.2 secure . --ci --format json` reported one NEMO-009 finding ("Unsafe deserialization:
+  pickle.load", critical) at line 215 of `sdk/python/tests/test_revocation_unknown_error.py`. The test checks that
+  `RevocationUnknownError` survives a pickle round trip, and the bytes it loads are the ones `pickle.dumps` made from
+  an error the test built itself. `.hmaignore` exempts that file from NEMO-009 only, and the same scan now reports no
+  NEMO-009 finding. It reported no NEMO-006 finding ("Predictable /tmp path without mktemp") before this change.
+
 ### Fixed: CI runs the public wording check's own tests
 
 - The TypeScript SDK's suite, which CI runs on every pull request to `main`, runs
