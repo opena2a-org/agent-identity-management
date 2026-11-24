@@ -192,6 +192,31 @@ describe('an argument aim-arp does not know is named on stderr with a pointer to
   });
 });
 
+describe('an unknown argument is echoed as one line, with nothing a terminal would act on', () => {
+  const R = '\ufffd';
+
+  it('an ANSI escape sequence is not passed through', async () => {
+    expect(await runAimArp(['\x1b[2J\x1b[31mfrob'])).toBe(1);
+    expect(errLines).toEqual([`Unknown command: ${R}[2J${R}[31mfrob`, 'Run: aim-arp --help']);
+    expect(errLines.join('\n')).not.toContain('\x1b');
+  });
+
+  it('a line feed does not start a new line', async () => {
+    expect(await runAimArp(['--frob\nRun: aim-arp --fake'])).toBe(1);
+    expect(errLines).toEqual([`Unknown option: --frob${R}Run: aim-arp --fake`, 'Run: aim-arp --help']);
+  });
+
+  it('a control character is replaced', async () => {
+    expect(await runAimArp(['fr\rob\x07\x00'])).toBe(1);
+    expect(errLines).toEqual([`Unknown command: fr${R}ob${R}${R}`, 'Run: aim-arp --help']);
+  });
+
+  it('a long argument is cut with a marker', async () => {
+    expect(await runAimArp(['x'.repeat(500)])).toBe(1);
+    expect(errLines[0]).toBe(`Unknown command: ${'x'.repeat(128)} [truncated]`);
+  });
+});
+
 describe('the telemetry text has no capitals for emphasis and no em dash (#852)', () => {
   // Words in capitals that are not emphasis: the channel state, and names.
   const NOT_EMPHASIS = new Set(['ON', 'OFF', 'AIM', 'ARP', 'GTIN', 'IP']);

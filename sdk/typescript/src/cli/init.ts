@@ -98,7 +98,7 @@ export function initHelpText(): string {
 const VALUE_FLAGS = new Set(['--url', '--name']);
 
 /** Longest unexpected argument an error message shows. */
-const SHOWN_ARGUMENT_MAX_CHARS = 128;
+export const SHOWN_ARGUMENT_MAX_CHARS = 128;
 
 /**
  * The flag refused in every form (`--token <value>`, `--token=<value>`, bare
