@@ -1,16 +1,105 @@
 # gitleaks configuration for the Secret Detection job in
 # .github/workflows/security.yml, which runs `gitleaks dir` over the checked-out
-# tree. Every rule in gitleaks' default set stays on (GitHub tokens such as
-# ghp_..., AWS keys, private key blocks, Slack, Stripe and the rest of its
-# provider patterns), in every file type, .go included, except the two below.
+# tree. Every rule in gitleaks' default set is on (GitHub tokens such as
+# ghp_..., AWS keys, private key blocks, Slack, Stripe, the rest of its
+# provider patterns, generic-api-key and curl-auth-header), in every file type,
+# .go included. No rule is disabled.
+#
+# This scanner is the only one in that job that reads source files. The
+# HackMyAgent step after it runs with `--scan-depth quick`, which reads config
+# and credential files only, so nothing else in the job catches a key committed
+# in a .go, .ts, .py or .java file.
+#
+# The allowlists below are scoped to one rule each; there is no global
+# allowlist. Each one was written against the findings that gitleaks v8.30.1
+# (the version the workflow pins) reports on this tree with no allowlist, and
+# every one of those findings was read: none is a real credential. If a new
+# finding appears, read it before widening any entry here.
 [extend]
 useDefault = true
-# generic-api-key matches any high-entropy string assigned to a name containing
-# "key", "token" or "secret". On this tree it fires only on made-up test inputs
-# and fixtures (bearer tokens the tests mint, record key IDs in testdata, the
-# PrivateKeySize constant in internal/crypto/pqc). HackMyAgent's AST-CRED-003,
-# which runs in the same job, covers that class, with its exceptions listed
-# one file at a time in .hmaignore.
-#
-# curl-auth-header matches curl examples in docs/ whose tokens are placeholders.
-disabledRules = ["generic-api-key", "curl-auth-header"]
+
+# generic-api-key matches a high-entropy string assigned to a name containing
+# "key", "token", "secret" and the like.
+[[rules]]
+id = "generic-api-key"
+
+    # Test code and test data: tests mint bearer tokens, API keys and
+    # JWT_SECRET values, and testdata/fixtures hold made-up keys. A test
+    # file is skipped for this rule only; every provider rule still reads it.
+    [[rules.allowlists]]
+    description = "Made-up keys in tests, testdata and fixtures"
+    paths = [
+        '''_test\.go$''',
+        '''\.test\.tsx?$''',
+        '''(^|/)testdata/''',
+        '''(^|/)fixtures/''',
+        '''(^|/)sdk/python/tests/''',
+        '''(^|/)sdk/java/src/test/''',
+        '''(^|/)sdk/typescript/tests/''',
+        '''(^|/)scripts/test-[^/]+\.mjs$''',
+    ]
+
+    # Values cut short with "..." in docs and example payloads (eyJhbGciOi...
+    # JWT headers, ed25519_private_key_abc123...). A truncated value is not a
+    # usable credential.
+    [[rules.allowlists]]
+    description = "Truncated placeholder values ending in ..."
+    regexes = ['''\.\.\.$''']
+
+    # did:key identifiers are public keys by definition
+    # (sdk/typescript/scripts/verify-kanoniv-chain.ts).
+    [[rules.allowlists]]
+    description = "did:key public identifiers"
+    regexTarget = "line"
+    regexes = ['''did:key:z6Mk[1-9A-HJ-NP-Za-km-z]+''']
+
+    # The rest are single values in non-test files, each allowed only in the
+    # file it is in, so a real key added to that file is still reported.
+    [[rules.allowlists]]
+    description = "Python template text in the SDK generator, not a value"
+    condition = "AND"
+    paths = ['''(^|/)apps/backend/internal/sdkgen/python_generator\.go$''']
+    regexes = ['''^aim_url=AIM_URL$''']
+
+    [[rules.allowlists]]
+    description = "Go parameter name in a doc code sample"
+    condition = "AND"
+    paths = ['''(^|/)docs/api/direct-api-usage\.md$''']
+    regexes = ['''^privateKeyB64$''']
+
+    [[rules.allowlists]]
+    description = "Java parameter name passed to requireNonNull"
+    condition = "AND"
+    paths = ['''(^|/)sdk/java/src/main/java/org/opena2a/aim/crypto/pqc/HybridKeyPair\.java$''']
+    regexes = ['''^ed25519PrivateKey$''']
+
+    [[rules.allowlists]]
+    description = "Sequential a1b2c3... placeholder API key in the API reference"
+    condition = "AND"
+    paths = ['''(^|/)docs/guides/API_REFERENCE\.md$''']
+    regexes = ['''^aim_live_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6$''']
+
+    [[rules.allowlists]]
+    description = "Placeholder API key in an SDK example, marked 'Replace with your actual API key'"
+    condition = "AND"
+    paths = ['''(^|/)sdk/python/examples/example_one_line_setup\.py$''']
+    regexes = ['''^aim_test_key_12345$''']
+
+    [[rules.allowlists]]
+    description = "Example PagerDuty dedup_key (a UUID) in the API docs"
+    condition = "AND"
+    paths = ['''(^|/)docs/API\.md$''']
+    regexes = ['''^9b2e4c1a-7f3d-4e6b-8a5c-2d1f0e9b8a7c$''']
+
+# curl-auth-header matches an Authorization or API-key header in a curl
+# command. Its only findings on this tree are curl examples in docs/ whose
+# token is a YOUR_... placeholder (YOUR_JWT_TOKEN, YOUR_API_KEY). Only that
+# exact placeholder form is allowed, and only under docs/.
+[[rules]]
+id = "curl-auth-header"
+
+    [[rules.allowlists]]
+    description = "YOUR_... placeholder tokens in curl examples under docs/"
+    condition = "AND"
+    paths = ['''(^|/)docs/''']
+    regexes = ['''^YOUR_[A-Z_]+$''']
