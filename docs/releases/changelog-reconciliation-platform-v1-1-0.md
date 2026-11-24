@@ -34,7 +34,7 @@ records those in its Security section, as it does for jackson 2.18.11.
 - Decision: `present`, `added by this reconciliation`, or `not needed` with the
   reason.
 
-Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request number in the commit subjects. `[Unreleased]` spans CHANGELOG.md lines 12-8092 as of this table.
+Range: `platform-v1.0.0..f1a70418` (`origin/main` when the table was made). Rows: 412, one per distinct pull request number in the commit subjects. `[Unreleased]` spans CHANGELOG.md lines 12-8092 as of this table.
 
 | Decision | Rows |
 | --- | --- |
@@ -461,7 +461,7 @@ Range: `platform-v1.0.0..origin/main`. Rows: 412, one per distinct pull request 
 
 ## Commits with no pull request number
 
-Commits whose subject carries no `#N` and that change code, listed by commit. 124 more change only tests, CI, documentation or this changelog, or are merge commits, and are not listed.
+Commits whose subject carries no `#N` and that change code, listed by commit. 126 more in the range change only tests, CI, documentation or this changelog, or are merge commits, and are not listed.
 
 | Commit | Subject | Entry | Decision |
 | --- | --- | --- | --- |
