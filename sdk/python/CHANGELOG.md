@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrow terminal too.
 - Tests: `tests/test_cli_version_names_a_source_build.py`.
 
+### Changed: the README's login paragraphs say which flags the published 2.0.3 has
+
+- The Quick start's device-grant sentence and its `--allow-http` sentence, and the CLI commands section's paragraphs
+  on `login`'s exit codes and `--no-browser`, described a source build without saying so. They now say they describe
+  a source build, and that the published 2.0.3's `login` takes `--url` and `--force` (`-f`) only, signs in through a
+  browser at `<url>/auth/login` rather than a device code, makes no http: address check, and answers
+  `--no-browser` or `--allow-http` with `aim-sdk: error: unrecognized arguments: <flag>` and exit code 2. These are
+  read from the CLI at tag `sdk-py-v2.0.2`, whose commands are the four 2.0.3 offers
+  (`login, logout, status, version`).
+
 ### Changed: the README says what 2.0.3 lacks, what `aim-sdk init` needs from the server, and how a bootstrap token is minted
 
 - Where the Quick start introduces `aim-sdk init`, the README says that `init` is not in 2.0.3, the published
