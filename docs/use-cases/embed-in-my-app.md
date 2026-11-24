@@ -54,7 +54,7 @@ aim.logEvent({
 });
 ```
 
-Each event is appended to the local audit log with a SHA-256 hash chain.
+Each event is appended to the local audit log as one JSON line (timestamp, action, target, result, plugin). The log has no hash chain or signature, so the file does not show changes to earlier lines.
 
 ### Enforce Capabilities
 
