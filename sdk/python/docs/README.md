@@ -7,10 +7,10 @@ This directory contains comprehensive integration guides and configuration docum
 ### Framework Integrations
 
 - **[LANGCHAIN_INTEGRATION.md](./LANGCHAIN_INTEGRATION.md)** - Complete guide for integrating AIM with LangChain agents
-  - LCEL agent integration
-  - Chain-based agent integration
-  - Tool registration and verification
-  - Real-time capability authorization
+  - Logging every tool call with `AIMCallbackHandler`
+  - Verifying a tool before it runs with `@aim_verify`
+  - Wrapping existing tools with `wrap_tools_with_aim`
+  - Risk levels per tool
 
 - **[CREWAI_INTEGRATION.md](./CREWAI_INTEGRATION.md)** - Integration guide for CrewAI agents
   - Agent decorator usage
