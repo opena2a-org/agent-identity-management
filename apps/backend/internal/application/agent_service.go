@@ -88,6 +88,7 @@ type AgentService struct {
 	atcRevoker               RegistryATCRevoker            // Optional: revokes the agent's Registry-issued credentials in RevokeAgent; set by SetRegistryATCRevoker
 	atcRevocationRetryDelays []time.Duration               // Waits between those revocation requests; nil means defaultRegistryATCRevocationRetryDelays
 	atcRevocations           *RegistryATCRevocations       // Optional: stores RevokeAgent's revocation request before it is sent, in place of atcRevoker; set by SetRegistryATCRevocations
+	verifyReadSource         VerifyReadSource              // Optional: where VerifyCapability reads from, a read replica when one is current; set by SetVerifyReads
 }
 
 // SetWebhookService wires the webhook service that the agent.* and
@@ -1429,11 +1430,11 @@ const capabilitiesUnreadableReason = "Action denied: the capabilities granted to
 // error: the caller denies the request rather than applying MONITORING, which
 // would allow what STRICT mode denies. A service built without an organization
 // repository applies MONITORING.
-func (s *AgentService) verificationEnforcementMode(orgID uuid.UUID) (domain.EnforcementMode, error) {
-	if s.orgRepo == nil {
+func (s *AgentService) verificationEnforcementMode(orgRepo domain.OrganizationRepository, orgID uuid.UUID) (domain.EnforcementMode, error) {
+	if orgRepo == nil {
 		return domain.EnforcementModeMonitoring, nil
 	}
-	org, err := s.orgRepo.GetByID(orgID)
+	org, err := orgRepo.GetByID(orgID)
 	if err != nil {
 		return "", fmt.Errorf("read the enforcement mode of organization %s: %w", orgID, err)
 	}
@@ -1456,8 +1457,12 @@ func (s *AgentService) VerifyCapability(
 ) (allowed bool, reason string, auditID uuid.UUID, err error) {
 	auditID = uuid.New()
 
+	// The reads below come from the read replica when the replica holds every
+	// write the primary has committed, so a revocation is never missed.
+	reads := s.verifyReads(ctx)
+
 	// 1. Fetch agent
-	agent, err := s.agentRepo.GetByID(agentID)
+	agent, err := reads.Agent.GetByID(agentID)
 	if err != nil {
 		return false, "Agent not found", uuid.Nil, err
 	}
@@ -1470,7 +1475,7 @@ func (s *AgentService) VerifyCapability(
 	// path. Detection is a tripwire only: it never changes the authorization
 	// outcome (indistinguishability — a probing attacker gets the normal decision
 	// and no signal that the decoy was tripped).
-	activeCapabilities, capFetchErr := s.capabilityRepo.GetActiveCapabilitiesByAgentID(agentID)
+	activeCapabilities, capFetchErr := reads.Capability.GetActiveCapabilitiesByAgentID(agentID)
 	if capFetchErr == nil {
 		s.detectHoneytoken(agent, activeCapabilities, capability, resource, sourceIP)
 	}
@@ -1478,7 +1483,7 @@ func (s *AgentService) VerifyCapability(
 	// 2. Check agent status - MUST be verified (unless MONITORING mode)
 	if agent.Status != domain.AgentStatusVerified {
 		// Check enforcement mode before blocking
-		enforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+		enforcementMode, modeErr := s.verificationEnforcementMode(reads.Organization, agent.OrganizationID)
 		if modeErr != nil {
 			return false, enforcementModeUnreadableReason, auditID, modeErr
 		}
@@ -1593,7 +1598,7 @@ func (s *AgentService) VerifyCapability(
 	// In STRICT mode: Block actions (require capabilities to be granted first)
 	if len(capabilityTypes) == 0 {
 		// 🔍 Get organization enforcement mode
-		enforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+		enforcementMode, modeErr := s.verificationEnforcementMode(reads.Organization, agent.OrganizationID)
 		if modeErr != nil {
 			return false, enforcementModeUnreadableReason, auditID, modeErr
 		}
@@ -1726,7 +1731,7 @@ func (s *AgentService) VerifyCapability(
 		// This prevents scope violations like EchoLeak's bulk email access
 
 		// 🔍 Get organization enforcement mode (check if MONITORING overrides)
-		orgEnforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+		orgEnforcementMode, modeErr := s.verificationEnforcementMode(reads.Organization, agent.OrganizationID)
 		if modeErr != nil {
 			return false, enforcementModeUnreadableReason, auditID, modeErr
 		}
@@ -1886,7 +1891,7 @@ func (s *AgentService) VerifyCapability(
 	// Even if agent has the capability, we still need to check other policy types
 
 	// 🔍 Get organization enforcement mode for policy overrides
-	policyEnforcementMode, modeErr := s.verificationEnforcementMode(agent.OrganizationID)
+	policyEnforcementMode, modeErr := s.verificationEnforcementMode(reads.Organization, agent.OrganizationID)
 	if modeErr != nil {
 		return false, enforcementModeUnreadableReason, auditID, modeErr
 	}

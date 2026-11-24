@@ -1233,6 +1233,34 @@
       "line": ""
     },
     {
+      "variable": "POSTGRES_REPLICA_URL",
+      "input": "unset",
+      "value": null,
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_REPLICA_URL",
+      "input": "empty",
+      "value": "",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_REPLICA_URL",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "\"\"",
+      "line": ""
+    },
+    {
+      "variable": "POSTGRES_REPLICA_URL",
+      "input": "valid",
+      "value": "postgres://aim_ro@replica.internal:5432/aim?sslmode=require",
+      "setting": "\"postgres://aim_ro@replica.internal:5432/aim?sslmode=require\"",
+      "line": ""
+    },
+    {
       "variable": "POSTGRES_SCOPE_CENSUS",
       "input": "unset",
       "value": null,

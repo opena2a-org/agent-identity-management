@@ -215,6 +215,11 @@ func main() {
 	// Initialize application services
 	services, keyVault := initServices(cfg, db, repos, cacheService, oauthRepo, jwtService, emailService)
 
+	// Read the verification path from POSTGRES_REPLICA_URL's replica, when set.
+	if replica := wireReadReplica(cfg.Database, db, census, services.Agent, repos); replica != nil {
+		defer replica.Close()
+	}
+
 	// Convert stored v1 agent private keys to the storage-bound format once,
 	// before the server accepts requests: the request path refuses v1.
 	if _, err := application.MigrateAgentPrivateKeysToV2(context.Background(), migrationDB, keyVault); err != nil {

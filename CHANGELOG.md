@@ -11,6 +11,19 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: `POSTGRES_REPLICA_URL` routes the verification path's reads to a Postgres read replica
+
+- `POSTGRES_REPLICA_URL` is the connection string of a read replica. Unset or empty, the default, every read
+  stays on the primary. When it is set, `POST /api/v1/agents/:id/verify-capability` reads the agent, its granted
+  capabilities and the organization's enforcement mode from the replica. Every write, and every other read,
+  stays on the primary. The replica's pool uses `POSTGRES_POOL_ROLE`, `POSTGRES_MAX_CONNECTIONS` and
+  `POSTGRES_CONN_MAX_LIFETIME` as the primary's does.
+- A revocation still takes effect at once. Before each verification the server reads the primary's current
+  write-ahead log position and the replica answers only if it has replayed up to that position, so every write
+  the primary had committed, a revoked agent or a revoked grant included, is visible to the read. When the
+  replica is behind, cannot be reached, answers in more than 250 ms or is not a standby, the verification reads
+  the primary. The cost is one position query on the primary per verification.
+
 ### Changed: `.hmaignore` exempts the Python SDK's pickle round-trip test from NEMO-009
 
 - `hackmyagent@0.33.2 secure . --ci --format json` reported one NEMO-009 finding ("Unsafe deserialization:
