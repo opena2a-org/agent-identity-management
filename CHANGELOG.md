@@ -11,6 +11,21 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: the automated code review reaches a verdict on a pull request that changes a file carrying a large data-URI image
+
+- `scripts/pr-review-generated-files.mjs`, which composes the diff the PR Review workflow sends to the reviewer,
+  replaces each base64 `image/png`, `image/jpeg`, `image/gif` or `image/webp` data-URI payload of 1,024 characters or
+  more with a one-line marker that keeps the media type and gives the payload's length, decoded size and SHA-256. The
+  payload is replaced only when its decoded bytes begin with the signature of the type it declares. Other payloads,
+  `image/svg+xml` among them, are sent unchanged. Every line of the diff is kept, and each replacement is listed in the
+  report's `payloads` array.
+- The full-file context list leaves out a changed file larger than the workflow's 200,000-byte full-file limit, and
+  the report's `contextExcluded` array names it. Before, the workflow stopped at such a file and dropped every file
+  listed after it. The file's diff is still sent.
+- `apps/web/public/opena2a-logo.svg` is a 12 KB vector drawing of the logo at the same path and size. It was a
+  1,018,749-byte SVG wrapping a base64 PNG, and the diff of any pull request that changed it was over the review
+  budget, so the check recorded INCONCLUSIVE. The background outside the shield is now transparent.
+
 ### Changed: webhook create and update name the refused address class when they refuse a URL
 
 - `POST /api/v1/webhooks` and `PUT /api/v1/webhooks/:id` answer a URL whose host is, or resolves to, an address the
