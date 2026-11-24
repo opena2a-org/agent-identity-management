@@ -57,7 +57,9 @@
 // removed whole at a final head. A present chain that does not verify is
 // reported as failed. An absent chain that a held checkpoint names and that
 // no single tombstone accounts for, at or above every held checkpoint of the
-// chain, is reported as removed without record.
+// chain, is reported as removed without record. A held checkpoint that does
+// not open names no chain, so while one is reported unread no chain is
+// reported as verified or removed: those findings are reported unresolved.
 //
 // The package is pure: it reads and writes no database and serves no route.
 // Its subpackage store keeps chains in PostgreSQL: it starts a chain, appends
