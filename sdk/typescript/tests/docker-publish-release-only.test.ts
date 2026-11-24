@@ -1401,7 +1401,7 @@ describe('DOCKER-PUBLISH-RELEASE-ONLY docker-publish.yml publishes only from a p
     }
   });
 
-  it('DOCKER-PUBLISH-RELEASE-ONLY.AC7 the release guard is the first run step of each publish job, precedes every login, carries no if, no secrets and no inline expression, and reads tags only through git ls-remote', () => {
+  it('each publish job runs its release guard as its first run step, before either docker login, with no if, no secrets and no inline expression, reading tags only through git ls-remote', () => {
     const doc = readWorkflow();
     assertAC7Shape(doc);
     for (const name of PUBLISH_JOBS) {
