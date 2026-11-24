@@ -88,11 +88,11 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   and a request without a valid token with `401`. The server's own verification paths still record verification events.
 - The read routes and `DELETE` are unchanged. The developer API documentation marks the write disabled.
 
-### Security — the dashboard uses Next.js 16.4.2 and sharp 0.35.5, and its image installs exactly what its committed lockfile pins (#493, #568)
+### Security — the dashboard uses Next.js 16.4.5 and sharp 0.35.5, and its image installs exactly what its committed lockfile pins (#493, #568)
 
-- `apps/web/package.json` pins `next` at exactly 16.4.2; platform 1.0.0 asked for `^16.2.3`. The version moved to
-  16.3.5 (#491), was pinned exactly (#493), and moved to 16.3.6 (#568) and then to 16.4.2. The root `package.json`
-  overrides `sharp` to 0.35.5. `apps/web/package-lock.json` resolves `next` 16.4.2 and `sharp` 0.35.5.
+- `apps/web/package.json` pins `next` at exactly 16.4.5; platform 1.0.0 asked for `^16.2.3`. The version moved to
+  16.3.5 (#491), was pinned exactly (#493), and moved to 16.3.6 (#568), then to 16.4.2 and then to 16.4.5. The root
+  `package.json` overrides `sharp` to 0.35.5. `apps/web/package-lock.json` resolves `next` 16.4.5 and `sharp` 0.35.5.
 - `apps/web/package-lock.json` is committed (#493). The dashboard Dockerfiles copy it by name and install with
   `npm ci --ignore-scripts`, which refuses a lockfile that disagrees with `package.json` and runs no dependency's
   install script (#568).
