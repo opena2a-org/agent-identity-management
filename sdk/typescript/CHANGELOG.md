@@ -7,6 +7,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed: an interceptor scanned before `start()` says so once
+
+- `PromptInterceptor.scanInput` and `scanOutput`, `MCPProtocolInterceptor.scanToolCall` and
+  `A2AProtocolInterceptor.scanMessage`, called while the interceptor is not started, still return `scanned: false`,
+  and now also print one line with `console.warn` naming the fix: `Call await start() on the <interceptor> first.`
+  Each instance prints it once, and again only after a later `start()` and `stop()`.
+
 ### Changed: the README's `init` section says what `init` needs from the server and how a bootstrap token is minted
 
 - "Register a first agent from the terminal" says that `init` needs an AIM server that has onboarding tokens, which
