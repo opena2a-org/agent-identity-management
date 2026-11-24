@@ -126,6 +126,22 @@ func TestHealthReadyAndStatusReportTheSameVersion(t *testing.T) {
 	})
 }
 
+// The OpenTelemetry service.version comes from the same stamp, reduced the
+// same way, so a trace names the version GET /health/ready reports.
+func TestTelemetryServiceVersionIsTheReportedVersion(t *testing.T) {
+	prev := buildVersion
+	t.Cleanup(func() { buildVersion = prev })
+
+	for _, stamped := range []string{"platform-v1.1.0", reportedVersionTestSha, "dev"} {
+		buildVersion = stamped
+		want := reportedVersionGet(t, reportedVersionApp(), "/health/ready")["version"]
+		assert.Equal(t, want, telemetryConfig().ServiceVersion, "stamp %q", stamped)
+	}
+
+	buildVersion = ""
+	assert.Empty(t, telemetryConfig().ServiceVersion, "an unstamped build names no service version")
+}
+
 // The status route must take its version from the build stamp, never from a
 // literal written into the server source.
 func TestStatusRouteCarriesNoVersionLiteral(t *testing.T) {

@@ -2519,12 +2519,15 @@ func mountVerificationEventRoutes(v1 fiber.Router, h *handlers.VerificationEvent
 
 // telemetryConfig is the configuration main passes to telemetry.Init. It
 // names no endpoint and sets no TLS choice, so both come from the
-// OTEL_EXPORTER_OTLP_* variables.
+// OTEL_EXPORTER_OTLP_* variables. Its service version is the stamped build
+// version as GET /health/ready reports it, so traces, metrics and logs carry
+// the version the image tag carries; an unstamped build sets none.
 func telemetryConfig() telemetry.Config {
-	return telemetry.Config{
-		ServiceName:    "aim-backend",
-		ServiceVersion: "0.x",
+	cfg := telemetry.Config{ServiceName: "aim-backend"}
+	if v := stampedVersion(); v != nil {
+		cfg.ServiceVersion = *v
 	}
+	return cfg
 }
 
 func customErrorHandler(c fiber.Ctx, err error) error {

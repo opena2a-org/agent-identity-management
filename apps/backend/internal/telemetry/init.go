@@ -16,6 +16,7 @@ import (
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
@@ -47,6 +48,7 @@ type Config struct {
 	// ServiceName populates the `service.name` resource attribute.
 	ServiceName string
 	// ServiceVersion populates the `service.version` resource attribute.
+	// Empty leaves the attribute out.
 	ServiceVersion string
 	// Endpoint is the OTLP gRPC endpoint for every signal, a URL
 	// (https://host:port or http://host:port) or host:port. Empty = the
@@ -83,10 +85,6 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 			return nil, ErrDisabled
 		}
 	}
-	if cfg.ServiceVersion == "" {
-		cfg.ServiceVersion = "1.0.0"
-	}
-
 	transports := map[string]transport{}
 	for _, signal := range []string{signalTraces, signalMetrics, signalLogs} {
 		t, err := resolveTransport(os.LookupEnv, signal, cfg.Endpoint, cfg.Insecure)
@@ -96,14 +94,9 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		transports[signal] = t
 	}
 
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			semconv.ServiceName(cfg.ServiceName),
-			semconv.ServiceVersion(cfg.ServiceVersion),
-		),
-	)
+	res, err := serviceResource(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("telemetry: build resource: %w", err)
+		return nil, err
 	}
 
 	otel.SetTextMapPropagator(Propagator())
@@ -144,6 +137,22 @@ func Init(ctx context.Context, cfg Config) (shutdown func(context.Context) error
 		return errors.Join(errs...)
 	}
 	return shutdown, nil
+}
+
+// serviceResource is the resource every signal Init installs carries:
+// service.name, and service.version when cfg names one. An empty
+// ServiceVersion leaves the attribute out rather than inventing a version the
+// build does not have.
+func serviceResource(ctx context.Context, cfg Config) (*resource.Resource, error) {
+	attrs := []attribute.KeyValue{semconv.ServiceName(cfg.ServiceName)}
+	if cfg.ServiceVersion != "" {
+		attrs = append(attrs, semconv.ServiceVersion(cfg.ServiceVersion))
+	}
+	res, err := resource.New(ctx, resource.WithAttributes(attrs...))
+	if err != nil {
+		return nil, fmt.Errorf("telemetry: build resource: %w", err)
+	}
+	return res, nil
 }
 
 // Propagator is the text map propagator Init registers as the global one.
