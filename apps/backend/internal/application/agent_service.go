@@ -621,7 +621,8 @@ func agentCreateError(err error) error {
 	}
 	msg := err.Error()
 	switch {
-	case strings.Contains(msg, "duplicate key value"), strings.Contains(msg, "unique constraint"):
+	case errors.Is(err, repository.ErrAgentNameTaken),
+		strings.Contains(msg, "duplicate key value"), strings.Contains(msg, "unique constraint"):
 		return ErrAgentNameExists
 	case strings.Contains(msg, "foreign key constraint"):
 		return ErrInvalidOrgOrUser
