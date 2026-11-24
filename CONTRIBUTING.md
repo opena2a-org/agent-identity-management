@@ -260,6 +260,62 @@ The `.github/workflows/release.yml` workflow currently filters on `platform-v*` 
    - Once approved, a maintainer will merge your PR
    - Delete your branch after merge
 
+## License of contributions
+
+This project is licensed under the Apache License 2.0 (see [LICENSE](LICENSE)), and contributions are accepted
+under the same licence. By contributing, you agree that your contributions are licensed under the Apache License 2.0.
+
+## Sign your work
+
+Every commit of a contribution carries a sign-off line with your name and email address:
+
+```
+Signed-off-by: Your Name <your.email@example.com>
+```
+
+`git commit -s` adds the line, using the `user.name` and `user.email` of your git configuration. By signing off a
+commit, you certify the [Developer Certificate of Origin 1.1](https://developercertificate.org), which reads:
+
+```
+Developer Certificate of Origin
+Version 1.1
+
+Copyright (C) 2004, 2006 The Linux Foundation and its contributors.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+
+Developer's Certificate of Origin 1.1
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created in whole or in part by me and I
+    have the right to submit it under the open source license
+    indicated in the file; or
+
+(b) The contribution is based upon previous work that, to the best
+    of my knowledge, is covered under an appropriate open source
+    license and I have the right under that license to submit that
+    work with modifications, whether created in whole or in part
+    by me, under the same open source license (unless I am
+    permitted to submit under a different license), as indicated
+    in the file; or
+
+(c) The contribution was provided directly to me by some other
+    person who certified (a), (b) or (c) and I have not modified
+    it.
+
+(d) I understand and agree that this project and the contribution
+    are public and that a record of the contribution (including all
+    personal information I submit with it, including my sign-off) is
+    maintained indefinitely and may be redistributed consistent with
+    this project or the open source license(s) involved.
+```
+
+No contributor licence agreement is asked for: the sign-off is all. The code licence does not license the names
+and logos of the project; the Apache License 2.0 grants no permission to use them (section 6 of the licence).
+
 ## 🐛 Reporting Bugs
 
 When reporting bugs, please include:
