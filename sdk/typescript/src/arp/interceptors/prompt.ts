@@ -1,6 +1,7 @@
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 import { scanText, PATTERN_SETS, type ScanResult } from '../patterns/ai-threats';
+import { warnNotStarted } from './not-started';
 
 /**
  * Prompt interceptor -- scans user messages and LLM responses for
@@ -13,6 +14,8 @@ export class PromptInterceptor implements Monitor {
   readonly type: MonitorType = 'prompt';
   private readonly engine: EventEngine;
   private active = false;
+  /** Whether the not-started warning has been printed since the last start(). */
+  private warnedNotStarted = false;
 
   constructor(engine: EventEngine) {
     this.engine = engine;
@@ -20,6 +23,7 @@ export class PromptInterceptor implements Monitor {
 
   async start(): Promise<void> {
     this.active = true;
+    this.warnedNotStarted = false;
   }
 
   async stop(): Promise<void> {
@@ -30,12 +34,22 @@ export class PromptInterceptor implements Monitor {
     return this.active;
   }
 
+  /** Print the not-started warning once until the next start(). */
+  private warnIfNotStarted(method: string): void {
+    if (this.warnedNotStarted) return;
+    this.warnedNotStarted = true;
+    warnNotStarted('PromptInterceptor', method);
+  }
+
   /**
    * Scan user/agent input for prompt injection, jailbreak,
    * data exfiltration, and context manipulation attempts.
    */
   scanInput(content: string): ScanResult {
-    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'input', patternIds: [] } };
+    if (!this.active) {
+      this.warnIfNotStarted('scanInput');
+      return { detected: false, matches: [], scanned: false, scope: { set: 'input', patternIds: [] } };
+    }
     const result = scanText(content, PATTERN_SETS.inputPatterns, 'input');
 
     if (result.detected) {
@@ -63,7 +77,10 @@ export class PromptInterceptor implements Monitor {
    * Scan LLM output for leaked secrets, PII, and system prompt disclosure.
    */
   scanOutput(content: string): ScanResult {
-    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'output', patternIds: [] } };
+    if (!this.active) {
+      this.warnIfNotStarted('scanOutput');
+      return { detected: false, matches: [], scanned: false, scope: { set: 'output', patternIds: [] } };
+    }
     const result = scanText(content, PATTERN_SETS.outputPatterns, 'output');
 
     if (result.detected) {

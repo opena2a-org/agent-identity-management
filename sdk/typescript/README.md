@@ -553,7 +553,10 @@ not a clean verdict on the file. After an allowlist refusal, `scanToolCall`
 lists only `MCP-ALLOWLIST`, because it did not scan the arguments. A result
 with `truncated: true` covers only the first 64 KB of the text. An analyzer
 that is not started returns `scanned: false` and an empty `patternIds`: it
-evaluated nothing, and its `detected: false` is not a verdict.
+evaluated nothing, and its `detected: false` is not a verdict. The first such
+call on an instance also prints one line with `console.warn` naming the fix,
+`Call await start() on the <interceptor> first.`; the line is printed again
+only after a later `start()` and `stop()`.
 
 Classification of runtime events is supplied through the injectable
 `ClassificationProvider` seam. The default `NanoMindGuardClassificationProvider`

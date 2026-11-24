@@ -1,6 +1,7 @@
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 import { scanText, PATTERN_SETS, type ScanResult } from '../patterns/ai-threats';
+import { warnNotStarted } from './not-started';
 
 /**
  * A2A Protocol interceptor -- scans agent-to-agent messages for
@@ -13,6 +14,8 @@ export class A2AProtocolInterceptor implements Monitor {
   private readonly engine: EventEngine;
   private readonly trustedAgents: Set<string>;
   private active = false;
+  /** Whether the not-started warning has been printed since the last start(). */
+  private warnedNotStarted = false;
 
   constructor(engine: EventEngine, trustedAgents?: string[]) {
     this.engine = engine;
@@ -21,6 +24,7 @@ export class A2AProtocolInterceptor implements Monitor {
 
   async start(): Promise<void> {
     this.active = true;
+    this.warnedNotStarted = false;
   }
 
   async stop(): Promise<void> {
@@ -29,6 +33,13 @@ export class A2AProtocolInterceptor implements Monitor {
 
   isRunning(): boolean {
     return this.active;
+  }
+
+  /** Print the not-started warning once until the next start(). */
+  private warnIfNotStarted(method: string): void {
+    if (this.warnedNotStarted) return;
+    this.warnedNotStarted = true;
+    warnNotStarted('A2AProtocolInterceptor', method);
   }
 
   /**
@@ -40,7 +51,10 @@ export class A2AProtocolInterceptor implements Monitor {
    * @param content - Message content
    */
   scanMessage(from: string, to: string, content: string): ScanResult {
-    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'a2a', patternIds: [] } };
+    if (!this.active) {
+      this.warnIfNotStarted('scanMessage');
+      return { detected: false, matches: [], scanned: false, scope: { set: 'a2a', patternIds: [] } };
+    }
     const allMatches: ScanResult['matches'] = [];
     const checkedIds = this.trustedAgents.size > 0 ? ['A2A-TRUST'] : [];
 

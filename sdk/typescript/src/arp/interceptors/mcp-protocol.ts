@@ -1,6 +1,7 @@
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 import { scanText, PATTERN_SETS, type ScanResult } from '../patterns/ai-threats';
+import { warnNotStarted } from './not-started';
 
 /**
  * MCP Protocol interceptor -- scans MCP tool calls for path traversal,
@@ -13,6 +14,8 @@ export class MCPProtocolInterceptor implements Monitor {
   private readonly engine: EventEngine;
   private readonly allowedTools: Set<string>;
   private active = false;
+  /** Whether the not-started warning has been printed since the last start(). */
+  private warnedNotStarted = false;
 
   constructor(engine: EventEngine, allowedTools?: string[]) {
     this.engine = engine;
@@ -21,6 +24,7 @@ export class MCPProtocolInterceptor implements Monitor {
 
   async start(): Promise<void> {
     this.active = true;
+    this.warnedNotStarted = false;
   }
 
   async stop(): Promise<void> {
@@ -31,12 +35,22 @@ export class MCPProtocolInterceptor implements Monitor {
     return this.active;
   }
 
+  /** Print the not-started warning once until the next start(). */
+  private warnIfNotStarted(method: string): void {
+    if (this.warnedNotStarted) return;
+    this.warnedNotStarted = true;
+    warnNotStarted('MCPProtocolInterceptor', method);
+  }
+
   /**
    * Scan an MCP tool call for exploitation patterns.
    * Checks tool name against allowlist and scans all parameter values.
    */
   scanToolCall(toolName: string, args: Record<string, unknown>): ScanResult {
-    if (!this.active) return { detected: false, matches: [], scanned: false, scope: { set: 'mcp', patternIds: [] } };
+    if (!this.active) {
+      this.warnIfNotStarted('scanToolCall');
+      return { detected: false, matches: [], scanned: false, scope: { set: 'mcp', patternIds: [] } };
+    }
     const checkedIds = this.allowedTools.size > 0 ? ['MCP-ALLOWLIST'] : [];
     // Check tool allowlist
     if (this.allowedTools.size > 0 && !this.allowedTools.has(toolName)) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MCPProtocolInterceptor } from '../../../src/arp/interceptors/mcp-protocol';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
 import { PATTERN_SETS } from '../../../src/arp/patterns/ai-threats';
@@ -124,6 +124,22 @@ describe('MCPProtocolInterceptor', () => {
       expect(result.scanned).toBe(false);
       expect(result.scope).toEqual({ set: 'mcp', patternIds: [] });
       expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('a scan before start() prints one line naming start(), once per instance', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const idle = new MCPProtocolInterceptor(engine);
+        expect(idle.scanToolCall('execute', { command: 'ls' }).scanned).toBe(false);
+        expect(idle.scanToolCall('execute', { command: 'ls' }).scanned).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toBe(
+          '[ARP] MCPProtocolInterceptor.scanToolCall() was called while it is not started, so nothing was scanned ' +
+            '(scanned: false). Call await start() on the MCPProtocolInterceptor first.',
+        );
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 

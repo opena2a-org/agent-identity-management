@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { A2AProtocolInterceptor } from '../../../src/arp/interceptors/a2a-protocol';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
 import { PATTERN_SETS } from '../../../src/arp/patterns/ai-threats';
@@ -156,6 +156,22 @@ describe('A2AProtocolInterceptor', () => {
       expect(result.scanned).toBe(false);
       expect(result.scope).toEqual({ set: 'a2a', patternIds: [] });
       expect(emittedEvents).toHaveLength(0);
+    });
+
+    it('a scan before start() prints one line naming start(), once per instance', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const idle = new A2AProtocolInterceptor(engine);
+        expect(idle.scanMessage('agent-a', 'agent-b', 'hello').scanned).toBe(false);
+        expect(idle.scanMessage('agent-a', 'agent-b', 'hello').scanned).toBe(false);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toBe(
+          '[ARP] A2AProtocolInterceptor.scanMessage() was called while it is not started, so nothing was scanned ' +
+            '(scanned: false). Call await start() on the A2AProtocolInterceptor first.',
+        );
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 
