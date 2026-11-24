@@ -7,9 +7,15 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -88,5 +94,43 @@ class LiveAimTest {
         assertEquals("abcdefgh", LiveAim.head("abcdefgh"));
         assertEquals("abcdefgh...", LiveAim.head("abcdefghi"));
         assertEquals("n/a", LiveAim.head(null));
+    }
+
+    /**
+     * A test class that signs in with the stored SDK credential through
+     * {@code AIMClient.secure()} decides whether to run with
+     * {@link LiveAim#canSignIn}, which probes the server that credential
+     * names. AIMClientIntegrationTest and LiveBackendTest probed
+     * http://localhost:8080 instead, so a credential naming a server that no
+     * longer ran was signed in with whenever something else answered there.
+     * A class that installs its own credential from the AIM_URL environment
+     * variable is left out.
+     */
+    @Test
+    void everyTestThatSignsInWithTheStoredCredentialAsksCanSignIn() throws IOException {
+        Path root = Path.of(System.getProperty("basedir", ".")).resolve("src/test/java");
+        List<String> unguarded;
+        try (Stream<Path> files = Files.walk(root)) {
+            unguarded = files
+                    .filter(p -> p.getFileName().toString().endsWith("Test.java"))
+                    .filter(p -> {
+                        String source = read(p);
+                        return source.contains("AIMClient.secure(")
+                                && !source.contains("System.getenv(\"AIM_URL\")")
+                                && !source.contains("LiveAim.canSignIn(");
+                    })
+                    .map(p -> root.relativize(p).toString())
+                    .sorted()
+                    .collect(Collectors.toList());
+        }
+        assertEquals(List.of(), unguarded);
+    }
+
+    private static String read(Path path) {
+        try {
+            return Files.readString(path);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 }
