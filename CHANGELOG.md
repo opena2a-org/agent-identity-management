@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Fixed: CI runs the public wording check's own tests
+
+- The TypeScript SDK's suite, which CI runs on every pull request to `main`, runs
+  `scripts/test-check-public-wording.sh` next to `scripts/check-public-wording.py`. The tests check that each barred
+  term fails its fixture on the marked lines and that the allowlisted sentences and near misses pass. Nothing ran
+  them before, so a change to the check that still passed on the documents but missed a term would have reached
+  `main` unreported.
+
 ### Fixed: the logo IDAT entry names the scan its base64 text matched
 
 - The entry `The logo SVG's embedded PNG is split into one more IDAT chunk` below names the scan that matched the

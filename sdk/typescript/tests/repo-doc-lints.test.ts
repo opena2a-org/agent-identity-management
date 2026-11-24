@@ -17,6 +17,11 @@ import { join } from 'path';
  * the opena2a GitHub account. Running them here keeps each one passing; a
  * failure prints the script's own report.
  *
+ * scripts/test-check-public-wording.sh, the wording check's own tests, runs
+ * here too: nothing ran it, so a change that left the check passing on the
+ * documents while missing a barred term or reporting the wrong line would
+ * reach main unreported.
+ *
  * scripts/check-docs-prose.mjs runs here for the same reason: the root lint
  * script that also runs it is not a CI step, so a dash or a "Why this
  * exists" section added to a tracked Markdown file would otherwise reach
@@ -43,6 +48,7 @@ interface Lint {
 }
 
 const WORDING: Lint = { runner: 'python3', command: 'python3', script: 'scripts/check-public-wording.py' };
+const WORDING_TESTS: Lint = { runner: 'bash', command: 'bash', script: 'scripts/test-check-public-wording.sh' };
 const KEYVAULT: Lint = { runner: 'bash', command: 'bash', script: 'scripts/test-lint-docs-keyvault-master-key.sh' };
 const REPO_LINKS: Lint = { runner: 'bash', command: 'bash', script: 'scripts/test-lint-docs-repo-links.sh' };
 const DOCS_PROSE: Lint = { runner: 'node', command: process.execPath, script: 'scripts/check-docs-prose.mjs' };
@@ -51,7 +57,7 @@ const TOKEN_LITERALS: Lint = { runner: 'node', command: process.execPath, script
 const TOKEN_LITERALS_TESTS: Lint = { runner: 'node', command: process.execPath, script: 'scripts/test-lint-token-literals.mjs' };
 
 /** Every script the cases below run. */
-const LINTS = [WORDING, KEYVAULT, REPO_LINKS, DOCS_PROSE, DOCS_PROSE_TESTS, TOKEN_LITERALS, TOKEN_LITERALS_TESTS];
+const LINTS = [WORDING, WORDING_TESTS, KEYVAULT, REPO_LINKS, DOCS_PROSE, DOCS_PROSE_TESTS, TOKEN_LITERALS, TOKEN_LITERALS_TESTS];
 const COUNT_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 
 function run(lint: Lint, args: string[] = [lint.script]): { status: number | null; output: string } {
@@ -66,6 +72,13 @@ describe('repository lints', () => {
     expect(status, output).toBe(0);
     expect(output).toMatch(/^0 hit\(s\) in 0 of [1-9]\d* file\(s\) scanned/m);
   });
+
+  it('scripts/test-check-public-wording.sh passes: every barred term fails its fixture and every allowlisted sentence passes', () => {
+    const { status, output } = run(WORDING_TESTS);
+    expect(status, output).toBe(0);
+    expect(output).toMatch(/^failing-fixture cases: [1-9]\d* {2}passing-fixture cases: [1-9]\d* {2}refused-list cases: [1-9]\d*$/m);
+    expect(output).toMatch(/^all cases passed$/m);
+  }, 120_000);
 
   it('scripts/test-lint-docs-keyvault-master-key.sh passes, the repository\'s docs included', () => {
     const { status, output } = run(KEYVAULT);
