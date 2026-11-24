@@ -7,6 +7,15 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed: `A2AClient` sends the agent's access token as the bearer (#652)
+
+- Every `A2AClient` request sent `Authorization: Bearer <agent ID>`. The agent ID is not a credential, so the server
+  refused it. The bearer is now the agent's OAuth access token, obtained the same way `AIMClient` obtains it (the
+  JWT-bearer exchange, cached until near expiry). A client with no agent credentials sends no `Authorization` header,
+  as before; a failed token exchange fails the A2A call before any request is sent.
+- Added `AIMClient.getAccessToken()`, which returns that token, or `null` when the client has no agent credentials.
+- Tests: `src/a2a/A2AClient.test.ts`, `src/client/AIMClient.test.ts`.
+
 ### Added: an analyzer that leaves input unmatched emits one truncation event (#856)
 
 - `PromptInterceptor.scanInput` and `scanOutput`, `MCPProtocolInterceptor.scanToolCall` and

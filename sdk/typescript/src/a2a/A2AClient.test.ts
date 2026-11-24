@@ -37,6 +37,7 @@ const createMockAIMClient = () => {
   return {
     config: { baseUrl: 'http://test.example.com' },
     getCredentials: vi.fn().mockReturnValue({ agentId: 'test-agent-id' }),
+    getAccessToken: vi.fn().mockResolvedValue('test-access-token'),
     credentials: { agentId: 'test-agent-id' },
   } as unknown as AIMClient;
 };
@@ -107,6 +108,42 @@ describe('A2AClient', () => {
   afterEach(() => {
     global.fetch = originalFetch;
     vi.resetAllMocks();
+  });
+
+  // ==================== Authentication ====================
+
+  describe('Authentication', () => {
+    it('sends the agent access token, not the agent ID, as the bearer', async () => {
+      setMockResponse({ skills: [] });
+
+      await client.listSkills();
+      await client.registerSkill({ name: 'echo' } as never);
+
+      const calls = vi.mocked(global.fetch).mock.calls;
+      expect(calls).toHaveLength(2);
+      for (const [, init] of calls) {
+        const headers = init?.headers as Record<string, string>;
+        expect(headers['Authorization']).toBe('Bearer test-access-token');
+      }
+      expect(mockAIMClient.getAccessToken).toHaveBeenCalled();
+    });
+
+    it('sends no Authorization header when the client has no access token', async () => {
+      vi.mocked(mockAIMClient.getAccessToken).mockResolvedValue(null);
+      setMockResponse({ peers: [] });
+
+      await client.listPeerTrusts();
+
+      const [, init] = vi.mocked(global.fetch).mock.calls[0];
+      expect((init?.headers as Record<string, string>)['Authorization']).toBeUndefined();
+    });
+
+    it('fails the request when the token exchange fails', async () => {
+      vi.mocked(mockAIMClient.getAccessToken).mockRejectedValue(new Error('token exchange failed'));
+
+      await expect(client.listSkills()).rejects.toThrow('token exchange failed');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   // ==================== Agent Card Tests ====================

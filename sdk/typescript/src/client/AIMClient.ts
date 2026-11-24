@@ -983,6 +983,18 @@ export class AIMClient {
   }
 
   /**
+   * Get an OAuth access token for the agent, exchanging the agent's signed
+   * client assertion for one (or reusing the cached token) as needed. Returns
+   * null when the client has no agent credentials.
+   */
+  async getAccessToken(): Promise<string | null> {
+    if (!this.tokenManager) {
+      return null;
+    }
+    return this.tokenManager.getAccessToken();
+  }
+
+  /**
    * Set credentials (for loading from storage)
    */
   setCredentials(credentials: AgentCredentials): void {
