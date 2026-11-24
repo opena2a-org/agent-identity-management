@@ -234,13 +234,17 @@ curl -s https://aim.example.com/auth/login | grep -o '<meta http-equiv="Content-
 On a hostname such as `aim-frontend.example.com`, with no `NEXT_PUBLIC_API_URL` in the dashboard's environment, the
 dashboard calls `aim-backend.example.com` instead, and the page's `connect-src` lists that host as well. The browser
 takes the name from the address bar, and the page's `connect-src` from the `Host` header the dashboard server
-receives, not from `X-Forwarded-Host`, so a reverse proxy in front of the dashboard has to pass the public host name
-on in `Host` (nginx: `proxy_set_header Host $host;`).
+receives, not from `X-Forwarded-Host`. The same holds for port 8080 on the host name the dashboard was opened at,
+which a dashboard with no URL in its environment or its build calls. So when `NEXT_PUBLIC_API_URL` is not in the
+dashboard's environment, a reverse proxy in front of the dashboard has to pass the public host name on in `Host`
+(nginx: `proxy_set_header Host $host;`): given another name, such as `127.0.0.1:3000`, the page's `connect-src`
+lists a host the browser does not call, and the browser refuses every API request. With `NEXT_PUBLIC_API_URL` set,
+the page's `connect-src` lists that URL's origin whatever `Host` the server receives.
 
 **Checklist:**
 - [ ] `NEXT_PUBLIC_API_URL` in the dashboard's environment set to the API origin the browser uses
 - [ ] `connect-src` in the page's `Content-Security-Policy` element lists that origin
-- [ ] A reverse proxy in front of a `-frontend` hostname passes the public host name on in `Host`
+- [ ] Without `NEXT_PUBLIC_API_URL`, a reverse proxy in front of the dashboard passes the public host name on in `Host`
 
 ### Step 2: Configure Production Environment
 ```bash
