@@ -26,9 +26,9 @@ aim-sdk login                              # OAuth to aim.opena2a.org
 aim-sdk login --url http://localhost:8080  # or to your self-hosted AIM
 ```
 
-Login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
+From a source build of this repository, login uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. The published 2.0.3 has no device sign-in: its `login` opens a browser at an `<url>/auth/login?response_type=code&...` address, prints that address, and waits for the browser to be sent back to a port it opens on this machine. Credentials save to `~/.aim/sdk_credentials.json` (mode 0600).
 
-An http: address is accepted only on this machine; a self-hosted server on another host needs https (a TLS-terminating proxy, see the [deployment guide](https://github.com/opena2a-org/agent-identity-management/blob/main/docs/DEPLOYMENT.md)) or, on a trusted network, `--allow-http`, which sends the tokens unencrypted.
+In a source build, an http: address is accepted only on this machine; a self-hosted server on another host needs https (a TLS-terminating proxy, see the [deployment guide](https://github.com/opena2a-org/agent-identity-management/blob/main/docs/DEPLOYMENT.md)) or, on a trusted network, `--allow-http`, which sends the tokens unencrypted. The published 2.0.3 makes no such check and has no `--allow-http`: it answers `aim-sdk login --allow-http` with `aim-sdk: error: unrecognized arguments: --allow-http` and exits 2.
 
 Then register an agent, in a Python session, with the capability it holds:
 
@@ -275,6 +275,10 @@ The published 2.0.3 has `login` with `--url` and `--force`, `logout`, `status`, 
 The demo agent registers in your own organization under agent type `demo`:
 visibly a demo in every list, excluded from adoption and trust analytics,
 and re-runs reconnect to the same agent instead of creating new ones.
+
+The two paragraphs below describe `aim-sdk login` in a source build of this repository. The published 2.0.3's
+`login` takes `--url` and `--force` (`-f`) only, always tries to open a browser, and answers
+`aim-sdk login --no-browser` with `aim-sdk: error: unrecognized arguments: --no-browser` and exit code 2.
 
 `aim-sdk login` exits 0 when you are signed in, 1 when the login did not complete (the code was
 denied or expired, or the server refused the request), and 75 when the AIM server was unavailable:
