@@ -126,6 +126,7 @@ curl -X POST http://localhost:8080/api/v1/auth/login/local \
 ### Day 3: Deploy (2 hours)
 - [ ] Production environment setup
 - [ ] DNS & SSL configuration
+- [ ] Set `NEXT_PUBLIC_API_URL` in the dashboard's environment, or have the reverse proxy pass the public host name on in `Host` (see [Deployment Checklist](DEPLOYMENT_CHECKLIST.md#dashboard-api-origin-and-content-security-policy))
 - [ ] Deploy backend + frontend
 - [ ] Smoke tests
 - [ ] Monitor logs
