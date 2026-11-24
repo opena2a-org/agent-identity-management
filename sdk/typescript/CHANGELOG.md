@@ -7,6 +7,22 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added: an analyzer that leaves input unmatched emits one truncation event (#856)
+
+- `PromptInterceptor.scanInput` and `scanOutput`, `MCPProtocolInterceptor.scanToolCall` and
+  `A2AProtocolInterceptor.scanMessage` returned `truncated: true` for text longer than `MAX_SCAN_TOTAL`, but emitted
+  nothing, so a rule or log never saw that the rest was not scanned. Each such call now emits one event: category
+  `violation`, severity `high` (the default `high-violation` rule alerts on it), with `data.truncation: true`,
+  `data.reason: 'truncated'`, `data.analyzer`, and `data.matchedLength` and `data.receivedLength` in characters. A
+  `scanToolCall` with several long arguments emits one event, with the lengths summed over its arguments; a
+  `scanMessage`, which scans its content twice, emits one.
+- `ARPProxy` skipped scanning a passthrough response body over 100 KB without a trace. It now emits the same event,
+  with `data.reason: 'over-size-limit'`, `data.matchedLength: 0` and `data.receivedLength` in bytes.
+- No event carries any of the input text. Input within the limits emits no truncation event. The reason type is
+  exported as `TruncationReason`.
+- Tests: `tests/arp/interceptors/prompt.test.ts`, `tests/arp/interceptors/mcp-protocol.test.ts`,
+  `tests/arp/interceptors/a2a-protocol.test.ts`, `tests/arp/proxy/response-scanning.test.ts`.
+
 ### Changed: an interceptor scanned before `start()` says so once
 
 - `PromptInterceptor.scanInput` and `scanOutput`, `MCPProtocolInterceptor.scanToolCall` and

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PromptInterceptor } from '../../../src/arp/interceptors/prompt';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
-import { PATTERN_SETS } from '../../../src/arp/patterns/ai-threats';
-import type { ARPEvent } from '../../../src/arp/types';
+import { PATTERN_SETS, MAX_SCAN_TOTAL } from '../../../src/arp/patterns/ai-threats';
+import type { ARPEvent, EnforcementResult } from '../../../src/arp/types';
 
 describe('PromptInterceptor', () => {
   let engine: EventEngine;
@@ -181,5 +181,55 @@ describe('PromptInterceptor', () => {
     it('reports correct type', () => {
       expect(interceptor.type).toBe('prompt');
     });
+  });
+
+  describe('truncation event', () => {
+    let results: EnforcementResult[];
+    beforeEach(() => {
+      results = [];
+      engine.onEnforcement((r) => { results.push(r); });
+    });
+
+    /** Truncation events, and the rule names their enforcement results name, after the engine settles. */
+    async function truncationEvents(results: EnforcementResult[]) {
+      await new Promise((resolve) => setImmediate(resolve));
+      const events = emittedEvents.filter((e) => e.data.truncation === true);
+      const rules = results
+        .filter((r) => r.event.data.truncation === true)
+        .map((r) => /^Rule "([^"]+)"/.exec(r.reason ?? '')?.[1]);
+      return { events, rules };
+    }
+
+    for (const method of ['scanInput', 'scanOutput'] as const) {
+      it(`${method} emits one truncation event for input longer than the scan total`, async () => {
+        const planted = ['sk', 'proj', 'abc123def456ghi789jkl012mno'].join('-');
+        const content = 'x'.repeat(MAX_SCAN_TOTAL) + ' ' + planted;
+        const result = interceptor[method](content);
+        expect(result.truncated).toBe(true);
+        const { events, rules } = await truncationEvents(results);
+        expect(events).toHaveLength(1);
+        expect(events[0].source).toBe('prompt');
+        expect(events[0].category).toBe('violation');
+        expect(events[0].severity).toBe('high');
+        expect(events[0].data).toEqual({
+          truncation: true,
+          analyzer: `PromptInterceptor.${method}`,
+          reason: 'truncated',
+          matchedLength: MAX_SCAN_TOTAL,
+          receivedLength: content.length,
+          unit: 'characters',
+        });
+        expect(JSON.stringify(events[0])).not.toContain(planted);
+        expect(JSON.stringify(events[0])).not.toContain('xxxx');
+        expect(rules).toEqual(['high-violation']);
+      });
+
+      it(`${method} emits no truncation event for short input`, async () => {
+        const result = interceptor[method]('What is the weather forecast for tomorrow?');
+        expect(result.truncated).toBe(false);
+        const { events } = await truncationEvents(results);
+        expect(events).toHaveLength(0);
+      });
+    }
   });
 });

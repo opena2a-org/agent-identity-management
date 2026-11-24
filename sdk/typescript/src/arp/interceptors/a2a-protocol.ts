@@ -1,7 +1,8 @@
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
-import { scanText, PATTERN_SETS, type ScanResult } from '../patterns/ai-threats';
+import { scanText, PATTERN_SETS, MAX_SCAN_TOTAL, type ScanResult } from '../patterns/ai-threats';
 import { warnNotStarted } from './not-started';
+import { emitTruncation } from './truncation';
 
 /**
  * A2A Protocol interceptor -- scans agent-to-agent messages for
@@ -127,10 +128,21 @@ export class A2AProtocolInterceptor implements Monitor {
       allMatches.push(...injectionResult.matches);
     }
 
+    // Both scans cover the same content, so one event covers both
+    const truncated = Boolean(a2aResult.truncated || injectionResult.truncated);
+    if (truncated) {
+      emitTruncation(this.engine, 'a2a-protocol', 'A2AProtocolInterceptor.scanMessage', {
+        reason: 'truncated',
+        matchedLength: MAX_SCAN_TOTAL,
+        receivedLength: content.length,
+        unit: 'characters',
+      });
+    }
+
     return {
       detected: allMatches.length > 0,
       matches: allMatches,
-      truncated: Boolean(a2aResult.truncated || injectionResult.truncated),
+      truncated,
       scanned: true,
       scope: {
         set: 'a2a',
