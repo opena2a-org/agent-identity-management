@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1515,6 +1516,11 @@ func TestAgentService_CreateAgent_SanitizesDBErrors(t *testing.T) {
 		{
 			name:    "duplicate key maps to friendly message",
 			repoErr: errors.New(`pq: duplicate key value violates unique constraint "agents_name_key"`),
+			wantMsg: "an agent with this name already exists",
+		},
+		{
+			name:    "name taken in the organization maps to friendly message",
+			repoErr: repository.ErrAgentNameTaken,
 			wantMsg: "an agent with this name already exists",
 		},
 		{

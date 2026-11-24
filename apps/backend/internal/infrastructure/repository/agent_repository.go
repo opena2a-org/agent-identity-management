@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -148,6 +149,25 @@ func insertAgent(ctx context.Context, db execer, agent *domain.Agent) error {
 		agent.VerifiedAt,
 	)
 
+	return agentInsertError(err)
+}
+
+// agentNameConstraint is the unique constraint on an organization's agent
+// names, UNIQUE (organization_id, name) of migration 001.
+const agentNameConstraint = "agents_organization_id_name_key"
+
+// ErrAgentNameTaken is returned by Create and InsertAgentTx for an agent whose
+// name another agent of its organization has. Of two registrations of one
+// name that race, the database stores one and refuses the other with it.
+var ErrAgentNameTaken = errors.New("agent name taken in organization")
+
+// agentInsertError turns the refusal of a name another agent of the
+// organization has (23505, unique_violation) into ErrAgentNameTaken.
+func agentInsertError(err error) error {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && pqErr.Code == "23505" && pqErr.Constraint == agentNameConstraint {
+		return ErrAgentNameTaken
+	}
 	return err
 }
 
