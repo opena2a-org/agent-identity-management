@@ -7,7 +7,9 @@ import { join } from 'path';
  * names by digest. A tag such as latest-pg16 moves, so two runs of the smoke
  * could start two different images, and a run could fail on the image and not
  * on the SDK under test. With the digest in the reference every run starts
- * the same image, and moving to a newer one is a change to the script.
+ * the same image, and moving to a newer one is a change to the script. The
+ * reference carries the digest alone: with a tag beside it, a reader of the
+ * script could take the tag for what decides the image.
  *
  * The script is read as the shell reads it: a line ending in a backslash
  * continues on the next, and comment lines are skipped.
@@ -85,8 +87,10 @@ describe('the TypeScript SDK release smoke names its PostgreSQL image by digest'
     expect(unpinned, 'an image named by tag alone can change between two runs').toEqual([]);
   });
 
-  it('the PostgreSQL image keeps the tag it was read from beside the digest', () => {
-    const images = dockerRunImages(readFileSync(SCRIPT_PATH, 'utf-8')).map(({ image }) => image);
-    expect(images.filter((image) => image.startsWith('timescale/timescaledb:latest-pg16@'))).toHaveLength(1);
+  it('the PostgreSQL image is named by digest alone, with no moving tag', () => {
+    const script = readFileSync(SCRIPT_PATH, 'utf-8');
+    const images = dockerRunImages(script).map(({ image }) => image);
+    expect(images.filter((image) => /^timescale\/timescaledb@sha256:[0-9a-f]{64}$/.test(image))).toHaveLength(1);
+    expect(script, 'the script still names the moving tag').not.toContain('latest-pg16');
   });
 });

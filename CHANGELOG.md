@@ -11,6 +11,15 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: the TypeScript SDK release smoke names its PostgreSQL image by digest alone (#722)
+
+- `sdk/typescript/scripts/release-smoke.sh` started PostgreSQL from `timescale/timescaledb:<tag>@sha256:…`, the
+  digest pinned beside the moving `latest-pg16` tag. It now names `timescale/timescaledb@sha256:…` with the same
+  digest and no tag, so the script no longer names the tag at all. The comment beside it says which tag the digest
+  was read from and how to read a newer one.
+- Test: `sdk/typescript/tests/release-smoke-image-digest.test.ts` checks the reference has no tag and the script
+  does not name `latest-pg16`.
+
 ### Changed: `.hmaignore` exempts the Python SDK's pickle round-trip test from NEMO-009
 
 - `hackmyagent@0.33.2 secure . --ci --format json` reported one NEMO-009 finding ("Unsafe deserialization:
