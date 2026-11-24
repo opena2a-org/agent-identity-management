@@ -13,6 +13,18 @@ const SENSITIVE_PATHS = [
 ];
 
 /**
+ * True when `target` is `dir` itself or lies beneath it. Both must be absolute.
+ * A plain string-prefix test would treat `/srv/app-secrets` as inside `/srv/app`,
+ * so compare by path segments instead.
+ */
+function isWithinDir(dir: string, target: string): boolean {
+  const rel = path.relative(dir, target);
+  if (rel === '') return true;
+  if (path.isAbsolute(rel)) return false;
+  return rel !== '..' && !rel.startsWith('..' + path.sep);
+}
+
+/**
  * Filesystem interceptor — hooks fs module functions to intercept
  * ALL file operations at the application level.
  *
@@ -116,7 +128,7 @@ export class FilesystemInterceptor implements Monitor {
     if (this.allowedPaths.size === 0) return false;
     const normalized = path.resolve(filePath);
     return !Array.from(this.allowedPaths).some((ap) =>
-      normalized.startsWith(path.resolve(ap))
+      isWithinDir(path.resolve(ap), normalized)
     );
   }
 
@@ -124,7 +136,7 @@ export class FilesystemInterceptor implements Monitor {
     if (this.excludePaths.size === 0) return false;
     const normalized = path.resolve(filePath);
     return Array.from(this.excludePaths).some((ep) =>
-      normalized.startsWith(path.resolve(ep))
+      isWithinDir(path.resolve(ep), normalized)
     );
   }
 
