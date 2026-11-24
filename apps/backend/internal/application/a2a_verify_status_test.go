@@ -261,7 +261,7 @@ func TestVerifyA2ARequestAcceptsANonceOfSixtyFourCharacters(t *testing.T) {
 
 // A nonce the nonce table already holds is a replay: the request is not valid,
 // and neither the agent nor its grants are read and no nonce is recorded.
-func TestVerifyA2ARequestRefusesANonceFoundUsed(t *testing.T) {
+func TestVerifyA2ARequestRefusesAReplayedNonceAtTheCheck(t *testing.T) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
