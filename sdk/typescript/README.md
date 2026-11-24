@@ -429,7 +429,9 @@ all sources when `source` is not set), not only events that meet the rest of the
 condition: an anomaly that arrives after nine other events within 60 seconds
 triggers `anomaly-burst`.
 
-With L2 off, which is the default, an event classified as a critical `threat`
+L2 is off by default only from 1.4.0, which is not yet published; in 1.3.1, the
+version npm serves today, L2 is on by default (see the next section). With L2
+off, an event classified as a critical `threat`
 (an L0 pattern match, for one) ends in `kill` from `critical-threat` as soon as
 it is emitted. `requireLlmConfirmation` does not hold that back: the rule's
 action runs at once with or without the flag, which only records
@@ -460,10 +462,16 @@ const arp = new AgentRuntimeProtection({
 });
 ```
 
-### L2 sends nothing unless you configure it
+### L2 sends nothing unless you configure it (1.4.0, not yet published)
+
+> **Unreleased.** This section describes 1.4.0, which is not yet on npm; npm
+> serves 1.3.1 as latest. In 1.3.1, L2 is on by default with
+> `adapter: 'agent-proxy'`, which sends event content to Anthropic or OpenAI
+> when `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is exported (otherwise to a
+> local Ollama), and setting `intelligence: { enabled: false }` turns it off.
 
 L0 (rules) and L1 (behavioral twin) run entirely in-process and make no
-outbound connections. **L2 is off by default**, and turning it on takes two
+outbound connections. From 1.4.0, **L2 is off by default**, and turning it on takes two
 deliberate settings, not one:
 
 ```typescript
