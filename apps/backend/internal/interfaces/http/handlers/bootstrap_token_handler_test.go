@@ -38,8 +38,8 @@ func (r *btRegistrar) CreateAgent(_ context.Context, req *application.CreateAgen
 	}
 	agent := &domain.Agent{
 		ID: uuid.New(), OrganizationID: orgID, CreatedBy: userID,
-		Name: req.Name, DisplayName: req.DisplayName, AgentType: req.AgentType,
-		Status: domain.AgentStatusPending,
+		Name: req.Name, DisplayName: req.DisplayName, Description: req.Description,
+		AgentType: req.AgentType, Status: domain.AgentStatusPending,
 	}
 	r.agents = append(r.agents, agent)
 	return agent, nil
@@ -383,4 +383,48 @@ func TestBootstrapTokenHandler_DuplicateNameIs409AndTheTokenSurvives(t *testing.
 
 	status, _, _ = rig.do(t, exchangeRequest(t, second.Token, map[string]interface{}{"name": "my-second-agent"}))
 	assert.Equal(t, fiber.StatusCreated, status)
+}
+
+// No dashboard screen mints a bootstrap token, so a refusal names the API call
+// that does, and the description an agent gets when it names none says the same.
+func TestBootstrapTokenHandler_RefusalsAndDefaultDescriptionNameTheMintCall(t *testing.T) {
+	const mint = "POST /api/v1/onboarding/bootstrap-tokens"
+	const roles = mint + " (signed in as a member, manager or admin)"
+	rig := newBTRig(t)
+	orgID := uuid.New()
+	used := rig.mint(t, orgID, uuid.New())
+	status, _, _ := rig.do(t, exchangeRequest(t, used.Token, nil))
+	require.Equal(t, fiber.StatusCreated, status)
+	agents := rig.agents.inOrg(orgID)
+	require.Len(t, agents, 1)
+	assert.Equal(t, application.BootstrapDefaultAgentDescription, agents[0].Description)
+	assert.Contains(t, agents[0].Description, mint)
+	assert.NotContains(t, agents[0].Description, "screen")
+
+	exposed := rig.mint(t, uuid.New(), uuid.New())
+	inURL := httptest.NewRequest(http.MethodPost,
+		"/api/v1/onboarding/bootstrap-tokens/exchange?"+url.Values{"token": {exposed.Token}}.Encode(), nil)
+	expiring := rig.mint(t, uuid.New(), uuid.New())
+
+	refusals := map[string]*http.Request{
+		"bootstrap_token_invalid": exchangeRequest(t, "aim_ob_nope", nil),
+		"bootstrap_token_used":    exchangeRequest(t, used.Token, map[string]interface{}{"name": "again"}),
+		"bootstrap_token_in_url":  inURL,
+	}
+	for code, req := range refusals {
+		_, body, _ := rig.do(t, req)
+		require.Equal(t, code, body["code"])
+		assert.Contains(t, body["error"], roles, code)
+		assert.NotContains(t, body["error"], "screen", code)
+	}
+	_, body, _ := rig.do(t, exchangeRequest(t, exposed.Token, nil))
+	require.Equal(t, "bootstrap_token_revoked", body["code"])
+	assert.Contains(t, body["error"], roles)
+	assert.NotContains(t, body["error"], "screen")
+
+	rig.svc.SetClock(func() time.Time { return time.Now().Add(domain.BootstrapTokenTTL + time.Second) })
+	_, body, _ = rig.do(t, exchangeRequest(t, expiring.Token, nil))
+	require.Equal(t, "bootstrap_token_expired", body["code"])
+	assert.Contains(t, body["error"], roles)
+	assert.NotContains(t, body["error"], "screen")
 }

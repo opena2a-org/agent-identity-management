@@ -584,7 +584,7 @@ Content-Type: application/json
 
 `dashboardUrl` is the dashboard address the server is configured with (`FRONTEND_URL`), so a client can link to the agent at `<dashboardUrl>/dashboard/agents/<agentId>` without deriving the dashboard address from the API address. It is omitted when `FRONTEND_URL` is empty.
 
-**Refusals:** `401` with `code` set to `bootstrap_token_invalid`, `bootstrap_token_expired`, `bootstrap_token_used` or `bootstrap_token_revoked`; `400` with `code` `bootstrap_token_in_url` for a token in the query string; `409` when the organization already has an agent with that name (the token stays usable, so retry with another `name`). To recover from any `401`, mint a new token from the onboarding screen.
+**Refusals:** `401` with `code` set to `bootstrap_token_invalid`, `bootstrap_token_expired`, `bootstrap_token_used` or `bootstrap_token_revoked`; `400` with `code` `bootstrap_token_in_url` for a token in the query string; `409` when the organization already has an agent with that name (the token stays usable, so retry with another `name`). To recover from any `401`, mint a new token with `POST /api/v1/onboarding/bootstrap-tokens`, signed in as a member, manager or admin.
 
 #### Onboarding telemetry
 

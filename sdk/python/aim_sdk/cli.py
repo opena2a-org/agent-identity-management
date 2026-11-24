@@ -3,7 +3,8 @@ AIM SDK Command Line Interface.
 
 Provides commands for authenticating and managing the SDK:
 - login: Authenticate with an AIM server (OAuth 2.0 device grant, RFC 8628)
-- init: Register a first agent with a bootstrap token from the onboarding screen
+- init: Register a first agent with a bootstrap token minted by
+  POST /api/v1/onboarding/bootstrap-tokens
 - logout: Revoke credentials and clear local storage
 - status: Check the SDK sign-in and list the agents saved on this machine
 - version: Show SDK version
@@ -143,8 +144,9 @@ DEVICE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 EXIT_SERVER_UNAVAILABLE = 75
 SERVER_UNAVAILABLE_STATUSES = (502, 503, 504)
 
-# `aim-sdk init`: the bootstrap token minted on the dashboard's onboarding
-# screen registers exactly one agent. The environment variable is the only
+# `aim-sdk init`: the bootstrap token that a signed-in member, manager or
+# admin mints with POST /api/v1/onboarding/bootstrap-tokens registers exactly
+# one agent. The environment variable is the only
 # channel because an argument is visible in the process list.
 BOOTSTRAP_TOKEN_ENV = "AIM_BOOTSTRAP_TOKEN"
 # Why `aim-sdk init --token` is refused; the value is never read. The same
@@ -152,6 +154,8 @@ BOOTSTRAP_TOKEN_ENV = "AIM_BOOTSTRAP_TOKEN"
 TOKEN_FLAG_REFUSED = (f"the bootstrap token is read from {BOOTSTRAP_TOKEN_ENV}, not from a flag "
                       "(a flag value is visible in the process list and shell history)")
 BOOTSTRAP_TOKEN_PREFIX = "aim_ob_"
+# The API call that mints a bootstrap token. No dashboard screen mints one.
+BOOTSTRAP_TOKEN_MINT_CALL = "POST /api/v1/onboarding/bootstrap-tokens"
 BOOTSTRAP_TOKEN_HEADER = "X-AIM-Bootstrap-Token"
 DEFAULT_INIT_AGENT_NAME = "my-first-agent"
 INIT_REQUEST_TIMEOUT_SECONDS = 30
@@ -1382,7 +1386,8 @@ def exchange_bootstrap_token(aim_url, token, name, public_key):
     reason = _terminal_line(_redact_token(_server_reason(response, ''), token))
     if status_code == 401:
         return {'error': reason or ("The bootstrap token is not valid. "
-                                    "Generate a new one from the onboarding screen.")}
+                                    f"Mint a new one with {BOOTSTRAP_TOKEN_MINT_CALL} "
+                                    f"(signed in as a member, manager or admin).")}
     if status_code == 409:
         conflict = reason.rstrip('.') or f"An agent named {name!r} already exists in your organization"
         return {'error': (f"{conflict}. "
@@ -1429,7 +1434,7 @@ def _reported_dashboard_url(value, aim_url):
 
 
 def init(args):
-    """Register a first agent with a bootstrap token from the onboarding screen."""
+    """Register a first agent with a bootstrap token minted by POST /api/v1/onboarding/bootstrap-tokens."""
     from .credentials import (
         check_agent_credentials_dir,
         get_agent_credentials_path,
@@ -1448,8 +1453,8 @@ def init(args):
     token = (os.environ.get(BOOTSTRAP_TOKEN_ENV) or '').strip()
     if not token:
         print("Error: no bootstrap token.")
-        print("Copy the command from the onboarding screen in the AIM dashboard, or set the token")
-        print("in the environment, which keeps it out of the process list and shell history:")
+        print(f"Mint one with {BOOTSTRAP_TOKEN_MINT_CALL} (signed in as a member, manager or admin)")
+        print("and set it in the environment, which keeps it out of the process list and shell history:")
         print()
         print(f"  {BOOTSTRAP_TOKEN_ENV}=<token> aim-sdk init")
         return 1
@@ -1457,7 +1462,7 @@ def init(args):
         # Never echo it: a value pasted into the wrong variable may be some
         # other secret.
         print(f"Error: the token given is not a bootstrap token (those start with {BOOTSTRAP_TOKEN_PREFIX}).")
-        print("Generate one from the onboarding screen in the AIM dashboard.")
+        print(f"Mint one with {BOOTSTRAP_TOKEN_MINT_CALL} (signed in as a member, manager or admin).")
         return 1
 
     url_problem = invalid_server_url_reason(args.url)
@@ -1652,8 +1657,9 @@ def main():
     # Init command
     init_parser = subparsers.add_parser(
         'init',
-        help='Register a first agent with a bootstrap token from the onboarding screen',
-        description=(f'Register a first agent with a bootstrap token from the onboarding screen. '
+        help=f'Register a first agent with a bootstrap token minted by {BOOTSTRAP_TOKEN_MINT_CALL}',
+        description=(f'Register a first agent with a bootstrap token, which a signed-in member, '
+                     f'manager or admin mints with {BOOTSTRAP_TOKEN_MINT_CALL}. '
                      f'The token is read from {BOOTSTRAP_TOKEN_ENV} only: a flag value is visible in '
                      f'the process list and shell history.'),
     )

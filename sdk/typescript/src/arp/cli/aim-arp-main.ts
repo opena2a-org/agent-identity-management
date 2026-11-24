@@ -26,8 +26,9 @@ function showHelp(): void {
     npx @opena2a/aim-sdk telemetry <subcommand>
 
   COMMANDS
-    init       Register your first agent with a bootstrap token from the
-               onboarding screen (run \`npx @opena2a/aim-sdk init --help\`)
+    init       Register your first agent with a bootstrap token minted by
+               POST /api/v1/onboarding/bootstrap-tokens
+               (run \`npx @opena2a/aim-sdk init --help\`)
     telemetry  Review or change signature telemetry consent
 
   SUBCOMMANDS

@@ -16,7 +16,7 @@ import (
 // caller names none.
 const (
 	BootstrapDefaultAgentName        = "my-first-agent"
-	BootstrapDefaultAgentDescription = "Registered from the onboarding screen"
+	BootstrapDefaultAgentDescription = "Registered with a bootstrap token from POST /api/v1/onboarding/bootstrap-tokens"
 )
 
 var (

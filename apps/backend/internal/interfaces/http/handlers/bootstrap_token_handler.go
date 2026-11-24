@@ -164,7 +164,8 @@ func (h *BootstrapTokenHandler) Exchange(c fiber.Ctx) error {
 		}
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Send the bootstrap token in the " + BootstrapTokenHeader + " header or the JSON body, never in the URL. " +
-				"The token in this URL has been revoked; generate a new one from the onboarding screen.",
+				"The token in this URL has been revoked; mint a new one with POST /api/v1/onboarding/bootstrap-tokens " +
+				"(signed in as a member, manager or admin).",
 			"code": "bootstrap_token_in_url",
 		})
 	}
@@ -261,14 +262,14 @@ func validateBootstrapExchangeBody(body *ExchangeBootstrapTokenRequest) string {
 // bootstrapTokenRefusal answers 401 for a token that cannot be exchanged,
 // with a machine-readable code the SDK can act on.
 func bootstrapTokenRefusal(c fiber.Ctx, err error) error {
-	code, message := "bootstrap_token_invalid", "The bootstrap token is not valid. Generate a new one from the onboarding screen."
+	code, message := "bootstrap_token_invalid", "The bootstrap token is not valid. Mint a new one with POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)."
 	switch {
 	case errors.Is(err, domain.ErrBootstrapTokenExpired):
-		code, message = "bootstrap_token_expired", "The bootstrap token has expired. Generate a new one from the onboarding screen."
+		code, message = "bootstrap_token_expired", "The bootstrap token has expired. Mint a new one with POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)."
 	case errors.Is(err, domain.ErrBootstrapTokenUsed):
-		code, message = "bootstrap_token_used", "The bootstrap token has already registered an agent. Generate a new one from the onboarding screen."
+		code, message = "bootstrap_token_used", "The bootstrap token has already registered an agent. Mint a new one with POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)."
 	case errors.Is(err, domain.ErrBootstrapTokenRevoked):
-		code, message = "bootstrap_token_revoked", "The bootstrap token has been revoked. Generate a new one from the onboarding screen."
+		code, message = "bootstrap_token_revoked", "The bootstrap token has been revoked. Mint a new one with POST /api/v1/onboarding/bootstrap-tokens (signed in as a member, manager or admin)."
 	}
 	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": message, "code": code})
 }
