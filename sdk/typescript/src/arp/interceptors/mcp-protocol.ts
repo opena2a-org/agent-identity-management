@@ -1,7 +1,8 @@
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
-import { scanText, PATTERN_SETS, type ScanResult } from '../patterns/ai-threats';
+import { scanText, PATTERN_SETS, MAX_SCAN_TOTAL, type ScanResult } from '../patterns/ai-threats';
 import { warnNotStarted } from './not-started';
+import { emitTruncation } from './truncation';
 
 /**
  * MCP Protocol interceptor -- scans MCP tool calls for path traversal,
@@ -89,9 +90,14 @@ export class MCPProtocolInterceptor implements Monitor {
     // arguments is never joined into one match.
     const matches: ScanResult['matches'] = [];
     let truncated = false;
+    let receivedLength = 0;
+    let matchedLength = 0;
     for (const [argument, value] of Object.entries(args)) {
-      const argResult = scanText(flattenValue(value), PATTERN_SETS.mcpPatterns, 'mcp');
+      const text = flattenValue(value);
+      const argResult = scanText(text, PATTERN_SETS.mcpPatterns, 'mcp');
       truncated ||= Boolean(argResult.truncated);
+      receivedLength += text.length;
+      matchedLength += Math.min(text.length, MAX_SCAN_TOTAL);
       for (const match of argResult.matches) {
         matches.push({ ...match, argument });
       }
@@ -111,6 +117,16 @@ export class MCPProtocolInterceptor implements Monitor {
           matchedText: match.matchedText,
           args: sanitizeArgs(args),
         },
+      });
+    }
+
+    // One event per call, however many arguments were longer than the total
+    if (truncated) {
+      emitTruncation(this.engine, 'mcp-protocol', 'MCPProtocolInterceptor.scanToolCall', {
+        reason: 'truncated',
+        matchedLength,
+        receivedLength,
+        unit: 'characters',
       });
     }
 

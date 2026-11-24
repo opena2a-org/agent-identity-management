@@ -107,6 +107,7 @@ export { FilesystemInterceptor } from './interceptors/filesystem';
 export { PromptInterceptor } from './interceptors/prompt';
 export { MCPProtocolInterceptor } from './interceptors/mcp-protocol';
 export { A2AProtocolInterceptor } from './interceptors/a2a-protocol';
+export type { TruncationReason, TruncationDetails } from './interceptors/truncation';
 export { EnforcementEngine, type AlertCallback } from './enforcement/kill-switch';
 export { LocalLogger } from './reporting/local-log';
 export { loadConfig, defaultConfig } from './config/loader';

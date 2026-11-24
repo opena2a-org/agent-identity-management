@@ -557,7 +557,14 @@ scanned in windows of 65,536 characters, each overlapping the one before by
 a match within them is still reported and still emits its event.
 `scanToolCall` scans each top-level argument on its own, with its own total,
 and names it in each match's `argument` and in the event's `data.argument`;
-`truncated` is true when any one argument is longer than the total. An analyzer
+`truncated` is true when any one argument is longer than the total. Each call
+that returns `truncated: true` also emits one event (category `violation`,
+severity `high`, so the default `high-violation` rule alerts on it) with
+`data.truncation: true`, `data.reason: 'truncated'`, `data.analyzer`,
+`data.matchedLength` and `data.receivedLength` in characters, and no input
+text. The proxy, which skips scanning a passthrough response body over 100 KB,
+emits the same event for it with `reason: 'over-size-limit'`,
+`matchedLength: 0` and `receivedLength` in bytes. An analyzer
 that is not started returns `scanned: false` and an empty `patternIds`: it
 evaluated nothing, and its `detected: false` is not a verdict. The first such
 call on an instance also prints one line with `console.warn` naming the fix,

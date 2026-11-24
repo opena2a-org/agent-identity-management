@@ -1,7 +1,8 @@
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
-import { scanText, PATTERN_SETS, type ScanResult } from '../patterns/ai-threats';
+import { scanText, PATTERN_SETS, MAX_SCAN_TOTAL, type ScanResult } from '../patterns/ai-threats';
 import { warnNotStarted } from './not-started';
+import { emitTruncation } from './truncation';
 
 /**
  * Prompt interceptor -- scans user messages and LLM responses for
@@ -70,6 +71,15 @@ export class PromptInterceptor implements Monitor {
       }
     }
 
+    if (result.truncated) {
+      emitTruncation(this.engine, 'prompt', 'PromptInterceptor.scanInput', {
+        reason: 'truncated',
+        matchedLength: MAX_SCAN_TOTAL,
+        receivedLength: content.length,
+        unit: 'characters',
+      });
+    }
+
     return result;
   }
 
@@ -99,6 +109,15 @@ export class PromptInterceptor implements Monitor {
           },
         });
       }
+    }
+
+    if (result.truncated) {
+      emitTruncation(this.engine, 'prompt', 'PromptInterceptor.scanOutput', {
+        reason: 'truncated',
+        matchedLength: MAX_SCAN_TOTAL,
+        receivedLength: content.length,
+        unit: 'characters',
+      });
     }
 
     return result;

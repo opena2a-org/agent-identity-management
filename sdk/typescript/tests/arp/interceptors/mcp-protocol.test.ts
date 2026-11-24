@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MCPProtocolInterceptor } from '../../../src/arp/interceptors/mcp-protocol';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
 import { PATTERN_SETS, MAX_SCAN_TOTAL, SCAN_WINDOW_LENGTH } from '../../../src/arp/patterns/ai-threats';
-import type { ARPEvent } from '../../../src/arp/types';
+import type { ARPEvent, EnforcementResult } from '../../../src/arp/types';
 
 describe('MCPProtocolInterceptor', () => {
   let engine: EventEngine;
@@ -116,7 +116,8 @@ describe('MCPProtocolInterceptor', () => {
       });
       expect(result.detected).toBe(true);
       expect(result.truncated).toBe(true);
-      expect(emittedEvents.map((e) => e.data.argument)).toEqual(['path']);
+      const threats = emittedEvents.filter((e) => e.category === 'threat');
+      expect(threats.map((e) => e.data.argument)).toEqual(['path']);
     });
 
     it('detects command injection past 65,536 characters within one argument', async () => {
@@ -137,8 +138,9 @@ describe('MCPProtocolInterceptor', () => {
       });
       expect(result.detected).toBe(true);
       expect(result.truncated).toBe(true);
-      expect(emittedEvents).toHaveLength(1);
-      expect(emittedEvents[0].data.patternId).toBe('MCP-002');
+      const threats = emittedEvents.filter((e) => e.category === 'threat');
+      expect(threats).toHaveLength(1);
+      expect(threats[0].data.patternId).toBe('MCP-002');
     });
 
     it('does not join two arguments into one match', async () => {
@@ -224,6 +226,56 @@ describe('MCPProtocolInterceptor', () => {
     it('reports correct type', () => {
       const interceptor = new MCPProtocolInterceptor(engine);
       expect(interceptor.type).toBe('mcp-protocol');
+    });
+  });
+
+  describe('truncation event', () => {
+    let results: EnforcementResult[];
+    beforeEach(() => {
+      results = [];
+      engine.onEnforcement((r) => { results.push(r); });
+    });
+
+    /** Truncation events, and the rule names their enforcement results name, after the engine settles. */
+    async function truncationEvents(results: EnforcementResult[]) {
+      await new Promise((resolve) => setImmediate(resolve));
+      const events = emittedEvents.filter((e) => e.data.truncation === true);
+      const rules = results
+        .filter((r) => r.event.data.truncation === true)
+        .map((r) => /^Rule "([^"]+)"/.exec(r.reason ?? '')?.[1]);
+      return { events, rules };
+    }
+
+    it('emits one truncation event for a call with arguments longer than the scan total', async () => {
+      const interceptor = await createInterceptor();
+      const first = 'y'.repeat(MAX_SCAN_TOTAL + 10);
+      const second = 'z'.repeat(MAX_SCAN_TOTAL + 20);
+      const result = interceptor.scanToolCall('writeFile', { first, second, path: '/tmp/out.txt' });
+      expect(result.truncated).toBe(true);
+      const { events, rules } = await truncationEvents(results);
+      expect(events).toHaveLength(1);
+      expect(events[0].source).toBe('mcp-protocol');
+      expect(events[0].category).toBe('violation');
+      expect(events[0].severity).toBe('high');
+      expect(events[0].data).toEqual({
+        truncation: true,
+        analyzer: 'MCPProtocolInterceptor.scanToolCall',
+        reason: 'truncated',
+        matchedLength: 2 * MAX_SCAN_TOTAL + '/tmp/out.txt'.length,
+        receivedLength: first.length + second.length + '/tmp/out.txt'.length,
+        unit: 'characters',
+      });
+      expect(JSON.stringify(events[0])).not.toContain('yyyy');
+      expect(JSON.stringify(events[0])).not.toContain('/tmp/out.txt');
+      expect(rules).toEqual(['high-violation']);
+    });
+
+    it('emits no truncation event for short arguments', async () => {
+      const interceptor = await createInterceptor();
+      const result = interceptor.scanToolCall('readFile', { path: '/home/user/report.txt' });
+      expect(result.truncated).toBe(false);
+      const { events } = await truncationEvents(results);
+      expect(events).toHaveLength(0);
     });
   });
 });

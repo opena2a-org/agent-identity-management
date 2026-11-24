@@ -3,7 +3,7 @@ import * as http from 'http';
 import { ARPProxy, type ARPProxyDeps } from '../../../src/arp/proxy/server';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
 import { PromptInterceptor } from '../../../src/arp/interceptors/prompt';
-import type { ARPEvent, ProxyConfig } from '../../../src/arp/types';
+import type { ARPEvent, EnforcementResult, ProxyConfig } from '../../../src/arp/types';
 
 /**
  * Test that passthrough-mode HTTP responses are scanned through
@@ -135,9 +135,66 @@ describe('ARPProxy response body scanning', () => {
 
     // Should NOT detect anything because body exceeds 100KB
     const outputLeakEvents = emittedEvents.filter(
-      (e) => e.source === 'prompt' && e.data.direction === 'output'
+      (e) => e.category === 'threat' && e.data.direction === 'output'
     );
     expect(outputLeakEvents).toHaveLength(0);
+  });
+
+  describe('truncation event', () => {
+    let results: EnforcementResult[];
+
+    beforeEach(async () => {
+      // Default rules, so the high-violation rule is in place
+      engine = new EventEngine({ agentName: 'test-agent' });
+      promptInterceptor = new PromptInterceptor(engine);
+      await promptInterceptor.start();
+      emittedEvents = [];
+      results = [];
+      engine.onEvent((e) => { emittedEvents.push(e); });
+      engine.onEnforcement((r) => { results.push(r); });
+    });
+
+    function truncationEvents(): ARPEvent[] {
+      return emittedEvents.filter((e) => e.data.truncation === true);
+    }
+
+    it('emits one over-size-limit event for a response body over 100KB, with no body text', async () => {
+      const planted = ['sk', 'proj', 'abc123def456ghi789jkl012mno'].join('-');
+      const largeResponse = `${'x'.repeat(110 * 1024)} ${planted}`;
+
+      const port = await createUpstreamServer(largeResponse);
+      await createProxy(port);
+      const result = await makeRequest(proxy.getPort(), '/api/data');
+      expect(result.statusCode).toBe(200);
+
+      const events = truncationEvents();
+      expect(events).toHaveLength(1);
+      expect(events[0].source).toBe('prompt');
+      expect(events[0].category).toBe('violation');
+      expect(events[0].severity).toBe('high');
+      expect(events[0].data).toEqual({
+        truncation: true,
+        analyzer: 'ARPProxy.inspectRawResponseBody',
+        reason: 'over-size-limit',
+        matchedLength: 0,
+        receivedLength: Buffer.byteLength(largeResponse, 'utf-8'),
+        unit: 'bytes',
+      });
+      expect(JSON.stringify(events[0])).not.toContain(planted);
+      expect(JSON.stringify(events[0])).not.toContain('xxxx');
+      const rules = results
+        .filter((r) => r.event.data.truncation === true)
+        .map((r) => /^Rule "([^"]+)"/.exec(r.reason ?? '')?.[1]);
+      expect(rules).toEqual(['high-violation']);
+    });
+
+    it('emits no truncation event for a short response body', async () => {
+      const port = await createUpstreamServer(JSON.stringify({ message: 'Hello, world!' }));
+      await createProxy(port);
+      const result = await makeRequest(proxy.getPort(), '/api/data');
+      expect(result.statusCode).toBe(200);
+      expect(truncationEvents()).toHaveLength(0);
+    });
   });
 
   it('detects PII leak in passthrough response body', async () => {

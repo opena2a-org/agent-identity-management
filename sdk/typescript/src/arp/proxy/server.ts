@@ -10,6 +10,7 @@ import type { EventEngine } from '../engine/event-engine.js';
 import type { PromptInterceptor } from '../interceptors/prompt.js';
 import type { MCPProtocolInterceptor } from '../interceptors/mcp-protocol.js';
 import type { A2AProtocolInterceptor } from '../interceptors/a2a-protocol.js';
+import { emitTruncation } from '../interceptors/truncation.js';
 import type { IntelligenceCoordinator } from '../intelligence/coordinator.js';
 import {
   ClassificationAnnotator,
@@ -540,12 +541,23 @@ export class ARPProxy {
 
   /**
    * Scan raw HTTP response body through PromptInterceptor output patterns.
-   * Skips bodies larger than MAX_SCAN_BODY_BYTES to avoid performance issues.
+   * Skips bodies larger than MAX_SCAN_BODY_BYTES to avoid performance issues,
+   * and emits one 'over-size-limit' truncation event for each body it skips.
    */
   private inspectRawResponseBody(bodyStr: string): boolean {
     if (!this.deps.promptInterceptor) return false;
     if (!bodyStr) return false;
-    if (Buffer.byteLength(bodyStr, 'utf-8') > ARPProxy.MAX_SCAN_BODY_BYTES) return false;
+    const bodyBytes = Buffer.byteLength(bodyStr, 'utf-8');
+    if (bodyBytes > ARPProxy.MAX_SCAN_BODY_BYTES) {
+      // The body is not scanned at all; say so, with lengths only (CR-001: no body text)
+      emitTruncation(this.deps.engine, 'prompt', 'ARPProxy.inspectRawResponseBody', {
+        reason: 'over-size-limit',
+        matchedLength: 0,
+        receivedLength: bodyBytes,
+        unit: 'bytes',
+      });
+      return false;
+    }
 
     const result = this.deps.promptInterceptor.scanOutput(bodyStr);
     return result.detected;
