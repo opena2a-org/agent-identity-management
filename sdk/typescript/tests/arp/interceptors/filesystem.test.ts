@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtempSync, readFile, rmSync, writeFileSync } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { FilesystemInterceptor } from '../../../src/arp/interceptors/filesystem';
 import { EventEngine } from '../../../src/arp/engine/event-engine';
 
@@ -71,5 +74,39 @@ describe('FilesystemInterceptor path checks', () => {
     it('allows everything when no allowed paths are set', () => {
       expect(create().isOutsideAllowed('/anywhere')).toBe(false);
     });
+  });
+});
+
+describe('FilesystemInterceptor ESM named imports', () => {
+  it('intercepts a named readFile import after start() and releases it after stop()', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'arp-fs-esm-'));
+    const target = path.join(dir, '.env');
+    writeFileSync(target, 'SECRET=1');
+
+    const engine = new EventEngine({ agentName: 'test-agent', rules: [] });
+    const seen: string[] = [];
+    engine.onEvent((e) => {
+      if (e.source === 'filesystem') seen.push(e.data.path as string);
+    });
+    const fsi = new FilesystemInterceptor(engine);
+    const read = () =>
+      new Promise<void>((resolve, reject) =>
+        readFile(target, (err) => (err ? reject(err) : resolve())),
+      );
+
+    try {
+      await fsi.start();
+      try {
+        await read();
+      } finally {
+        await fsi.stop();
+      }
+      expect(seen).toEqual([target]);
+
+      await read();
+      expect(seen).toEqual([target]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

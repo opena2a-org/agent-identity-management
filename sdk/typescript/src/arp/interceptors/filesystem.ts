@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { syncBuiltinESMExports } from 'node:module';
 import type { Monitor, MonitorType } from '../types';
 import type { EventEngine } from '../engine/event-engine';
 import { nodeRequire } from '../node-require';
@@ -98,6 +99,11 @@ export class FilesystemInterceptor implements Monitor {
       };
     }
 
+    // Named ESM imports (`import { readFile } from 'fs'`) bind to the ESM
+    // namespace, which holds its own copy of each export. Without this they
+    // keep calling the unpatched functions.
+    syncBuiltinESMExports();
+
     this.active = true;
   }
 
@@ -108,6 +114,7 @@ export class FilesystemInterceptor implements Monitor {
     for (const [fn, original] of Object.entries(this.originals)) {
       mod[fn] = original;
     }
+    syncBuiltinESMExports();
 
     this.originals = null;
     this.active = false;
