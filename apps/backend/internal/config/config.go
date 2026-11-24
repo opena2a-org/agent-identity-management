@@ -90,6 +90,12 @@ type DatabaseConfig struct {
 	// PoolRole is the role the request pool sets on every connection it opens
 	// (POSTGRES_POOL_ROLE). Empty, the default, sets none.
 	PoolRole string
+	// ReplicaURL is the connection string of a read replica
+	// (POSTGRES_REPLICA_URL). Empty, the default, routes every read to the
+	// primary. Set, the verification path reads from the replica whenever the
+	// replica holds every write the primary has committed, and from the
+	// primary otherwise, so a revocation takes effect at once.
+	ReplicaURL string
 	// ScopeCensus turns on the row security census of the request pool
 	// (POSTGRES_SCOPE_CENSUS=on). Off by default.
 	ScopeCensus bool
@@ -534,6 +540,7 @@ func LoadDatabase() (DatabaseConfig, error) {
 		MaxConnections:  getEnvAsInt("POSTGRES_MAX_CONNECTIONS", 25),
 		ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
 		PoolRole:        getEnv("POSTGRES_POOL_ROLE", ""),
+		ReplicaURL:      strings.TrimSpace(getenv("POSTGRES_REPLICA_URL")),
 		ScopeCensus:     getEnvFlag("POSTGRES_SCOPE_CENSUS", "on"),
 		AppUser:         getEnv("POSTGRES_APP_USER", ""),
 		AppPassword:     getEnv("POSTGRES_APP_PASSWORD", ""),

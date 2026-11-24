@@ -184,6 +184,8 @@ func renderSetting(cfg *Config, name string) (string, bool) {
 		return cfg.Database.ConnMaxLifetime.String(), true
 	case "POSTGRES_POOL_ROLE":
 		return q(cfg.Database.PoolRole), true
+	case "POSTGRES_REPLICA_URL":
+		return q(cfg.Database.ReplicaURL), true
 	case "POSTGRES_SCOPE_CENSUS":
 		return fmt.Sprintf("%t", cfg.Database.ScopeCensus), true
 	case "POSTGRES_APP_USER":
