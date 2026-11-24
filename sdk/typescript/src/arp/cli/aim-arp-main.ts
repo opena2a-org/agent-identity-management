@@ -12,7 +12,8 @@
 import { cliVersion } from '../../build-version';
 import { loadConfig } from '../index';
 import { runTelemetrySubcommand, TELEMETRY_SUBCOMMANDS } from './telemetry';
-import { runInit, scrubToken } from '../../cli/init';
+import { runInit, scrubToken, SHOWN_ARGUMENT_MAX_CHARS } from '../../cli/init';
+import { sanitizeTerminalLine } from '../telemetry/signature/sanitize';
 
 function showHelp(): void {
   console.log(`
@@ -61,10 +62,13 @@ export async function runAimArp(argv: string[]): Promise<number> {
       showHelp();
       return 0;
     default:
-      // A bootstrap token pasted as the argument is printed redacted; an
-      // empty argument is shown as "", as init shows one.
+      // A bootstrap token pasted as the argument is printed redacted, and the
+      // argument is shown as one line (escapes, line breaks and other control
+      // characters replaced); an empty argument is shown as "", as init shows one.
       console.error(
-        `${command.startsWith('-') ? 'Unknown option' : 'Unknown command'}: ${command === '' ? '""' : scrubToken(command)}`,
+        `${command.startsWith('-') ? 'Unknown option' : 'Unknown command'}: ${
+          command === '' ? '""' : sanitizeTerminalLine(scrubToken(command), SHOWN_ARGUMENT_MAX_CHARS)
+        }`,
       );
       console.error('Run: aim-arp --help');
       return 1;
