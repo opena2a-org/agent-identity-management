@@ -1,11 +1,10 @@
 package org.opena2a.aim.client;
 
 import org.junit.jupiter.api.*;
+import org.opena2a.aim.LiveAim;
 import org.opena2a.aim.credentials.CredentialManager;
 import org.opena2a.aim.exceptions.AIMException;
 
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -33,35 +32,32 @@ class LiveBackendTest {
 
     @BeforeAll
     static void checkPrerequisites() {
-        // Check if backend is available
-        try {
-            URL url = new URL(AIM_URL + "/health");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            int responseCode = conn.getResponseCode();
-            backendAvailable = (responseCode == 200);
-            conn.disconnect();
-            System.out.println("✅ Backend available at " + AIM_URL);
-        } catch (Exception e) {
-            System.out.println("❌ Backend not available: " + e.getMessage());
-            backendAvailable = false;
-        }
-
         // Check if credentials are available
+        Map<String, String> creds;
         try {
-            Map<String, String> creds = CredentialManager.loadSdkCredentials();
-            credentialsAvailable = creds.containsKey("refreshToken") ||
-                                   (creds.containsKey("clientId") && creds.containsKey("clientSecret"));
-            if (credentialsAvailable) {
-                System.out.println("✅ SDK credentials found");
-                System.out.println("   - Type: " + (creds.containsKey("refreshToken") ? "SDK OAuth (refresh token)" : "Client credentials"));
-                System.out.println("   - AIM URL: " + creds.getOrDefault("aimUrl", "http://localhost:8080"));
-            }
+            creds = CredentialManager.loadSdkCredentials();
         } catch (Exception e) {
             System.out.println("❌ Credentials error: " + e.getMessage());
-            credentialsAvailable = false;
+            creds = Map.of();
+        }
+        credentialsAvailable = creds.containsKey("refreshToken") ||
+                               (creds.containsKey("clientId") && creds.containsKey("clientSecret"));
+        String aimUrl = creds.getOrDefault("aimUrl", AIM_URL);
+        if (credentialsAvailable) {
+            System.out.println("✅ SDK credentials found");
+            System.out.println("   - Type: " + (creds.containsKey("refreshToken") ? "SDK OAuth (refresh token)" : "Client credentials"));
+            System.out.println("   - AIM URL: " + aimUrl);
+        }
+
+        // AIMClient.secure() calls the server the stored credential names: the
+        // live tests run only when that credential has something to sign in
+        // with and its server answers GET /health, so a credential left from a
+        // server that no longer runs skips them.
+        backendAvailable = LiveAim.canSignIn(creds);
+        if (backendAvailable) {
+            System.out.println("✅ Backend available at " + aimUrl);
+        } else {
+            System.out.println("❌ Backend not available to sign in with at " + aimUrl);
         }
     }
 

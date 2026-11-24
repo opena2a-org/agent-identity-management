@@ -168,6 +168,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped. With that credential the two classes ran 18 tests with 2 errors before this change, and run 18 with no
   error and 8 skipped after it (#792).
 - Test: `src/test/java/org/opena2a/aim/LiveAimTest.java` (#792).
+- `AIMClientIntegrationTest` and `LiveBackendTest` decided whether to sign in with the stored SDK credential by
+  asking `http://localhost:8080/health`, not the server the credential names, which `AIMClient.secure()` calls. With
+  a credential naming a server that no longer runs and any server answering on port 8080, their live tests called
+  the stale server and failed `mvn install`. They now ask `LiveAim.canSignIn`, as `RealWorldIntegrationTest` does,
+  and are skipped (#792).
+- Test: `LiveAimTest.everyTestThatSignsInWithTheStoredCredentialAsksCanSignIn` reads every test class that calls
+  `AIMClient.secure()` and fails on one that neither asks `LiveAim.canSignIn` nor reads `AIM_URL` from the
+  environment; it names both classes on the previous sources (#792).
 - `listAgents` documents the four agent statuses the server defines, `pending`, `verified`, `suspended` and
   `revoked`, as the values of its `status` filter. It listed `denied`, which no agent holds (#716).
 - A client built with a client ID and secret and no refresh token throws `AuthenticationException` when it

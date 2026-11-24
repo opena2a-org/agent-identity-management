@@ -8,8 +8,6 @@ import org.opena2a.aim.exceptions.ActionDeniedException;
 import org.opena2a.aim.exceptions.AIMException;
 import org.opena2a.aim.exceptions.CredentialException;
 
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -38,33 +36,26 @@ class AIMClientIntegrationTest {
 
     @BeforeAll
     static void checkPrerequisites() {
-        // Check if backend is available
-        try {
-            URL url = new URL(AIM_URL + "/health");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(5000);
-            conn.setReadTimeout(5000);
-            int responseCode = conn.getResponseCode();
-            backendAvailable = (responseCode == 200);
-            conn.disconnect();
-        } catch (Exception e) {
-            System.out.println("Backend not available: " + e.getMessage());
-            backendAvailable = false;
-        }
-
         // Check if credentials are available (supports both OAuth and legacy formats)
+        Map<String, String> creds;
         try {
-            Map<String, String> creds = CredentialManager.loadSdkCredentials();
-            // OAuth format uses refreshToken, legacy uses clientId/clientSecret
-            credentialsAvailable = creds.containsKey("refreshToken") ||
-                    (creds.containsKey("clientId") && creds.containsKey("clientSecret"));
+            creds = CredentialManager.loadSdkCredentials();
         } catch (Exception e) {
-            credentialsAvailable = false;
+            creds = Map.of();
         }
+        // OAuth format uses refreshToken, legacy uses clientId/clientSecret
+        credentialsAvailable = creds.containsKey("refreshToken") ||
+                (creds.containsKey("clientId") && creds.containsKey("clientSecret"));
+
+        // The live tests call the server the stored credential names, not
+        // AIM_URL: they run only when that credential has something to sign in
+        // with and its server answers GET /health, so a credential left from a
+        // server that no longer runs skips them.
+        backendAvailable = LiveAim.canSignIn(creds);
 
         if (!backendAvailable) {
-            System.out.println("⚠️  Integration tests skipped: AIM backend not available at " + AIM_URL);
+            System.out.println("⚠️  Integration tests skipped: the AIM server of the stored SDK credential ("
+                    + creds.getOrDefault("aimUrl", AIM_URL) + ") is not available to sign in with");
         }
         if (!credentialsAvailable) {
             System.out.println("⚠️  Integration tests skipped: No SDK credentials found");
