@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   read from the CLI at tag `sdk-py-v2.0.2`, whose commands are the four 2.0.3 offers
   (`login, logout, status, version`).
 
+### Fixed: the docs index lists only what the LangChain guide covers
+
+- `docs/README.md` said `LANGCHAIN_INTEGRATION.md` covers LCEL agent integration and chain-based agent integration;
+  the guide has neither. The index now lists what the guide has: logging every tool call with `AIMCallbackHandler`,
+  verifying a tool before it runs with `@aim_verify`, wrapping existing tools with `wrap_tools_with_aim`, and risk
+  levels per tool.
+
 ### Changed: the README says what 2.0.3 lacks, what `aim-sdk init` needs from the server, and how a bootstrap token is minted
 
 - Where the Quick start introduces `aim-sdk init`, the README says that `init` is not in 2.0.3, the published
