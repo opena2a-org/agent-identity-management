@@ -45,20 +45,14 @@ var sdkRouteContractAllowList = map[string]string{
 	a2aClient + " verifyRequest POST /api/v1/a2a/verify member publicKey": allowVerifyRequestShape,
 
 	a2aClient + " updateTrustScore PUT /api/v1/a2a/trust/{targetAgentId} route": "the server answers 405 to every trust score write and names the interaction route instead; whether the method stays is an API decision",
-
-	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member action":        allowPolicyShape,
-	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member context":       allowPolicyShape,
-	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member resource":      allowPolicyShape,
-	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member targetAgentId": allowPolicyShape,
 }
 
-const sdkRouteContractAllowListCeiling = 9
+const sdkRouteContractAllowListCeiling = 5
 
 const (
 	a2aClient = "sdk/typescript/src/a2a/A2AClient.ts"
 
 	allowVerifyRequestShape = "the server verifies an agentId and requestHash, while the client sends the method, path, body and public key; matching them changes the protocol, not a name"
-	allowPolicyShape        = "the server evaluates a different request (event, clientAgentId, remoteAgentId, skillId); no member maps one to one"
 )
 
 // sdkCall is one HTTP call an SDK makes, as read from its source.

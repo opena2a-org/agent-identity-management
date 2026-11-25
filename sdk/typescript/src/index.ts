@@ -184,6 +184,7 @@ export {
   type CapableAgent,
   type A2ASkillAttestation,
   type A2AConsensusResult,
+  type A2APolicyDecision,
 } from './a2a';
 
 // Post-Quantum Crypto utilities (ML-DSA)

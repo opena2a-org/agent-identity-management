@@ -150,6 +150,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Breaking change for code that calls `A2AClient.evaluatePolicy`.** `POST /api/v1/a2a/policies/evaluate`
+  reads `event`, `clientAgentId`, `remoteAgentId` and `skillId`. `evaluatePolicy(targetAgentId, action,
+  resource, context)` sent none of them, so every policy was evaluated for the zero client agent with no skill.
+  It is now `evaluatePolicy(event, remoteAgentId, skillId)`, with `evaluatePolicy(event, remoteAgentId)` for an
+  event that invokes no skill; the client agent is the current agent. The answer's `decision` is `ALLOW` or
+  `DENY`. The request is pinned in `sdk/typescript/tests/fixtures/sdk_requests/a2a_evaluate_policy.json`, which
+  the backend's handler test POSTs to that route and the TypeScript SDK's tests hold its client to (#652).
+
 - `AgentTypeServerTypesTest` reads the agent types the server accepts at registration from the `recognizedAgentTypes`
   map in `apps/backend/internal/application/agent_service.go`, the map `isValidAgentType` looks an agent type up in.
   It read them from the body of `isValidAgentType` up to `return validTypes`, and that function now returns
