@@ -6483,6 +6483,10 @@ def _print_registration_success(
     if trust_score is None:
         trust_score = credentials.get("trustScore")
     status = credentials.get("status", "active")
+    # Why a registration left the agent pending, as the server says it
+    # ("pending: the organization is in strict mode; ..."): printed under the
+    # status, so a pending agent never leaves the developer guessing.
+    status_reason = credentials.get("statusReason") or credentials.get("status_reason")
 
     console.agent_registered(
         name=name,
@@ -6492,5 +6496,6 @@ def _print_registration_success(
         trust_score=trust_score,
         status=status,
         capabilities=capabilities,
-        mcp_servers=mcp_servers
+        mcp_servers=mcp_servers,
+        status_reason=status_reason
     )

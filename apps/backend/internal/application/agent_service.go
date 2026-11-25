@@ -537,7 +537,9 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	// AUTO-VERIFICATION: Only in monitoring mode. In strict mode, agents must be manually verified.
 	// This ensures strict environments require explicit approval before agents can operate.
-	shouldAutoVerify := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
+	// A pending agent carries the reason in the registration's answer.
+	agent.PendingReason = s.registrationPendingReason(orgID, agent)
+	shouldAutoVerify := agent.PendingReason == ""
 	autoVerified := false
 	if shouldAutoVerify {
 		now := time.Now()
@@ -664,7 +666,8 @@ func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, c
 	} else {
 		trustScore, agent.TrustScore = score, score.Score
 	}
-	verified := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
+	agent.PendingReason = s.registrationPendingReason(orgID, agent)
+	verified := agent.PendingReason == ""
 	if verified {
 		now := time.Now()
 		agent.Status = domain.AgentStatusVerified
@@ -817,32 +820,77 @@ func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.
 	}
 }
 
+// autoVerifyTrustThreshold is the trust score an agent needs to be verified
+// at registration.
+const autoVerifyTrustThreshold = 0.3
+
+// strictModePendingReason is the reason a registration in a strict-mode
+// organization leaves the agent pending.
+const strictModePendingReason = "pending: the organization is in strict mode; an administrator verifies the agent under Agents in the dashboard"
+
 // shouldAutoVerifyAgent determines if an agent meets criteria for automatic verification
 // Auto-verification criteria:
-// 1. Has valid cryptographic keys (public + encrypted private key)
-// 2. Trust score >= 0.3 (30% minimum threshold)
-// 3. Has required metadata (name, description, type)
+//  1. Has its keys: an Ed25519 public key with its private key either held
+//     encrypted by the server, or held by the agent itself (an SDK sends only
+//     the public half of the keypair it generates)
+//  2. Trust score >= 0.3 (30% minimum threshold)
+//  3. Has required metadata (name, display name, description)
 func (s *AgentService) shouldAutoVerifyAgent(agent *domain.Agent) bool {
+	return autoVerifyRefusal(agent) == ""
+}
+
+// autoVerifyRefusal returns why the agent does not qualify for verification
+// at registration, as the reason a registration answers with, or "" when it
+// qualifies.
+func autoVerifyRefusal(agent *domain.Agent) string {
+	reason := ""
+	switch {
 	// ✅ Check 1: Must have cryptographic keys
-	if agent.PublicKey == nil || agent.EncryptedPrivateKey == nil {
-		fmt.Printf("Agent %s cannot be auto-verified: missing cryptographic keys\n", agent.Name)
-		return false
-	}
-
+	case agent.PublicKey == nil || *agent.PublicKey == "":
+		reason = "pending: the agent has no public key"
+	case agent.EncryptedPrivateKey == nil && !isEd25519PublicKey(*agent.PublicKey):
+		reason = "pending: the agent's public key is not a base64-encoded Ed25519 public key"
 	// ✅ Check 2: Trust score must be >= 0.3 (30%)
-	if agent.TrustScore < 0.3 {
-		fmt.Printf("Agent %s cannot be auto-verified: trust score too low (%.2f < 0.3)\n", agent.Name, agent.TrustScore)
-		return false
-	}
-
+	case agent.TrustScore < autoVerifyTrustThreshold:
+		reason = fmt.Sprintf("pending: trust score %.2f is below the threshold %.2f", agent.TrustScore, autoVerifyTrustThreshold)
 	// ✅ Check 3: Must have required metadata
-	if agent.Name == "" || agent.DisplayName == "" || agent.Description == "" {
-		fmt.Printf("Agent %s cannot be auto-verified: missing required metadata\n", agent.Name)
-		return false
+	default:
+		missing := make([]string, 0, 3)
+		if agent.Name == "" {
+			missing = append(missing, "name")
+		}
+		if agent.DisplayName == "" {
+			missing = append(missing, "display name")
+		}
+		if agent.Description == "" {
+			missing = append(missing, "description")
+		}
+		if len(missing) > 0 {
+			reason = "pending: the agent has no " + strings.Join(missing, ", ")
+		}
 	}
+	if reason != "" {
+		fmt.Printf("Agent %s cannot be auto-verified: %s\n", agent.Name, reason)
+	}
+	return reason
+}
 
-	// ✅ All checks passed - agent qualifies for auto-verification
-	return true
+// isEd25519PublicKey reports whether value is a base64-encoded Ed25519
+// public key.
+func isEd25519PublicKey(value string) bool {
+	_, err := crypto.DecodePublicKey(value)
+	return err == nil
+}
+
+// registrationPendingReason returns why a registration in orgID leaves the
+// agent pending, or "" when the agent is verified at registration: an
+// organization in strict mode verifies each agent by hand, and in monitoring
+// mode the agent must qualify (autoVerifyRefusal).
+func (s *AgentService) registrationPendingReason(orgID uuid.UUID, agent *domain.Agent) string {
+	if s.inStrictMode(orgID) {
+		return strictModePendingReason
+	}
+	return autoVerifyRefusal(agent)
 }
 
 // GetAgent retrieves an agent by ID

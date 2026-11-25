@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added: a pending registration prints why
+
+- When the server answers a registration with `status: pending` and a `statusReason`, the registration output prints
+  the reason on the line under the status, for example `pending: the organization is in strict mode; an administrator
+  verifies the agent under Agents in the dashboard`. Without the `rich` extra the reason is wrapped in the panel, not
+  truncated.
+
 ### Added: `aim_sdk.telemetry.guard`, the NanoMind-Guard socket client (stage 2 of #441)
 
 - `NanoMindGuardClient.classify(text)` sends `{"op": "classify", "text": ...}` as one JSON line over the daemon's

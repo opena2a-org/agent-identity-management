@@ -40,7 +40,9 @@ agent = secure("my-first-agent", capabilities=["db:read"])
 
 `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
 
-The agent starts `pending` until an administrator verifies it under Agents in the dashboard. On a new organization, which starts in monitoring mode (described below), a pending agent's call runs and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until the agent is verified. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
+On a new organization, which starts in monitoring mode (described below), the agent is registered `verified`. On a strict-mode organization it starts `pending` until an administrator verifies it under Agents in the dashboard. A registration that leaves the agent `pending` prints the reason under its status.
+
+A pending agent's call runs in monitoring mode and AIM raises an `Unverified Agent Action (Monitoring Mode)` alert for it. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until the agent is verified. Verify the agent before its first call: on a strict-mode organization, calls refused while pending are recorded against the agent's trust score, and a denied call after that can suspend it (measured 2026-09-23; an agent verified first is not affected).
 
 Once it is verified, protect a function with the capability the agent holds and call it:
 

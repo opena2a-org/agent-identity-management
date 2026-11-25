@@ -273,6 +273,32 @@ describe('AIMClient', () => {
       expect(client.isAuthenticated()).toBe(true);
     });
 
+    it('derives the display name and description from the name, as the Python and Java SDKs do', async () => {
+      vi.stubGlobal('fetch', mockFetch);
+      const client = new AIMClient({ apiKey: 'test-api-key' });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            id: 'agent-uuid-321',
+            name: 'my-first-agent',
+            displayName: 'my-first-agent',
+            status: 'pending',
+            statusReason: 'pending: trust score 0.25 is below the threshold 0.30',
+            trustScore: 0.25,
+          }),
+      });
+
+      const agent = await client.registerAgent({ name: 'my-first-agent', capabilities: ['db:read'] });
+
+      const [, init] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+      const sent = JSON.parse(init.body as string);
+      expect(sent.displayName).toBe('my-first-agent');
+      expect(sent.description).toBe('Agent my-first-agent registered via AIM SDK');
+      expect(sent.capabilities).toEqual(['db:read']);
+      expect(agent.statusReason).toBe('pending: trust score 0.25 is below the threshold 0.30');
+    });
+
     it('should handle wrapped response format for backward compatibility', async () => {
       vi.stubGlobal('fetch', mockFetch);
       const client = new AIMClient({ apiKey: 'test-api-key' });

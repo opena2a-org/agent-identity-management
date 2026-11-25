@@ -118,12 +118,12 @@ func TestQuickStartReadmes_StateWhichModeRefusesAPendingAgent(t *testing.T) {
 
 			var paragraph string
 			for _, p := range strings.Split(string(raw), "\n\n") {
-				if strings.HasPrefix(p, "The agent starts `pending`") {
+				if strings.HasPrefix(p, "A pending agent's call") {
 					paragraph = p
 					break
 				}
 			}
-			require.NotEmpty(t, paragraph, "%s: the Quick start must say the agent starts pending", rel)
+			require.NotEmpty(t, paragraph, "%s: the Quick start must say what a pending agent's call does", rel)
 
 			quoted := "`" + unverifiedAgentStrictDenial + "`"
 			require.Contains(t, paragraph, quoted, "%s: the paragraph must quote the strict-mode refusal", rel)

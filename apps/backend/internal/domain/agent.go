@@ -117,6 +117,10 @@ type Agent struct {
 	// the agent is for (atx-spec core.md §1.5). Identity/attestation + offline
 	// detection signal only; never an authorization input. Nil = not declared.
 	DeclaredPurpose *DeclaredPurpose `json:"declaredPurpose,omitempty"`
+	// PendingReason says why a registration left the agent pending, for
+	// example "pending: the organization is in strict mode". It is set only on
+	// the agent a registration returns, and never stored.
+	PendingReason string `json:"-"`
 }
 
 // AgentListFilter narrows a list of an organization's agents to the agents

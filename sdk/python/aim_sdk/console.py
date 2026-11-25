@@ -6,6 +6,7 @@ Uses Rich library when available, falls back to simple formatting otherwise.
 """
 
 import sys
+import textwrap
 from typing import Optional, Dict, Any, List
 
 from ._dashboard import JIT_APPROVALS_PAGE
@@ -48,6 +49,12 @@ _PANEL_BORDER_TOP = "╭" + "─" * 49 + "╮"
 _PANEL_BORDER_MID = "├" + "─" * 49 + "┤"
 _PANEL_BORDER_BOTTOM = "╰" + "─" * 49 + "╯"
 _PANEL_FIELD = 46
+
+
+def _escape_markup(text: str) -> str:
+    """Text from the server, printed through rich as written: a "[" would
+    otherwise open a markup tag."""
+    return str(text).replace("[", "\\[")
 
 
 def _panel_row(text: str) -> str:
@@ -128,9 +135,14 @@ class AIMConsole:
         trust_score: float,
         status: str,
         capabilities: Optional[List[str]] = None,
-        mcp_servers: Optional[List[str]] = None
+        mcp_servers: Optional[List[str]] = None,
+        status_reason: Optional[str] = None
     ):
-        """Display beautiful agent registration success message."""
+        """Display beautiful agent registration success message.
+
+        status_reason is the server's statusReason: why the registration left
+        the agent pending. It prints on its own line, under the status.
+        """
         if self.quiet:
             return
 
@@ -139,12 +151,12 @@ class AIMConsole:
         if RICH_AVAILABLE:
             self._agent_registered_rich(
                 name, agent_id, agent_type, version,
-                trust_score, status, capabilities, mcp_servers
+                trust_score, status, capabilities, mcp_servers, status_reason
             )
         else:
             self._agent_registered_simple(
                 name, agent_id, agent_type, version,
-                trust_score, status, capabilities, mcp_servers
+                trust_score, status, capabilities, mcp_servers, status_reason
             )
 
     def _agent_registered_rich(
@@ -156,7 +168,8 @@ class AIMConsole:
         trust_score: float,
         status: str,
         capabilities: Optional[List[str]] = None,
-        mcp_servers: Optional[List[str]] = None
+        mcp_servers: Optional[List[str]] = None,
+        status_reason: Optional[str] = None
     ):
         """Rich formatted agent registration output - compact professional style."""
         # Status indicator
@@ -173,6 +186,8 @@ class AIMConsole:
 
         self.console.print(f"  [dim]ID:[/] {id_short}  [dim]Type:[/] [magenta]{agent_type}[/]  [dim]Version:[/] {version}")
         self.console.print(f"  [dim]Status:[/] [{status_color}]{status_icon} {status}[/]  [dim]Trust:[/] {trust_str}")
+        if status_reason:
+            self.console.print(f"  [{status_color}]{_escape_markup(status_reason)}[/]")
 
         if capabilities:
             cap_str = ", ".join(capabilities)
@@ -189,7 +204,8 @@ class AIMConsole:
         trust_score: float,
         status: str,
         capabilities: Optional[List[str]] = None,
-        mcp_servers: Optional[List[str]] = None
+        mcp_servers: Optional[List[str]] = None,
+        status_reason: Optional[str] = None
     ):
         """Simple formatted agent registration output."""
         print()
@@ -201,6 +217,11 @@ class AIMConsole:
         print(_panel_row(f"Type:        {agent_type}"))
         print(_panel_row(f"Version:     {version}"))
         print(_panel_row(f"Status:      {status}"))
+        if status_reason:
+            # Wrapped, not truncated: the reason is the one line that says
+            # what to do about a pending agent.
+            for line in textwrap.wrap(str(status_reason), _PANEL_FIELD):
+                print(_panel_row(line))
         # None means the server sent no score; print that rather than a number.
         if trust_score is None:
             trust_display = "N/A"

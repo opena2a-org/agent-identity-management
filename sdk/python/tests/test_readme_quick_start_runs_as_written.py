@@ -472,7 +472,7 @@ def printed_line_pattern(module, marker):
 
 def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monkeypatch, capsys):
     """Holds the captured lines to the format this SDK prints, and to the call above them:
-    the agent name, its capabilities and the pending status. The values the server returns,
+    the agent name, its capabilities and a registration status. The values the server returns,
     the ID, type, version and trust score, are read from the capture and printed back
     through this SDK's console, so they are not checked: the trust score is computed by the
     server, and changing "Trust: 59%" to "Trust: 95%" keeps this test green by design.
@@ -517,7 +517,9 @@ def test_root_readme_register_output_is_what_this_sdk_prints_for_that_call(monke
     assert shown["capabilities"] == ", ".join(capabilities), (
         "the captured output lists different capabilities than the call grants"
     )
-    assert shown["status"] == "pending", "a newly registered agent is pending until verified"
+    assert shown["status"] in ("verified", "pending"), (
+        "a newly registered agent is verified at registration in monitoring mode, else pending"
+    )
 
     # The README elides the ID line in place, since it carries the agent's version;
     # the sidecar's untrimmed capture keeps it, and the line printed here must equal it.
