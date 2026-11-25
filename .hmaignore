@@ -31,34 +31,14 @@
 # Each line exempts its file from AST-CRED-003 only; every other check,
 # including the other credential checks, still reads the file. Delete a
 # line once the file stops matching.
-apps/backend/cmd/bootstrap/aim_backend_script_test.go:AST-CRED-003 # DATABASE_URL strings whose passwords are the made-up FAKE...PLACEHOLDER values the script is asserted to percent-decode
 apps/backend/cmd/server/admin_seed_log_test.go:AST-CRED-003 # alphabet-pattern passwords the test asserts are never logged
-apps/backend/cmd/server/database_conn_string_test.go:AST-CRED-003 # the made-up password "plain" the test's own recording Postgres receives over net.Pipe
 apps/backend/cmd/server/bootstrap_token_routes_test.go:AST-CRED-003 # bootstrap tokens the test mints in-process and posts to its own app
 apps/backend/cmd/server/metrics_wiring_test.go:AST-CRED-003 # sample bearer tokens built from digits and a-f
 apps/backend/cmd/server/migrations_renumbered_row_integration_test.go:AST-CRED-003 # a migration file name containing "key"
-apps/backend/cmd/server/quickstart_admin_seed_test.go:AST-CRED-003 # the made-up password "FAKEnoSpecial0" and .env lines the test writes to a temporary directory
 apps/backend/internal/application/agent_service_test.go:AST-CRED-003 # the placeholder string "encrypted-private-key"
 apps/backend/internal/application/api_key_service_test.go:AST-CRED-003 # the `aim_live_` prefix an API key is asserted to start with
 apps/backend/internal/application/device_auth_service_session_test.go:AST-CRED-003 # a labelled test-only JWT secret set with t.Setenv, and device codes minted in-process
 apps/backend/internal/application/device_auth_service_single_use_test.go:AST-CRED-003 # device codes minted in-process by the shared test helper
-sdk/typescript/src/cli/init.test.ts:AST-CRED-003 # the made-up bootstrap token `aim_ob_Xk3q...` the test sends to its own in-process server and asserts is never printed
-
-# A Python SDK test that checks RevocationUnknownError survives a pickle
-# round trip, so a caller can pass it between processes. NEMO-009 reads
-# any `pickle.load` as unsafe deserialization; the bytes the test loads
-# are the ones `pickle.dumps` made from an error the test built a line
-# earlier, and nothing from outside the test reaches them. The line
-# exempts the file from NEMO-009 only.
-sdk/python/tests/test_revocation_unknown_error.py:NEMO-009 # pickle.loads reads back only the bytes pickle.dumps made from an error the test built itself
-
-# The server's blocklist of known development secrets and template
-# placeholders, such as the JWT_SECRET placeholder in .env.example. The
-# list stores only SHA-256 digests; AST-CRED-003 reads a 64-character hex
-# string under a name containing "secret" as a hardcoded secret. The list
-# lives in its own file so config.go stays under every check, and
-# config_test.go fails if a plaintext from the list appears in either file.
-apps/backend/internal/config/dev_secret_digests.go:AST-CRED-003 # SHA-256 digests of dev secrets the server refuses; no plaintext
 
 # A local smoke script a developer runs against a throwaway Postgres
 # container (DOCKERINJ-001, "docker exec with variable interpolation").
