@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   distribution's metadata exists without a `direct_url.json`, which pip writes (PEP 610) for an install from a local
   directory, a VCS URL or an archive URL and never for an install from a package index. A source tree on
   `PYTHONPATH`, an install from a clone and a copy without distribution metadata print the qualifier.
+- An install from a wheel or archive file or URL (`archive_info` in `direct_url.json`) may be the published wheel
+  itself, so it is not called a source build: it prints `aim-sdk <version> (installed from an archive file or URL)`.
+  Installs from a local directory (`dir_info`) or a VCS URL (`vcs_info`), and a `direct_url.json` that is not valid
+  JSON, still print the `+source` qualifier.
 - Measured on Python 3.14.3: a source tree with the previous `cli.py`, the same tree installed with
   `pip install <directory>`, and aim-sdk 2.0.3 installed from PyPI each printed `aim-sdk 2.0.3` for
   `aim-sdk --version`, `aim-sdk -V` and `aim-sdk version`. The source build has `init`, `demo`, `help`,
