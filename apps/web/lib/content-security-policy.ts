@@ -83,9 +83,9 @@ export function connectSourcePolicy({ apiUrl, extraConnectSources = [] }: Connec
 // not-found answer. It does not set them on a path next.config.ts rewrites to the
 // backend, nor on a redirect from redirects() or for a trailing slash, so those
 // responses do not carry this policy.
-// The source is "/(.*)". The built server sets the header on "/" with "/:path*" as
-// well; the servedHeaders helper in next-config.test.ts matches a source strictly,
-// and under strict matching "/:path*" does not match "/".
+// The source is "/(.*)", which matches every path, "/" included. The server matches a
+// source strictly but lets a trailing slash through, so a "/:path*" source would
+// match "/" too.
 export function dashboardHeaderRules({ development = false }: HeaderPolicyOptions = {}) {
   return [
     {
