@@ -24,9 +24,11 @@ import { join } from 'path';
  *       the project page;
  *   C2  sdk/python/setup.py `url` (the PyPI "Homepage" link) is the project
  *       page, and no `project_urls` entry named Homepage overrides it;
- *   C3  in README.md (GitHub), a line above the first `## ` heading starts
- *       with the Website link to the project page: the title is plain text
- *       and the project page is the Website link in the link row. The first
+ *   C3  in README.md (GitHub), a line in the `## Documentation` section
+ *       starts with the Website link to the project page: the title is plain
+ *       text, the top of the README is the one sentence and the Quick start,
+ *       and the project page is the Website link in the link row at the end
+ *       of the documentation section. The first
  *       link in sdk/python/README.md (the PyPI description),
  *       sdk/typescript/README.md (the npm readme) and sdk/java/README.md is
  *       the project page;
@@ -83,17 +85,18 @@ function firstLinkTarget(markdown: string): string | null {
 }
 
 /**
- * Whether a line above the first `## ` heading starts with the Website link
- * to the project page. The repository README's title is plain text; its
- * link row under the badges carries the project page as Website.
+ * Whether a line in the `## Documentation` section starts with the Website
+ * link to the project page. The repository README's title is plain text; the
+ * link row at the end of its documentation section carries the project page
+ * as Website.
  */
-function websiteLinkAboveFirstHeading(markdown: string): boolean {
+function websiteLinkInDocumentation(markdown: string): boolean {
   const lines = markdown.split('\n');
-  const heading = lines.findIndex((line) => line.startsWith('## '));
-  return (
-    heading !== -1 &&
-    lines.slice(0, heading).some((line) => line.startsWith(`[Website](${PROJECT_PAGE})`))
-  );
+  const start = lines.findIndex((line) => line === '## Documentation');
+  if (start === -1) return false;
+  const next = lines.findIndex((line, i) => i > start && line.startsWith('## '));
+  const section = lines.slice(start + 1, next === -1 ? lines.length : next);
+  return section.some((line) => line.startsWith(`[Website](${PROJECT_PAGE})`));
 }
 
 function setupPyHomepage(source: string): string | null {
@@ -156,10 +159,10 @@ describe('project page links on the README, npm, PyPI and Maven pages', () => {
 
   for (const readme of READMES) {
     if (readme === 'README.md') {
-      it(`C3: a line above the first heading in ${readme} starts with the Website link to the project page`, () => {
+      it(`C3: a line in the Documentation section of ${readme} starts with the Website link to the project page`, () => {
         expect(
-          websiteLinkAboveFirstHeading(read(readme)),
-          `${readme}: no line above the first "## " heading starts with [Website](${PROJECT_PAGE})`,
+          websiteLinkInDocumentation(read(readme)),
+          `${readme}: no line in the "## Documentation" section starts with [Website](${PROJECT_PAGE})`,
         ).toBe(true);
       });
       continue;
@@ -206,21 +209,21 @@ describe('project page links on the README, npm, PyPI and Maven pages', () => {
       expect(isProjectPage(firstLinkTarget(text)), JSON.stringify(text)).toBe(false);
     }
 
-    const refusedRootHeaders = [
-      // Root README before the change: the title links the page, and the
-      // Website link inside the description paragraph is the site root.
-      `# [OpenA2A AIM (Agent Identity Management)](${PROJECT_PAGE})\n\n` +
-        'Audit trails for AI agents. Apache 2.0. [Website](https://opena2a.org) · [Discord](https://discord.gg/x)\n\n' +
-        '## Quick start\n',
+    const refusedRootReadmes = [
+      // Root README before the change: the Website link sits above the Quick
+      // start, and there is no documentation section.
+      '# AIM\n\n' + `[Website](${PROJECT_PAGE}) · [Discord](https://discord.gg/x)\n\n` + '## Quick start\n',
       // A Website link that starts its line but is the site root.
-      '# AIM\n\n[Website](https://opena2a.org) · [AIM Cloud](https://aim.opena2a.org/get-started)\n\n## Quick start\n',
+      '# AIM\n\n## Documentation\n\n[Website](https://opena2a.org) · [AIM Cloud](https://aim.opena2a.org/get-started)\n',
       // The page with a trailing slash is a different URL.
-      `# AIM\n\n[Website](${PROJECT_PAGE}/)\n\n## Quick start\n`,
-      // A Website link below the first heading is not in the header.
-      `# AIM\n\n## Quick start\n\n[Website](${PROJECT_PAGE})\n`,
+      `# AIM\n\n## Documentation\n\n[Website](${PROJECT_PAGE}/)\n`,
+      // A Website link in the section after Documentation is not in it.
+      `# AIM\n\n## Documentation\n\n- [Roadmap](ROADMAP.md)\n\n## License\n\n[Website](${PROJECT_PAGE})\n`,
+      // A Website link inside a list item does not start its line.
+      `# AIM\n\n## Documentation\n\n- [Website](${PROJECT_PAGE})\n`,
     ];
-    for (const text of refusedRootHeaders) {
-      expect(websiteLinkAboveFirstHeading(text), JSON.stringify(text)).toBe(false);
+    for (const text of refusedRootReadmes) {
+      expect(websiteLinkInDocumentation(text), JSON.stringify(text)).toBe(false);
     }
 
     const refusedSetups = [
@@ -245,12 +248,15 @@ describe('project page links on the README, npm, PyPI and Maven pages', () => {
       expect(isProjectPage(firstLinkTarget(text)), JSON.stringify(text)).toBe(true);
     }
 
-    const acceptedRootHeader =
+    const acceptedRootReadme =
       '# OpenA2A AIM (Agent Identity Management)\n\n' +
-      '[![Status: stable](https://img.shields.io/badge/status-stable-green)](STATUS.md)\n\n' +
+      '[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)\n\n' +
+      '## Quick start\n\n' +
+      '## Documentation\n\n' +
+      '- [Roadmap](ROADMAP.md)\n\n' +
       `[Website](${PROJECT_PAGE}) · [AIM Cloud](https://aim.opena2a.org/get-started)\n\n` +
-      '## Quick start\n';
-    expect(websiteLinkAboveFirstHeading(acceptedRootHeader), JSON.stringify(acceptedRootHeader)).toBe(true);
+      '## Related projects\n';
+    expect(websiteLinkInDocumentation(acceptedRootReadme), JSON.stringify(acceptedRootReadme)).toBe(true);
 
     const acceptedSetup = `setup(\n    url="${PROJECT_PAGE}",\n    project_urls={"Source": "https://github.com/opena2a-org/agent-identity-management"},\n)\n`;
     expect(setupPyHomepage(acceptedSetup)).toBe(PROJECT_PAGE);

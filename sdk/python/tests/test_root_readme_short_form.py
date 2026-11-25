@@ -92,10 +92,11 @@ def test_readme_is_under_the_word_budget():
 
 
 # Sentences the short form keeps, so a reader meets no state the README does not name:
-# what pending means, the setting the refusal needs, where secure() writes, how the
+# what AIM does for a developer whose agent calls tools, what pending means, the setting the refusal needs, where secure() writes, how the
 # release on PyPI prints the captures, what the self-hosted install needs and writes,
 # where its login comes from, and that it is unpinned.
 KEPT_SENTENCES = [
+    "AIM gives each agent an identity",
     "until an administrator verifies it under Agents",
     "needs strict mode",
     "stores credentials at `~/.aim/`",
