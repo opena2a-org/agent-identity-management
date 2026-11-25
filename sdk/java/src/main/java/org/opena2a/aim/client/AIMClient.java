@@ -1010,7 +1010,8 @@ public class AIMClient implements AutoCloseable {
                     // recovery route (POST /api/v1/auth/sdk/recover) refuses an
                     // access token minted by refreshing a downloaded SDK's
                     // token, which is the access token this client holds, so
-                    // the banner names how to replace the credential.
+                    // the banner names how to replace the credential. A caller
+                    // holding a dashboard sign-in can use recoverRevokedToken.
                     String error = errorBody.toLowerCase();
                     if (error.contains("revoked") || error.contains("invalid") || error.contains("expired")) {
                         printTokenExpiredError();
@@ -1050,6 +1051,65 @@ public class AIMClient implements AutoCloseable {
             }
         } catch (IOException e) {
             throw new AuthenticationException("Failed to authenticate with refresh token: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Replaces a revoked SDK refresh token through {@code POST /api/v1/auth/sdk/recover}.
+     *
+     * <p>The route reads the revoked token from the body member {@code oldRefreshToken}. It
+     * mints only for the access token of a dashboard sign-in by the token's owner, which this
+     * client does not hold: the access tokens it obtains by refreshing a downloaded SDK's
+     * token are refused. So the caller supplies that sign-in's access token, which is sent as
+     * the bearer of this request only. On success the client uses the returned access and
+     * refresh tokens and saves them to the SDK credentials file.
+     *
+     * @param oldRefreshToken     the revoked SDK refresh token
+     * @param signedInAccessToken the access token of the owner's dashboard sign-in
+     * @throws AuthenticationException when the server refuses the recovery
+     */
+    public void recoverRevokedToken(String oldRefreshToken, String signedInAccessToken) {
+        if (oldRefreshToken == null || oldRefreshToken.isEmpty()) {
+            throw new IllegalArgumentException("oldRefreshToken is required");
+        }
+        if (signedInAccessToken == null || signedInAccessToken.isEmpty()) {
+            throw new IllegalArgumentException("signedInAccessToken is required");
+        }
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("oldRefreshToken", oldRefreshToken);
+
+        Request request = new Request.Builder()
+                .url(aimUrl + "/api/v1/auth/sdk/recover")
+                .header("Authorization", "Bearer " + signedInAccessToken)
+                .post(RequestBody.create(payload.toString(), JSON))
+                .build();
+
+        try (Response response = authClient.newCall(request).execute()) {
+            String responseBody = response.body() != null ? response.body().string() : "";
+            if (!response.isSuccessful()) {
+                logger.warn("SDK token recovery failed: {} - {}", response.code(), responseBody);
+                throw new AuthenticationException(
+                    "SDK token recovery failed with status " + response.code() + ": " + responseBody);
+            }
+            JsonNode json = objectMapper.readTree(responseBody);
+            String recoveredAccess = json.path("accessToken").asText("");
+            String recoveredRefresh = json.path("refreshToken").asText("");
+            if (recoveredAccess.isEmpty() || recoveredRefresh.isEmpty()) {
+                throw new AuthenticationException("SDK token recovery answered without an access and a refresh token");
+            }
+            tokenLock.lock();
+            try {
+                this.accessToken = recoveredAccess;
+                this.refreshToken = recoveredRefresh;
+                extractAndSaveTokenId(recoveredRefresh);
+                setTokenExpiryFromJWT(recoveredAccess);
+                updateStoredCredentials();
+            } finally {
+                tokenLock.unlock();
+            }
+            logger.debug("Recovered the revoked SDK refresh token");
+        } catch (IOException e) {
+            throw new AuthenticationException("Failed to recover the SDK refresh token: " + e.getMessage(), e);
         }
     }
 

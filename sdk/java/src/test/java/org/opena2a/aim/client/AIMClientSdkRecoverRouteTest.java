@@ -12,6 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.opena2a.aim.exceptions.AuthenticationException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -132,6 +134,8 @@ class AIMClientSdkRecoverRouteTest {
     private String recoveryKey;
     /** The access token the first refresh hands out; null when every refresh is refused. */
     private volatile String heldAccessToken;
+    /** The access token of the owner's dashboard sign-in, which a caller hands to recoverRevokedToken. */
+    private volatile String signInAccessToken;
     /** The body every refresh after the first is refused with. */
     private volatile String refusalBody = "{\"error\":\"Refresh token has been revoked\"}";
 
@@ -356,6 +360,74 @@ class AIMClientSdkRecoverRouteTest {
     }
 
     @Test
+    @DisplayName("recoverRevokedToken sends the revoked token as oldRefreshToken with the caller's sign-in bearer")
+    void recoverRevokedToken_sendsOldRefreshTokenWithTheSignInBearer() throws Exception {
+        // The recovery route mints for a dashboard sign-in's access token, which
+        // records a sign-in time. The caller supplies it; the client sends it as
+        // the bearer of the recovery request and the revoked token in the body.
+        heldAccessToken = null;
+        signInAccessToken = signInJwtExpiringIn(600);
+        String agentId = UUID.randomUUID().toString();
+
+        AIMClient client = new AIMClient.Builder()
+                .agentName("recover-route-agent")
+                .aimUrl(baseUrl())
+                .agentId(agentId)
+                .refreshToken(REFUSED_REFRESH_TOKEN)
+                .build();
+
+        Map<String, Object> result;
+        try {
+            client.recoverRevokedToken(REFUSED_REFRESH_TOKEN, signInAccessToken);
+            result = client.useMcpTool(UUID.randomUUID().toString(), "read_file",
+                    "http://localhost:3001", "filesystem-mcp");
+        } finally {
+            client.close();
+        }
+
+        List<RecordedRequest> requests = drainRequests();
+        assertEquals(1, count(requests, RECOVER_PATH), "requests: " + paths(requests));
+        RecordedRequest recovery = find(requests, RECOVER_PATH);
+        assertEquals("POST", recovery.getMethod());
+        assertEquals("Bearer " + signInAccessToken, recovery.getHeader("Authorization"));
+        JsonNode body = objectMapper.readTree(recovery.getBody().readUtf8());
+        assertEquals("oldRefreshToken", recoveryKey);
+        assertEquals(REFUSED_REFRESH_TOKEN, body.path("oldRefreshToken").asText(null),
+                "the recovery body does not carry oldRefreshToken: " + body);
+        assertFalse(body.has("old_refresh_token"), "the recovery body carries old_refresh_token: " + body);
+        assertEquals(1, body.size(), "the recovery body carries members the route does not read: " + body);
+
+        assertEquals(0, count(requests, REFRESH_PATH),
+                "the client refreshed instead of using the recovered access token; requests: " + paths(requests));
+        RecordedRequest call = find(requests, "/api/v1/sdk-api/agents/" + agentId + "/mcp-usage-report");
+        assertNotNull(call, "the client did not send the call after recovery; requests: " + paths(requests));
+        assertEquals("Bearer " + RECOVERED_ACCESS_TOKEN, call.getHeader("Authorization"));
+        assertEquals(Boolean.TRUE, result.get("success"), "the call after recovery failed: " + result.get("error"));
+    }
+
+    @Test
+    @DisplayName("recoverRevokedToken reports the route's refusal of an SDK-minted bearer")
+    void recoverRevokedToken_withAnSdkMintedBearer_isRefused() throws Exception {
+        heldAccessToken = jwtExpiringIn(600);
+        AIMClient client = new AIMClient.Builder()
+                .agentName("recover-route-agent")
+                .aimUrl(baseUrl())
+                .agentId(UUID.randomUUID().toString())
+                .refreshToken(REFUSED_REFRESH_TOKEN)
+                .build();
+        try {
+            AuthenticationException refused = assertThrows(
+                    AuthenticationException.class,
+                    () -> client.recoverRevokedToken(REFUSED_REFRESH_TOKEN, heldAccessToken));
+            assertTrue(refused.getMessage().contains("401"), refused.getMessage());
+        } finally {
+            client.close();
+        }
+        List<RecordedRequest> requests = drainRequests();
+        assertEquals(1, count(requests, RECOVER_PATH), "requests: " + paths(requests));
+    }
+
+    @Test
     @DisplayName("the recovery key is read from the backend handler source")
     void recoveryKey_isReadFromBackendSource() {
         // Guards the reader itself: a pattern that stopped matching the handler
@@ -378,11 +450,17 @@ class AIMClientSdkRecoverRouteTest {
 
     private MockResponse recover(RecordedRequest request) {
         String authorization = request.getHeader("Authorization");
-        if (heldAccessToken == null || !("Bearer " + heldAccessToken).equals(authorization)) {
+        String bearer = null;
+        for (String token : new String[] {heldAccessToken, signInAccessToken}) {
+            if (token != null && ("Bearer " + token).equals(authorization)) {
+                bearer = token;
+            }
+        }
+        if (bearer == null) {
             return json(401, "{\"error\":\"No authentication token provided\"}");
         }
         // The auth middleware refuses an access token whose exp has passed.
-        if (!Instant.now().isBefore(expiryOf(heldAccessToken))) {
+        if (!Instant.now().isBefore(expiryOf(bearer))) {
             return json(401, "{\"error\":\"Invalid or expired token\"}");
         }
         JsonNode body;
@@ -393,7 +471,7 @@ class AIMClientSdkRecoverRouteTest {
         }
         // The route refuses an access token that carries a family and records
         // no sign-in (refuseUnlessLiveSignIn), before it reads the old token.
-        JsonNode held = claimsOf(heldAccessToken);
+        JsonNode held = claimsOf(bearer);
         if (!held.path("sid").asText().isEmpty() && !held.has("auth_time")) {
             return json(401, "{\"error\":\"" + REVOKED_REFUSAL + "\"}");
         }
@@ -443,6 +521,19 @@ class AIMClientSdkRecoverRouteTest {
         String claims = "{\"typ\":\"access\",\"sid\":\"" + DOWNLOAD_FAMILY + "\",\"exp\":"
                 + (Instant.now().getEpochSecond() + seconds) + "}";
         return header + "." + encoder.encodeToString(claims.getBytes(StandardCharsets.UTF_8)) + ".held";
+    }
+
+    /**
+     * An unsigned JWT-shaped access token of a dashboard sign-in whose exp claim
+     * is the given seconds from now: it records the sign-in time as auth_time.
+     */
+    private static String signInJwtExpiringIn(long seconds) {
+        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+        long now = Instant.now().getEpochSecond();
+        String header = encoder.encodeToString("{\"alg\":\"none\",\"typ\":\"JWT\"}".getBytes(StandardCharsets.UTF_8));
+        String claims = "{\"typ\":\"access\",\"sid\":\"sign-in-session-1\",\"auth_time\":" + now
+                + ",\"exp\":" + (now + seconds) + "}";
+        return header + "." + encoder.encodeToString(claims.getBytes(StandardCharsets.UTF_8)) + ".signed-in";
     }
 
     /** The exp claim of a token made by {@link #jwtExpiringIn(long)}. */

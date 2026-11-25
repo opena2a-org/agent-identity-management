@@ -32,6 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `AIMClient.recoverRevokedToken(oldRefreshToken, signedInAccessToken)` replaces a revoked SDK refresh token
+  through `POST /api/v1/auth/sdk/recover`. It sends `{"oldRefreshToken": ...}`, the member the route reads,
+  with the caller's dashboard sign-in access token as the bearer of that request only: the route refuses the
+  access tokens the client mints by refreshing a downloaded SDK's token. On success the client uses the
+  returned access and refresh tokens and saves them to the SDK credentials file; a refusal throws
+  `AuthenticationException` with the status. Test: `AIMClientSdkRecoverRouteTest` checks the body carries
+  `oldRefreshToken` and no `old_refresh_token`, the bearer is the sign-in's, and the next call uses the
+  recovered access token; and that an SDK-minted bearer is refused.
 - `CredentialManager.withSdkCredentialsLock` runs an action while it holds a lock on the SDK credentials
   file: `~/.aim/sdk_credentials.json.lock`, beside `~/.aim/sdk_credentials.json`, or the same name beside
   another credentials file passed to the overload that also takes a timeout. The lock keeps processes of this
