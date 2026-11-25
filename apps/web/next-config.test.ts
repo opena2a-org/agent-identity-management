@@ -1,15 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import loadCustomRoutes from "next/dist/lib/load-custom-routes";
 import { normalizeConfig } from "next/dist/server/config-shared";
 import { buildCustomRoute } from "next/dist/server/lib/router-utils/filesystem";
 import { PHASE_PRODUCTION_SERVER } from "next/dist/shared/lib/constants";
-import { getPathMatch } from "next/dist/shared/lib/router/utils/path-match";
 import { compileNonPath, matchHas } from "next/dist/shared/lib/router/utils/prepare-destination";
 import nextConfig from "./next.config.js";
-import { headerContentSecurityPolicy } from "./lib/content-security-policy";
+import { dashboardHeaderRules, headerContentSecurityPolicy } from "./lib/content-security-policy";
 import { UNDECODABLE_PATH_DESTINATION } from "./lib/undecodable-path";
 
 // The backend serves the Prometheus exposition on its own listener, loopback
@@ -157,16 +156,17 @@ describe("dashboard paths with an escape that does not decode", () => {
 // The headers the server sends for a page, worked out with the server's own route
 // code the way it applies header rules: every rule whose source and `has` match, in
 // order, with the path and `has` captures substituted into the value, and a later
-// rule replacing an earlier one's value. It models pages only: it also reports a
-// header for a path the server redirects or rewrites to the backend, where the
-// server does not set one, and it matches a source strictly, where the built server
-// also sets a "/:path*" rule's header on "/".
+// rule replacing an earlier one's value. A source is matched by the route the server
+// builds for it, which also takes the path with a trailing slash, so a "/:path*"
+// rule's header is set on "/". It models pages only: it also reports a header for a
+// path the server redirects or rewrites to the backend, where the server does not
+// set one.
 async function servedHeaders(pathname: string, host: string): Promise<Record<string, string>> {
   const resolved = await normalizeConfig(PHASE_PRODUCTION_SERVER, nextConfig);
   const { headers: rules } = await loadCustomRoutes(resolved);
   const served: Record<string, string> = {};
   for (const rule of rules) {
-    let params = getPathMatch(rule.source, { strict: true, removeUnnamedParams: true })(pathname);
+    let params = buildCustomRoute("header", rule).match(pathname);
     if (params && (rule.has || rule.missing)) {
       const captured = matchHas({ headers: { host } } as never, {}, rule.has, rule.missing);
       params = captured ? Object.assign(params, captured) : false;
@@ -200,6 +200,33 @@ describe("dashboard Content-Security-Policy", () => {
       const served = await servedHeaders(page, "localhost");
       expect(served["content-security-policy"], page).toBe(headerContentSecurityPolicy());
     }
+  });
+
+  // The comment on dashboardHeaderRules says how the server matches the rule's source
+  // against "/"; it is held to the route the server builds.
+  it("is described by its comment the way the server matches it on /", () => {
+    const source = readFileSync(join(__dirname, "lib", "content-security-policy.ts"), "utf8");
+    const comment = source
+      .slice(0, source.indexOf("export function dashboardHeaderRules"))
+      .split("\n\n")
+      .pop()!
+      .split("\n")
+      .map((line) => line.replace(/^\/\/ ?/, ""))
+      .join(" ");
+    const serverMatches = (pattern: string, path: string) =>
+      Boolean(buildCustomRoute("header", { source: pattern, headers: [] }).match(path));
+
+    expect(dashboardHeaderRules().map((rule) => rule.source)).toEqual(["/(.*)"]);
+    expect(comment).toContain('The source is "/(.*)", which matches every path, "/" included.');
+    expect(serverMatches("/(.*)", "/")).toBe(true);
+
+    // The server matches strictly but lets a trailing slash through: "/:path*" takes
+    // "/" and "/dashboard/", and no path with a segment it does not name.
+    expect(serverMatches("/:path*", "/")).toBe(true);
+    expect(serverMatches("/:path*", "/dashboard/")).toBe(true);
+    expect(serverMatches("/dashboard", "/dashboard/x")).toBe(false);
+    expect(comment).toContain('lets a trailing slash through, so a "/:path*" source would match "/" too.');
+    expect(comment).not.toMatch(/"\/:path\*" does not match "\/"/);
   });
 
   // The header is fixed when the dashboard is built. The API origin, and the backend a
