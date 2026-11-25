@@ -14,7 +14,10 @@ release when no VERSION file sits beside the imported package (a source tree
 and the sdist carry one; a wheel installs the package without it) and the
 aim-sdk distribution's metadata exists without a `direct_url.json`. pip writes
 that file (PEP 610) for an install from a local directory, a VCS URL or an
-archive URL, and never for an install from a package index.
+archive URL, and never for an install from a package index. An install from a
+wheel or archive file or URL (`archive_info`) may be the published wheel, so it
+prints `aim-sdk <v> (installed from an archive file or URL)`; `dir_info` and
+`vcs_info` installs stay source builds.
 
 `version --json`, `aim_sdk.__version__` and the User-Agents stay the bare
 version.
@@ -47,6 +50,20 @@ VERSION_LINES = [
 
 # What pip writes for `pip install ./sdk/python` (PEP 610).
 DIRECTORY_INSTALL = '{"url": "file:///x", "dir_info": {}}'
+# ... for `pip install git+https://...` (PEP 610).
+VCS_INSTALL = '{"url": "https://example.invalid/aim.git", "vcs_info": {"vcs": "git", "commit_id": "0123abc"}}'
+# ... for `pip install <wheel file>` and `pip install <wheel URL>` (PEP 610).
+ARCHIVE_INSTALLS = [
+    pytest.param(
+        '{"url": "file:///tmp/aim_sdk-1-py3-none-any.whl", "archive_info": {"hashes": {"sha256": "00"}}}',
+        id="wheel-file",
+    ),
+    pytest.param(
+        '{"url": "https://example.invalid/aim_sdk-1-py3-none-any.whl", "archive_info": {}}',
+        id="wheel-url",
+    ),
+]
+ARCHIVE_LINE = f"aim-sdk {VERSION} (installed from an archive file or URL)"
 
 
 def _run(argv, capsys):
@@ -118,6 +135,46 @@ def test_a_copy_installed_from_a_directory_prints_the_source_build_qualifier(
     argv, capsys, monkeypatch, tmp_path
 ):
     _installed(monkeypatch, tmp_path, _Distribution(direct_url=DIRECTORY_INSTALL))
+
+    code, out = _run(argv, capsys)
+
+    assert code == 0
+    assert out == SOURCE_LINE + "\n"
+
+
+@pytest.mark.parametrize("argv", VERSION_LINES)
+def test_a_copy_installed_from_a_vcs_url_prints_the_source_build_qualifier(
+    argv, capsys, monkeypatch, tmp_path
+):
+    _installed(monkeypatch, tmp_path, _Distribution(direct_url=VCS_INSTALL))
+
+    code, out = _run(argv, capsys)
+
+    assert code == 0
+    assert out == SOURCE_LINE + "\n"
+
+
+@pytest.mark.parametrize("direct_url", ARCHIVE_INSTALLS)
+@pytest.mark.parametrize("argv", VERSION_LINES)
+def test_a_copy_installed_from_a_wheel_file_or_url_is_not_called_a_source_build(
+    argv, direct_url, capsys, monkeypatch, tmp_path
+):
+    """A wheel installed from a file or URL may be the published wheel itself."""
+    _installed(monkeypatch, tmp_path, _Distribution(direct_url=direct_url))
+
+    code, out = _run(argv, capsys)
+
+    assert code == 0
+    assert out == ARCHIVE_LINE + "\n"
+    assert "+source" not in out
+    assert "built from source" not in out
+
+
+@pytest.mark.parametrize("argv", VERSION_LINES)
+def test_an_unreadable_direct_url_prints_the_source_build_qualifier(
+    argv, capsys, monkeypatch, tmp_path
+):
+    _installed(monkeypatch, tmp_path, _Distribution(direct_url="not json"))
 
     code, out = _run(argv, capsys)
 

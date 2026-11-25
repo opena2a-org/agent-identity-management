@@ -91,17 +91,42 @@ def cli_version():
     for an install from a local directory, a VCS URL or an archive URL, and
     never for an install from a package index. A source tree on PYTHONPATH, an
     install from a clone and a copy without distribution metadata are source
-    builds. `version --json`, `__version__` and the User-Agent stay the bare
-    version.
+    builds.
+
+    An install from a wheel or archive file or URL (`archive_info` in
+    direct_url.json) may be the published wheel itself, so it is not called a
+    source build: it prints `<version> (installed from an archive file or URL)`.
+    `dir_info` and `vcs_info` installs, and a direct_url.json this cannot read,
+    stay source builds. `version --json`, `__version__` and the User-Agent stay
+    the bare version.
     """
     if not os.path.exists(_version_file()):
         try:
             from importlib.metadata import distribution
-            if distribution("aim-sdk").read_text("direct_url.json") is None:
+            direct_url = distribution("aim-sdk").read_text("direct_url.json")
+            if direct_url is None:
                 return __version__
+            if _is_archive_install(direct_url):
+                return f"{__version__} (installed from an archive file or URL)"
         except Exception:  # PackageNotFoundError, or metadata it cannot read
             pass
     return f"{__version__}+source (built from source; not the published {__version__})"
+
+
+def _is_archive_install(direct_url):
+    """True when a PEP 610 direct_url.json names an install from a wheel or
+    archive file or URL (`archive_info`), and neither a local directory
+    (`dir_info`) nor a VCS checkout (`vcs_info`)."""
+    try:
+        record = json.loads(direct_url)
+    except ValueError:
+        return False
+    return (
+        isinstance(record, dict)
+        and isinstance(record.get("archive_info"), dict)
+        and "dir_info" not in record
+        and "vcs_info" not in record
+    )
 
 
 class _VersionLineAction(argparse.Action):
