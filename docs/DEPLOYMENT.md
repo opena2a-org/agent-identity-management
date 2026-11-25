@@ -226,6 +226,12 @@ DATABASE_URL=postgresql://postgres:your_password@postgres:5432/identity?sslmode=
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your_password
 POSTGRES_DB=identity
+# Optional: a hot standby that answers the verification path's reads while it
+# holds every committed write (see Read Replica for the Verification Path).
+# Unset or empty, every read goes to the primary. Write it as DATABASE_URL is
+# written, with the replica's host (for example postgres-replica:5432) and the
+# role and password the server uses on the primary.
+# POSTGRES_REPLICA_URL=
 
 # Redis
 REDIS_URL=redis://redis:6379/0
@@ -695,6 +701,33 @@ With `POSTGRES_APP_USER` and `POSTGRES_APP_PASSWORD` set, it first creates or up
 **Upgrading across the agent private key data key change.** A build that encrypts each agent private key under a data key of its own writes format v3, and still reads the keys stored in format v2: the startup sweep moves a v2 key under an older storage key id to format v3, and a v2 key under the current id stays as it is. A build from before that change refuses format v3, so a key it reads in v3 fails on the request path until that agent's credentials are rotated. Stop every instance of the earlier build before the first instance of the new one starts, and take a database backup first if you may roll back.
 
 **Finding the agents whose stored key does not open.** The startup conversion logs the rows it cannot read only as a count. `aim-server check-agent-keys` names them: it reads every stored agent private key, with the `POSTGRES_*` variables as `aim-server migrate` does and the `KEYVAULT_MASTER_KEY` variables the server runs with, writes nothing, and prints one line for each agent whose key does not open for its own row, `agent=<id> organization=<id> key=v1` or `key=unreadable`, then logs the counts. While the conversion is not recorded complete, the next server start converts the `v1` keys it reads. Once it is recorded complete, a `v1` key stays refused like an `unreadable` one: rotate that agent's credentials with `POST /api/v1/agents/<id>/rotate-credentials`. The command refuses to run without `KEYVAULT_MASTER_KEY`, because a master key generated for the run opens no stored key.
+
+### Read Replica for the Verification Path
+
+`POSTGRES_REPLICA_URL` is the connection string of a PostgreSQL read replica. Unset or empty, the default, every read goes to the primary. When it is set, the server opens a second pool on the replica with the same `POSTGRES_POOL_ROLE`, `POSTGRES_MAX_CONNECTIONS` and `POSTGRES_CONN_MAX_LIFETIME` as the primary's, and the capability decision of each verification reads from the replica whenever the replica is current.
+
+The replica must be a physical streaming replica in hot standby (`hot_standby = on`), so it carries the primary's roles and row-level security policies. Connect to it as the same role the server uses on the primary. A logical replica, or any server that is not a standby, is never read: the server sees that it is not replaying the primary's write-ahead log and reads the primary instead.
+
+**What the replica answers.** The capability decision is `AgentService.VerifyCapability`: the whole of `POST /api/v1/agents/:id/verify-capability` after its ownership check, and step 1 of `POST /api/v1/verifications`. When the replica is current, that decision reads these from it:
+
+- the agent: its status, trust score and organization
+- the capabilities granted to the agent, for the capability check, the honeytoken check and the config drift policy's capability checks
+- the definition of the requested capability: the minimum trust score it requires
+- the organization's enforcement mode
+- the organization's security policies of every type the decision evaluates: capability violation, low trust score, data exfiltration, unusual activity, config drift and unauthorized access
+
+**What stays on the primary.**
+
+- Every write: violation records, alerts, trust score updates, a suspension, audit entries and verification events.
+- The handler's ownership check, which loads the agent before the decision to confirm that it belongs to the caller's organization.
+- The history the policy evaluators read: data transfers, behaviour baselines, recent audit actions and the verification-event statistics behind the low trust score check.
+- The trust score policy that runs after a capability violation lowers an agent's score: it reads the score that was just written.
+- The rest of `POST /api/v1/verifications`: the agent lookup and the signature and key checks before the decision, and the FGA policy steps and the intent check after it.
+- Every read outside verification.
+
+**Revocations take effect at once.** A replica replays the primary's writes after a delay. Before each verification the server reads the primary's current write-ahead log position (`pg_current_wal_lsn()`) and asks the replica whether it has replayed up to that position (`pg_last_wal_replay_lsn()`). The replica answers that verification's reads only if it has. Every transaction the primary had committed before the verification began is then visible to it: a suspended or revoked agent, a revoked grant, a changed capability definition or enforcement mode, and a disabled or changed policy. All of one verification's reads come from the same side, so a decision never mixes the replica's agent with the primary's grants. When the replica is behind, cannot be reached, takes more than 250 ms to answer the check or is not a standby, the verification reads the primary. The check costs one query on the primary and one on the replica per verification.
+
+**Startup.** An unparseable `POSTGRES_REPLICA_URL` is logged as `Read replica not used: POSTGRES_REPLICA_URL is not a valid connection string` and the server runs on the primary alone; the log line leaves out the value because it holds a password. A replica that cannot be reached at startup is logged and kept: verifications read the primary until it answers. A configured replica logs `Read replica configured: verification reads use it while it holds every committed write, the primary otherwise`.
 
 ---
 
