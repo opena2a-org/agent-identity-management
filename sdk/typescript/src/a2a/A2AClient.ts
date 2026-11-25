@@ -48,6 +48,7 @@ import type {
   A2ARegisteredSkill,
   A2ASkillAttestation,
   A2AConsensusResult,
+  A2APolicyDecision,
 } from './types';
 
 const A2A_BASE_PATH = '/api/v1/a2a';
@@ -478,19 +479,24 @@ export class A2AClient {
   // ==================== Policy Evaluation ====================
 
   /**
-   * Evaluate cross-agent policy for an operation.
+   * Evaluate the A2A policies of the caller's organization for an event
+   * between this agent (the client) and a remote agent.
+   *
+   * POST /api/v1/a2a/policies/evaluate reads `event`, `clientAgentId`,
+   * `remoteAgentId` and `skillId`; the organization is the one the caller's
+   * credentials carry.
+   *
+   * @param event - The event, e.g. `task.create` or `task.received`
+   * @param remoteAgentId - ID of the remote agent
+   * @param skillId - The skill the event invokes, if any
+   * @returns The decision, ALLOW or DENY, and the policies evaluated
    */
-  async evaluatePolicy(
-    targetAgentId: string,
-    action: string,
-    resource: string,
-    context?: Record<string, unknown>
-  ): Promise<{ allowed: boolean; reason?: string }> {
-    return this.post(`${A2A_BASE_PATH}/policies/evaluate`, {
-      targetAgentId,
-      action,
-      resource,
-      context,
+  async evaluatePolicy(event: string, remoteAgentId: string, skillId?: string): Promise<A2APolicyDecision> {
+    return this.post<A2APolicyDecision>(`${A2A_BASE_PATH}/policies/evaluate`, {
+      event,
+      clientAgentId: this.agentId || this.getAgentId(),
+      remoteAgentId,
+      skillId,
     });
   }
 

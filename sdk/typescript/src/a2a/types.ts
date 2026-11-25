@@ -335,3 +335,17 @@ export interface A2AConsensusResult {
   confidenceScore: number;
   isVerified: boolean;
 }
+
+/**
+ * A2A Policy Decision - the answer of POST /api/v1/a2a/policies/evaluate
+ *
+ * `decision` is ALLOW or DENY. `policiesEvaluated` names each active policy of
+ * the caller's organization that was walked; `reason` names the policy that
+ * denied, when one did.
+ */
+export interface A2APolicyDecision {
+  decision: 'ALLOW' | 'DENY' | string;
+  policiesEvaluated: string[];
+  reason?: string;
+  evaluatedAt: string;
+}

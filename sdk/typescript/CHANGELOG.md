@@ -7,6 +7,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed: `A2AClient.evaluatePolicy` sends the request the server reads (#652)
+
+- `POST /api/v1/a2a/policies/evaluate` reads `event`, `clientAgentId`, `remoteAgentId` and `skillId`.
+  `evaluatePolicy(targetAgentId, action, resource, context)` sent none of them, so every policy was evaluated for the
+  zero client agent with no skill, and its answer was typed `{ allowed, reason }`, which the route does not answer.
+  It is now `evaluatePolicy(event, remoteAgentId, skillId?)`: the client agent is the one the `A2AClient` was made
+  for, and the answer is the new `A2APolicyDecision` (`decision`, `policiesEvaluated`, `reason?`, `evaluatedAt`).
+- **Breaking change.** Pass the event (for example `task.create`) first and the remote agent's ID second; read
+  `decision === 'ALLOW'` in place of `allowed`. `resource` and `context` are no longer taken, as the route never read
+  them.
+- The request is pinned in `tests/fixtures/sdk_requests/a2a_evaluate_policy.json`, which the backend's handler test
+  POSTs to the route. Tests: `src/a2a/evaluatePolicy.wire.test.ts`.
+
 ### Fixed: `A2AClient.registerSkill` sends each example as a string (#652)
 
 - `POST /api/v1/a2a/skills` reads a skill's examples as strings. `registerSkill` took an `A2ASkill` and sent it as it

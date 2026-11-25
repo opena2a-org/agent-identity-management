@@ -763,24 +763,29 @@ public class A2AClient {
     // ==================== Policy Evaluation ====================
 
     /**
-     * Evaluate cross-agent policy for an operation.
+     * Evaluate the A2A policies of the caller's organization for an event between this agent
+     * (the client) and a remote agent.
      *
-     * @param targetAgentId Target agent for the operation
-     * @param action The action being requested
-     * @param resource The resource being accessed
-     * @param context Additional context for policy evaluation
-     * @return Policy evaluation result
+     * <p>{@code POST /api/v1/a2a/policies/evaluate} reads {@code event}, {@code clientAgentId},
+     * {@code remoteAgentId} and {@code skillId}; the organization is the one the caller's
+     * credentials carry. The answer carries {@code decision} (ALLOW or DENY),
+     * {@code policiesEvaluated}, {@code reason} when a policy denied, and {@code evaluatedAt}.</p>
+     *
+     * @param event The event, e.g. {@code task.create} or {@code task.received}
+     * @param remoteAgentId ID of the remote agent
+     * @param skillId The skill the event invokes, or null
+     * @return Policy decision
      * @throws A2AException if evaluation fails
      */
-    public Map<String, Object> evaluatePolicy(String targetAgentId, String action, String resource,
-                                               Map<String, Object> context) throws A2AException {
+    public Map<String, Object> evaluatePolicy(String event, String remoteAgentId, String skillId)
+            throws A2AException {
         try {
             ObjectNode body = objectMapper.createObjectNode();
-            body.put("targetAgentId", targetAgentId);
-            body.put("action", action);
-            body.put("resource", resource);
-            if (context != null) {
-                body.set("context", objectMapper.valueToTree(context));
+            body.put("event", event);
+            body.put("clientAgentId", aimClient.getAgentId());
+            body.put("remoteAgentId", remoteAgentId);
+            if (skillId != null && !skillId.isEmpty()) {
+                body.put("skillId", skillId);
             }
 
             String response = post(A2A_BASE_PATH + "/policies/evaluate", objectMapper.writeValueAsString(body));
@@ -788,6 +793,18 @@ public class A2AClient {
         } catch (Exception e) {
             throw new A2AException("Failed to evaluate policy: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Evaluate the A2A policies of the caller's organization for an event that invokes no skill.
+     *
+     * @param event The event, e.g. {@code task.create}
+     * @param remoteAgentId ID of the remote agent
+     * @return Policy decision
+     * @throws A2AException if evaluation fails
+     */
+    public Map<String, Object> evaluatePolicy(String event, String remoteAgentId) throws A2AException {
+        return evaluatePolicy(event, remoteAgentId, null);
     }
 
     // ==================== Task Operations ====================

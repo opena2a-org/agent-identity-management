@@ -33,4 +33,5 @@ export type {
   CapableAgent,
   A2ASkillAttestation,
   A2AConsensusResult,
+  A2APolicyDecision,
 } from './types';
