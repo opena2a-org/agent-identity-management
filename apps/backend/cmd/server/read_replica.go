@@ -23,7 +23,9 @@ import (
 // first: the replica answers only when it has replayed every write the primary
 // had committed, and the primary answers otherwise. A revocation therefore
 // takes effect on the next verification, replica or not. Writes, and every
-// read outside the verification, stay on the primary.
+// read outside the verification, stay on the primary. "Read Replica for the
+// Verification Path" in docs/DEPLOYMENT.md lists which reads the replica
+// answers.
 func wireReadReplica(cfg config.DatabaseConfig, primary *sql.DB, census *database.Census, agents *application.AgentService, repos *Repositories) *sql.DB {
 	if cfg.ReplicaURL == "" {
 		return nil
@@ -52,11 +54,12 @@ func wireReadReplica(cfg config.DatabaseConfig, primary *sql.DB, census *databas
 
 	replicaX := sqlx.NewDb(replica, "postgres")
 	agents.SetVerifyReads(&application.ReplicaVerifyReads{
-		Primary: application.VerifyReads{Agent: repos.Agent, Capability: repos.Capability, Organization: repos.Organization},
+		Primary: application.VerifyReads{Agent: repos.Agent, Capability: repos.Capability, Organization: repos.Organization, Policy: repos.SecurityPolicy},
 		Replica: application.VerifyReads{
 			Agent:        repository.NewAgentRepository(replica),
 			Capability:   repository.NewCapabilityRepository(replicaX),
 			Organization: repository.NewOrganizationRepository(replica),
+			Policy:       repository.NewSecurityPolicyRepository(replica),
 		},
 		Fence: fence.Replica,
 	})

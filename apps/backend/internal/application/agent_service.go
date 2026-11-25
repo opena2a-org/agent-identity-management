@@ -1460,6 +1460,7 @@ func (s *AgentService) VerifyCapability(
 	// The reads below come from the read replica when the replica holds every
 	// write the primary has committed, so a revocation is never missed.
 	reads := s.verifyReads(ctx)
+	policies := s.verifyPolicies(reads)
 
 	// 1. Fetch agent
 	agent, err := reads.Agent.GetByID(agentID)
@@ -1605,7 +1606,7 @@ func (s *AgentService) VerifyCapability(
 
 		// 🛡️ Also check security policies for capability violations
 		// Note: In MONITORING mode, we ignore shouldBlock and always allow (alert only)
-		_, shouldAlert, policyName, policyErr := s.policyService.EvaluateCapabilityViolation(
+		_, shouldAlert, policyName, policyErr := policies.EvaluateCapabilityViolation(
 			ctx, agent, capability, resource, auditID,
 		)
 		if policyErr != nil {
@@ -1737,7 +1738,7 @@ func (s *AgentService) VerifyCapability(
 		}
 
 		// 🛡️ Evaluate security policies to determine enforcement action
-		shouldBlock, shouldAlert, policyName, err := s.policyService.EvaluateCapabilityViolation(
+		shouldBlock, shouldAlert, policyName, err := policies.EvaluateCapabilityViolation(
 			ctx, agent, capability, resource, auditID,
 		)
 		if err != nil {
@@ -1901,7 +1902,7 @@ func (s *AgentService) VerifyCapability(
 	// agent needs to use it, even when it is granted. In MONITORING mode the request
 	// goes on to the checks below and is allowed, as it is for every other
 	// check on this path.
-	minTrustScore, hasMinTrustScore, defErr := s.capabilityMinTrustScore(capability, agent.OrganizationID)
+	minTrustScore, hasMinTrustScore, defErr := s.capabilityMinTrustScore(reads.Capability, capability, agent.OrganizationID)
 	if defErr != nil {
 		return false, fmt.Sprintf("Failed to fetch the definition of capability '%s'", capability), auditID, defErr
 	}
@@ -1914,7 +1915,7 @@ func (s *AgentService) VerifyCapability(
 	}
 
 	// 6.1 Trust Score Policy Evaluation
-	trustScoreBlocked, trustScoreAlert, trustScorePolicyName, err := s.policyService.EvaluateTrustScoreLow(
+	trustScoreBlocked, trustScoreAlert, trustScorePolicyName, err := policies.EvaluateTrustScoreLow(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
@@ -1938,7 +1939,7 @@ func (s *AgentService) VerifyCapability(
 	}
 
 	// 6.2 Data Exfiltration Policy Evaluation
-	exfilBlocked, exfilAlert, exfilPolicyName, err := s.policyService.EvaluateDataExfiltration(
+	exfilBlocked, exfilAlert, exfilPolicyName, err := policies.EvaluateDataExfiltration(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
@@ -1963,7 +1964,7 @@ func (s *AgentService) VerifyCapability(
 	}
 
 	// 6.3 Unusual Activity Policy Evaluation (stub - needs historical data)
-	unusualBlocked, unusualAlert, unusualPolicyName, err := s.policyService.EvaluateUnusualActivity(
+	unusualBlocked, unusualAlert, unusualPolicyName, err := policies.EvaluateUnusualActivity(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
@@ -1987,7 +1988,7 @@ func (s *AgentService) VerifyCapability(
 	}
 
 	// 6.4 Config Drift Policy Evaluation (stub - needs baseline)
-	driftBlocked, driftAlert, driftPolicyName, err := s.policyService.EvaluateConfigDrift(
+	driftBlocked, driftAlert, driftPolicyName, err := policies.EvaluateConfigDrift(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
@@ -2011,7 +2012,7 @@ func (s *AgentService) VerifyCapability(
 	}
 
 	// 6.5 Unauthorized Access Policy Evaluation (stub)
-	unauthBlocked, unauthAlert, unauthPolicyName, err := s.policyService.EvaluateUnauthorizedAccess(
+	unauthBlocked, unauthAlert, unauthPolicyName, err := policies.EvaluateUnauthorizedAccess(
 		ctx, agent, capability, resource, auditID,
 	)
 	if err != nil {
@@ -2045,12 +2046,12 @@ func (s *AgentService) VerifyCapability(
 // capability requires in the organization, and whether it requires one. A
 // capability that is not in namespace:action form, or that has no
 // definition, requires none.
-func (s *AgentService) capabilityMinTrustScore(capability string, orgID uuid.UUID) (float64, bool, error) {
+func (s *AgentService) capabilityMinTrustScore(capabilityRepo domain.CapabilityRepository, capability string, orgID uuid.UUID) (float64, bool, error) {
 	namespace, action, err := domain.ParseCapability(capability)
 	if err != nil {
 		return 0, false, nil
 	}
-	def, err := s.capabilityRepo.GetCapabilityDefinition(namespace, action, &orgID)
+	def, err := capabilityRepo.GetCapabilityDefinition(namespace, action, &orgID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, nil
 	}

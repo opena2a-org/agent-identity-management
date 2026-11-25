@@ -6,12 +6,18 @@ import (
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
-// VerifyReads are the repositories VerifyCapability reads the agent, its
-// granted capabilities and its organization's enforcement mode from.
+// VerifyReads are the repositories VerifyCapability reads from: the agent, its
+// granted capabilities, the requested capability's definition, its
+// organization's enforcement mode and, when Policy is set, its organization's
+// security policies.
 type VerifyReads struct {
 	Agent        domain.AgentRepository
 	Capability   domain.CapabilityRepository
 	Organization domain.OrganizationRepository
+	// Policy is where the security policies the verification evaluates are
+	// read from. Nil reads them where the service's SecurityPolicyService
+	// does.
+	Policy domain.SecurityPolicyRepository
 }
 
 // VerifyReadSource picks the repositories one verification reads from.
@@ -38,6 +44,24 @@ func (s *AgentService) verifyReads(ctx context.Context) VerifyReads {
 		}
 	}
 	return VerifyReads{Agent: s.agentRepo, Capability: s.capabilityRepo, Organization: s.orgRepo}
+}
+
+// verifyPolicies returns the security policy service one verification
+// evaluates its policies with. When reads.Policy is set it is a copy of the
+// service's own that reads the policies from reads.Policy and the active
+// grants of the config drift checks from reads.Capability; its writes, an
+// alert or a suspension, go where the service's own do. Otherwise it is the
+// service's own.
+func (s *AgentService) verifyPolicies(reads VerifyReads) *SecurityPolicyService {
+	if s.policyService == nil || reads.Policy == nil {
+		return s.policyService
+	}
+	policies := *s.policyService
+	policies.policyRepo = reads.Policy
+	if policies.capabilityReader != nil && reads.Capability != nil {
+		policies.capabilityReader = reads.Capability
+	}
+	return &policies
 }
 
 // ReplicaVerifyReads reads from Replica when Fence says the replica holds every

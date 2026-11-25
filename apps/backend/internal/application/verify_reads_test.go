@@ -34,6 +34,7 @@ func replicaRouting(t *testing.T, fence func(context.Context) bool) (*AgentServi
 
 	primaryCaps.On("GetCapabilityDefinition", "file", "read", &orgID).Return(nil, sql.ErrNoRows).Maybe()
 	primaryCaps.On("GetCapabilityDefinition", mock.Anything, mock.Anything, &orgID).Return(nil, sql.ErrNoRows).Maybe()
+	replicaCaps.On("GetCapabilityDefinition", mock.Anything, mock.Anything, &orgID).Return(nil, sql.ErrNoRows).Maybe()
 	orgs := new(MockOrganizationRepository)
 	orgs.On("GetByID", orgID).Return(&domain.Organization{ID: orgID, EnforcementMode: domain.EnforcementModeStrict}, nil).Maybe()
 
@@ -92,4 +93,94 @@ func TestReplicaVerifyReads_NoFenceReadsThePrimary(t *testing.T) {
 	primary, replica := new(MockAgentRepository), new(MockAgentRepository)
 	routes := &ReplicaVerifyReads{Primary: VerifyReads{Agent: primary}, Replica: VerifyReads{Agent: replica}}
 	assert.Same(t, primary, routes.VerifyReads(context.Background()).Agent)
+}
+
+// policyRouting builds a service whose agent is verified with file:read
+// granted on both the primary and the replica, with separate capability and
+// security policy repositories on each, so a test can see where the
+// capability definition and the security policies were read.
+func policyRouting(t *testing.T, fence func(context.Context) bool) (service *AgentService, primaryCaps, replicaCaps *MockCapabilityRepository, primaryPolicies, replicaPolicies *AgentServiceMockSecurityPolicyRepository, agentID uuid.UUID) {
+	t.Helper()
+	agentID, orgID := uuid.New(), uuid.New()
+	agent := &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "a", DisplayName: "A", TrustScore: 0.9,
+		Status: domain.AgentStatusVerified, CreatedAt: time.Now().Add(-time.Hour), UpdatedAt: time.Now()}
+	agents := new(MockAgentRepository)
+	agents.On("GetByID", agentID).Return(agent, nil).Maybe()
+	grant := &domain.AgentCapability{AgentID: agentID, CapabilityType: "file:read"}
+	orgs := new(MockOrganizationRepository)
+	orgs.On("GetByID", orgID).Return(&domain.Organization{ID: orgID, EnforcementMode: domain.EnforcementModeStrict}, nil).Maybe()
+
+	primaryCaps, replicaCaps = new(MockCapabilityRepository), new(MockCapabilityRepository)
+	primaryPolicies, replicaPolicies = new(AgentServiceMockSecurityPolicyRepository), new(AgentServiceMockSecurityPolicyRepository)
+	for _, caps := range []*MockCapabilityRepository{primaryCaps, replicaCaps} {
+		caps.On("GetActiveCapabilitiesByAgentID", agentID).Return([]*domain.AgentCapability{grant}, nil).Maybe()
+	}
+	primaryCaps.On("GetCapabilityDefinition", "file", "read", &orgID).Return(nil, sql.ErrNoRows).Maybe()
+	replicaCaps.On("GetCapabilityDefinition", "file", "read", &orgID).
+		Return(&domain.CapabilityDefinition{Namespace: "file", Action: "read", MinTrustScore: 0.8}, nil).Maybe()
+	for _, policies := range []*AgentServiceMockSecurityPolicyRepository{primaryPolicies, replicaPolicies} {
+		policies.On("GetByType", orgID, mock.Anything).Return([]*domain.SecurityPolicy{}, nil).Maybe()
+	}
+
+	alerts := new(MockAlertRepository)
+	service = &AgentService{agentRepo: agents, capabilityRepo: primaryCaps, orgRepo: orgs, alertRepo: alerts,
+		policyService: NewSecurityPolicyService(primaryPolicies, alerts, nil)}
+	service.SetVerifyReads(&ReplicaVerifyReads{
+		Primary: VerifyReads{Agent: agents, Capability: primaryCaps, Organization: orgs, Policy: primaryPolicies},
+		Replica: VerifyReads{Agent: agents, Capability: replicaCaps, Organization: orgs, Policy: replicaPolicies},
+		Fence:   fence,
+	})
+	return service, primaryCaps, replicaCaps, primaryPolicies, replicaPolicies, agentID
+}
+
+// A replica the fence clears also answers the capability definition and the
+// security policies the verification evaluates.
+func TestVerifyCapability_ReadsDefinitionsAndPoliciesFromTheReplica(t *testing.T) {
+	service, primaryCaps, replicaCaps, primaryPolicies, replicaPolicies, agentID := policyRouting(t, func(context.Context) bool { return true })
+
+	allowed, reason, _, err := service.VerifyCapability(context.Background(), agentID, "file:read", "/tmp/x", nil, "")
+
+	assert.NoError(t, err)
+	assert.True(t, allowed, reason)
+	replicaCaps.AssertCalled(t, "GetCapabilityDefinition", "file", "read", mock.Anything)
+	primaryCaps.AssertNotCalled(t, "GetCapabilityDefinition", mock.Anything, mock.Anything, mock.Anything)
+	replicaPolicies.AssertCalled(t, "GetByType", mock.Anything, domain.PolicyTypeTrustScoreLow)
+	primaryPolicies.AssertNotCalled(t, "GetByType", mock.Anything, mock.Anything)
+}
+
+// While the replica lags, the capability definition and the security policies
+// are read from the primary, so a definition or policy changed there applies
+// at once.
+func TestVerifyCapability_ReadsDefinitionsAndPoliciesFromThePrimaryWhileTheReplicaLags(t *testing.T) {
+	service, primaryCaps, replicaCaps, primaryPolicies, replicaPolicies, agentID := policyRouting(t, func(context.Context) bool { return false })
+
+	allowed, reason, _, err := service.VerifyCapability(context.Background(), agentID, "file:read", "/tmp/x", nil, "")
+
+	assert.NoError(t, err)
+	assert.True(t, allowed, reason)
+	primaryCaps.AssertCalled(t, "GetCapabilityDefinition", "file", "read", mock.Anything)
+	replicaCaps.AssertNotCalled(t, "GetCapabilityDefinition", mock.Anything, mock.Anything, mock.Anything)
+	primaryPolicies.AssertCalled(t, "GetByType", mock.Anything, domain.PolicyTypeTrustScoreLow)
+	replicaPolicies.AssertNotCalled(t, "GetByType", mock.Anything, mock.Anything)
+}
+
+// The verification's policy service is the service's own when no policy
+// repository is given, and otherwise a copy that reads the given ones and
+// leaves the service's own unchanged.
+func TestVerifyPolicies_SwapsOnlyTheReads(t *testing.T) {
+	primary, replica := new(AgentServiceMockSecurityPolicyRepository), new(AgentServiceMockSecurityPolicyRepository)
+	primaryCaps, replicaCaps := new(MockCapabilityRepository), new(MockCapabilityRepository)
+	alerts := new(MockAlertRepository)
+	policyService := NewSecurityPolicyService(primary, alerts, nil)
+	policyService.SetCapabilityRepository(primaryCaps)
+	service := &AgentService{policyService: policyService}
+
+	assert.Same(t, policyService, service.verifyPolicies(VerifyReads{}))
+
+	swapped := service.verifyPolicies(VerifyReads{Capability: replicaCaps, Policy: replica})
+	assert.Same(t, replica, swapped.policyRepo)
+	assert.Same(t, replicaCaps, swapped.capabilityReader)
+	assert.Same(t, alerts, swapped.alertRepo)
+	assert.Same(t, primary, policyService.policyRepo)
+	assert.Same(t, primaryCaps, policyService.capabilityReader)
 }
