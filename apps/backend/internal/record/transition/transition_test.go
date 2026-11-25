@@ -464,6 +464,7 @@ func TestOpeningStateIsTheRecordersOwn(t *testing.T) {
 	opening.Trigger = TriggerOpeningState
 	_, err := r.Record(context.Background(), opening)
 	require.ErrorIs(t, err, ErrInvalidChange)
+	require.ErrorContains(t, err, "is written by the recorder, before an agent's first change or by the sweep")
 	registration := base
 	registration.Trigger = TriggerRegistrationBaseline
 	registration.EventID = uuid.NewString()
