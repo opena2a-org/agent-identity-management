@@ -269,3 +269,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for a signed-in user with the member role or higher; a refusal raises `AIMException` with the status. The
   method does not create an MCP server. `AIMClientRegisterMcpRouteTest` reads the members and the route's
   member role gate from the backend source (#625).
+- `A2AClient.updateAgentCard` sends the card as the document `PUT /api/v1/a2a/cards/:id` reads, in `cardData`,
+  and reads the server's answer. It sent the card itself, which the route does not read and answered `400`, and the
+  answer, whose `skills` are the identifiers of the card's skills as strings, could not be read into an
+  `A2AAgentCard`. The document is the card's A2A members, with no null member and none of the members the server
+  records (`id`, `agentId`, `aimAttestation`, `aimAttestationExpiresAt`, `publicKey`, `verified`, `createdAt`,
+  `updatedAt`, each skill's `agentId`); the card is replaced for its `agentId`, or for the current agent when that is
+  null. `A2AAgentCard` reads the answer's `cardId` as `id`, `attestationExpires` as `aimAttestationExpiresAt`, and a
+  skill given as a string as a `Skill` with that ID (`new Skill(String id)`). The request is pinned in
+  `sdk/typescript/tests/fixtures/sdk_requests/a2a_update_agent_card.json`, which the backend's handler test PUTs to
+  the route and the TypeScript SDK's tests hold its client to. Test: `A2AAgentCardUpdateWireTest` (#652).

@@ -33,6 +33,8 @@
 import type { AIMClient } from '../client/AIMClient';
 import type {
   A2AAgentCard,
+  A2AAgentCardUpdate,
+  A2AAgentCardRegistration,
   A2ATrustScore,
   A2APeerTrust,
   A2AConsent,
@@ -47,6 +49,9 @@ import type {
 } from './types';
 
 const A2A_BASE_PATH = '/api/v1/a2a';
+
+/** The card members the card update route once edited one by one and no longer reads. */
+const CARD_FIELD_MEMBERS = ['name', 'description', 'version', 'endpoint', 'url', 'skills'];
 
 export class A2AClient {
   private readonly aimClient: AIMClient;
@@ -75,11 +80,49 @@ export class A2AClient {
   }
 
   /**
-   * Update the current agent's card.
+   * The server's answer to a card update with neither `cardUrl` nor `cardData`.
    */
-  async updateAgentCard(card: Partial<A2AAgentCard>): Promise<A2AAgentCard> {
-    const agentId = card.agentId ?? this.getAgentId();
-    return this.put<A2AAgentCard>(`${A2A_BASE_PATH}/cards/${agentId}`, card);
+  static readonly CARD_DOCUMENT_REQUIRED =
+    'cardUrl or cardData is required: this route replaces the agent card document and does not edit fields';
+
+  /**
+   * Replace an agent's card document.
+   *
+   * The server takes `cardData`, or fetches the document from `cardUrl`,
+   * recomputes the card's hash, issues a new attestation and stores the card in
+   * place of the previous one. It does not edit a card field by field: pass the
+   * whole document. It answers the identifiers of the card's skills, as strings.
+   *
+   * Rejects without sending a request when the update carries neither
+   * `cardUrl` nor `cardData`, naming any field-level members it carried.
+   *
+   * @example
+   * ```typescript
+   * const registration = await a2a.updateAgentCard({
+   *   cardData: {
+   *     name: 'Report agent',
+   *     url: 'https://agent.example.com',
+   *     version: '1.1.0',
+   *     skills: [{ id: 'summarize', name: 'Summarize' }],
+   *   },
+   * });
+   * registration.skills; // ['summarize']
+   * ```
+   */
+  async updateAgentCard(update: A2AAgentCardUpdate): Promise<A2AAgentCardRegistration> {
+    if (!update.cardUrl && update.cardData == null) {
+      const unread = CARD_FIELD_MEMBERS.filter((member) => member in update);
+      throw new Error(
+        unread.length > 0
+          ? `${A2AClient.CARD_DOCUMENT_REQUIRED}; it does not read ${unread.join(', ')}: put them in cardData`
+          : A2AClient.CARD_DOCUMENT_REQUIRED
+      );
+    }
+    const agentId = update.agentId ?? this.getAgentId();
+    return this.put<A2AAgentCardRegistration>(`${A2A_BASE_PATH}/cards/${agentId}`, {
+      cardUrl: update.cardUrl || undefined,
+      cardData: update.cardData ?? undefined,
+    });
   }
 
   /**

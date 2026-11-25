@@ -39,16 +39,6 @@ import (
 // call is fixed and lower the ceiling with it; never add an entry or raise the
 // ceiling.
 var sdkRouteContractAllowList = map[string]string{
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member agentId":        allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member aimAttestation": allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member capabilities":   allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member createdAt":      allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member displayName":    allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member id":             allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member publicKey":      allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member updatedAt":      allowWholeAgentCard,
-	a2aClient + " updateAgentCard PUT /api/v1/a2a/cards/{agentId} member url":            allowWholeAgentCard,
-
 	a2aClient + " verifyRequest POST /api/v1/a2a/verify member body":      allowVerifyRequestShape,
 	a2aClient + " verifyRequest POST /api/v1/a2a/verify member method":    allowVerifyRequestShape,
 	a2aClient + " verifyRequest POST /api/v1/a2a/verify member path":      allowVerifyRequestShape,
@@ -68,12 +58,11 @@ var sdkRouteContractAllowList = map[string]string{
 	a2aClient + " registerSkill POST /api/v1/a2a/skills member verifiedAt":       allowWholeSkill,
 }
 
-const sdkRouteContractAllowListCeiling = 23
+const sdkRouteContractAllowListCeiling = 14
 
 const (
 	a2aClient = "sdk/typescript/src/a2a/A2AClient.ts"
 
-	allowWholeAgentCard     = "the client sends whatever card fields its caller passes; the update struct reads name, description, version, endpoint and skills, and url is not plainly endpoint"
 	allowVerifyRequestShape = "the server verifies an agentId and requestHash, while the client sends the method, path, body and public key; matching them changes the protocol, not a name"
 	allowPolicyShape        = "the server evaluates a different request (event, clientAgentId, remoteAgentId, skillId); no member maps one to one"
 	allowWholeSkill         = "the client sends whatever skill fields its caller passes, including ones the server computes; narrowing the parameter type is an API change"

@@ -129,19 +129,76 @@ public class A2AClient {
     }
 
     /**
-     * Update the current agent's card.
+     * Replace an agent's card document with {@code card}.
      *
-     * @param card The updated agent card
-     * @return The updated agent card
+     * <p>The server takes the document, sent as {@code cardData}, recomputes the card's hash,
+     * issues a new attestation and stores the card in place of the previous one. It does not edit
+     * a card field by field: pass the whole card. The document is the card's A2A members, with
+     * no null member and none of the members the server records ({@code id}, {@code agentId},
+     * {@code aimAttestation}, {@code aimAttestationExpiresAt}, {@code publicKey},
+     * {@code verified}, {@code createdAt}, {@code updatedAt}, and each skill's {@code agentId}).
+     * The card is replaced for {@code card.getAgentId()}, or for the current agent when that is
+     * null.</p>
+     *
+     * @param card The card to store
+     * @return The stored card as the server answers it: its ID, its agent's ID, the expiry of
+     *         its new attestation, and its skills, each with only its identifier
      * @throws A2AException if update fails
      */
     public A2AAgentCard updateAgentCard(A2AAgentCard card) throws A2AException {
+        if (card == null) {
+            throw new A2AException("Failed to update agent card: the card is required");
+        }
         try {
-            String response = put(A2A_BASE_PATH + "/cards/" + card.getAgentId(),
-                                  objectMapper.writeValueAsString(card));
+            String agentId = card.getAgentId() != null ? card.getAgentId() : aimClient.getAgentId();
+            ObjectNode body = objectMapper.createObjectNode();
+            body.set("cardData", cardDocument(card));
+            String response = put(A2A_BASE_PATH + "/cards/" + agentId, objectMapper.writeValueAsString(body));
             return objectMapper.readValue(response, A2AAgentCard.class);
         } catch (Exception e) {
             throw new A2AException("Failed to update agent card: " + e.getMessage(), e);
+        }
+    }
+
+    /** The card members the server records rather than reads from a card document. */
+    private static final List<String> CARD_RECORD_MEMBERS = List.of(
+            "id", "agentId", "aimAttestation", "aimAttestationExpiresAt", "publicKey", "verified",
+            "createdAt", "updatedAt");
+
+    /** The A2A card document {@code card} describes, as {@link #updateAgentCard} sends it. */
+    private ObjectNode cardDocument(A2AAgentCard card) {
+        ObjectNode document = objectMapper.valueToTree(card);
+        document.remove(CARD_RECORD_MEMBERS);
+        if (!card.isSupportsAuthenticatedExtendedCard()) {
+            document.remove("supportsAuthenticatedExtendedCard");
+        }
+        JsonNode skills = document.get("skills");
+        if (skills != null && skills.isArray()) {
+            for (JsonNode skill : skills) {
+                if (skill.isObject()) {
+                    ((ObjectNode) skill).remove("agentId");
+                }
+            }
+        }
+        removeNulls(document);
+        return document;
+    }
+
+    private static void removeNulls(JsonNode node) {
+        if (node.isObject()) {
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                if (field.getValue().isNull()) {
+                    fields.remove();
+                } else {
+                    removeNulls(field.getValue());
+                }
+            }
+        } else if (node.isArray()) {
+            for (JsonNode element : node) {
+                removeNulls(element);
+            }
         }
     }
 

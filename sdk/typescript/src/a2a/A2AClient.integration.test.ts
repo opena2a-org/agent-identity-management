@@ -14,10 +14,20 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { A2AClient } from './A2AClient';
 import { AIMClient, createClient } from '../client/AIMClient';
 import { loadCredentialsFromEnv } from '../auth/oauth';
-import type { A2ASkill } from './types';
+import type { A2ACardDocument, A2ASkill } from './types';
 
 const AIM_URL = process.env.AIM_BASE_URL ?? 'http://localhost:8080';
 const TEST_AGENT_NAME = `ts-a2a-test-${Date.now()}`;
+
+/** The card document updateAgentCard replaces the agent's card with, declaring these skills. */
+function cardDocument(skills: A2ASkill[]): A2ACardDocument {
+  return {
+    name: TEST_AGENT_NAME,
+    url: 'https://agent.example.com',
+    version: '1.0.0',
+    skills: skills.map(({ id, name, description }) => ({ id, name, description })),
+  };
+}
 
 let backendAvailable = false;
 let credentialsAvailable = false;
@@ -111,7 +121,7 @@ describe('A2AClient Integration Tests', () => {
 
         console.log(`✅ Registered agent card: ${card.cardUrl}`);
 
-        await a2aClient.updateAgentCard({ skills });
+        await a2aClient.updateAgentCard({ cardData: cardDocument(skills) });
 
         // Retrieve card
         const credentials = aimClient.getCredentials();
@@ -136,7 +146,7 @@ describe('A2AClient Integration Tests', () => {
         ];
 
         await a2aClient.registerAgentCard('https://agent.example.com/.well-known/agent.json');
-        await a2aClient.updateAgentCard({ skills: initialSkills });
+        await a2aClient.updateAgentCard({ cardData: cardDocument(initialSkills) });
 
         const newSkills: A2ASkill[] = [
           ...initialSkills,
@@ -148,10 +158,10 @@ describe('A2AClient Integration Tests', () => {
         ];
 
         const updatedCard = await a2aClient.updateAgentCard({
-          skills: newSkills,
+          cardData: cardDocument(newSkills),
         });
 
-        expect(updatedCard.skills).toHaveLength(2);
+        expect(updatedCard.skills).toEqual(['initial-skill', 'new-skill']);
         console.log('✅ Updated agent card with new skills');
       }
     );
