@@ -888,10 +888,20 @@ func TestAgentHandler_VerifyCapability_Allowed(t *testing.T) {
 		},
 	}
 
+	// The decision's audit entry goes through LogVerification, which queues
+	// it for a batch write.
+	var audited []*domain.AuditLog
+	auditService := &MockAuditServiceImpl{
+		LogVerificationFunc: func(_ context.Context, entry *domain.AuditLog) error {
+			audited = append(audited, entry)
+			return nil
+		},
+	}
+
 	handler := NewAgentHandlerWithInterfaces(
 		mockAgentService,
 		&MockMCPServiceImpl{},
-		&MockAuditServiceImpl{},
+		auditService,
 		&MockAPIKeyServiceImpl{},
 		nil,
 		&MockAlertServiceImpl{},
@@ -920,6 +930,14 @@ func TestAgentHandler_VerifyCapability_Allowed(t *testing.T) {
 	json.Unmarshal(respBody, &result)
 
 	assert.Equal(t, true, result["allowed"])
+
+	require.Len(t, audited, 1, "every decision is audited")
+	assert.Equal(t, orgID, audited[0].OrganizationID)
+	assert.Equal(t, domain.AuditActionVerify, audited[0].Action)
+	assert.Equal(t, "agent_capability", audited[0].ResourceType)
+	assert.Equal(t, agentID, audited[0].ResourceID)
+	assert.Equal(t, true, audited[0].Metadata["allowed"])
+	assert.Equal(t, auditID, audited[0].Metadata["auditId"])
 }
 
 func TestAgentHandler_VerifyCapability_Denied(t *testing.T) {

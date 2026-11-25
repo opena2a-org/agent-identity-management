@@ -3,6 +3,8 @@ package repository
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,6 +69,80 @@ func (r *AuditLogRepository) Create(log *domain.AuditLog) error {
 	}
 	if r.onCreate != nil {
 		r.onCreate(log)
+	}
+	return nil
+}
+
+// AuditLogBatchMaxRows is the most entries CreateBatch writes in one call:
+// eleven parameters a row keeps the insert within PostgreSQL's 65535.
+const AuditLogBatchMaxRows = 1000
+
+// CreateBatch writes entries in one multi-row insert, so either all of them
+// are written or none is. Each entry is prepared as Create prepares it, and
+// once the insert has succeeded each is given to the OnCreate function in
+// order.
+func (r *AuditLogRepository) CreateBatch(entries []*domain.AuditLog) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	if len(entries) > AuditLogBatchMaxRows {
+		return fmt.Errorf("audit log batch of %d entries is over the %d an insert holds", len(entries), AuditLogBatchMaxRows)
+	}
+
+	const columns = 11
+	var query strings.Builder
+	query.WriteString(`INSERT INTO audit_logs (id, organization_id, user_id, agent_id, action, resource_type, resource_id, ip_address, user_agent, metadata, timestamp) VALUES `)
+	args := make([]interface{}, 0, len(entries)*columns)
+	now := time.Now()
+	for i, log := range entries {
+		if log.ID == uuid.Nil {
+			log.ID = uuid.New()
+		}
+		if log.Timestamp.IsZero() {
+			log.Timestamp = now
+		}
+		if log.UserID != nil && *log.UserID == uuid.Nil {
+			log.UserID = nil
+		}
+		metadataJSON, err := json.Marshal(log.Metadata)
+		if err != nil {
+			return fmt.Errorf("audit log entry %s: %w", log.ID, err)
+		}
+
+		if i > 0 {
+			query.WriteString(", ")
+		}
+		query.WriteString("(")
+		for c := 1; c <= columns; c++ {
+			if c > 1 {
+				query.WriteString(", ")
+			}
+			fmt.Fprintf(&query, "$%d", i*columns+c)
+		}
+		query.WriteString(")")
+
+		args = append(args,
+			log.ID,
+			log.OrganizationID,
+			log.UserID,
+			log.AgentID,
+			log.Action,
+			log.ResourceType,
+			log.ResourceID,
+			log.IPAddress,
+			log.UserAgent,
+			metadataJSON,
+			log.Timestamp,
+		)
+	}
+
+	if _, err := r.db.Exec(query.String(), args...); err != nil {
+		return err
+	}
+	if r.onCreate != nil {
+		for _, log := range entries {
+			r.onCreate(log)
+		}
 	}
 	return nil
 }

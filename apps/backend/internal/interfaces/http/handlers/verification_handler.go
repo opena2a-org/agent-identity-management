@@ -587,9 +587,11 @@ func (h *VerificationHandler) decideAndRecord(c fiber.Ctx, agent *domain.Agent, 
 		auditEntry.Metadata[k] = v
 	}
 
-	// Save audit log - errors don't block the request
+	// Save audit log - errors don't block the request. The entry is queued
+	// for a batch write when the audit service batches them, so the
+	// response does not wait on the insert.
 	// SECURITY: No error logging to prevent information leakage
-	_ = h.getAuditService().Log(c.Context(), auditEntry)
+	_ = h.getAuditService().LogVerification(c.Context(), auditEntry)
 
 	// ✅ CREATE SECURITY ALERT if capability violation detected
 	if shouldCreateAlert {
