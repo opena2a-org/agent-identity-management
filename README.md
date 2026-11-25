@@ -1,16 +1,9 @@
 # OpenA2A AIM (Agent Identity Management)
 
-[![Status: stable](https://img.shields.io/badge/status-stable-green)](STATUS.md)
-[![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
-[![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
-[![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![CI](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/ci.yml)
 
-> **[OpenA2A](https://github.com/opena2a-org)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · **AIM** · [Browser Guard](https://github.com/opena2a-org/ai-browserguard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
-
-[Website](https://opena2a.org/agent-identity-management) · [AIM Cloud](https://aim.opena2a.org/get-started) · [Discord](https://discord.gg/uRZa3KXgEn)
-
-Cryptographic identity, capability authorization, and audit trails for AI agents.
+If your AI agent calls tools, AIM gives each agent an identity, checks each action against what the agent was granted, and leaves a signed record of each step.
 
 ## Quick start
 ```bash
@@ -146,6 +139,16 @@ Image tags, building from source, observability and the first administrator on o
 - [Roadmap](ROADMAP.md)
 - [Contributing](CONTRIBUTING.md): the dev loop and pull requests. Report security issues to `info@opena2a.org`; [SECURITY.md](SECURITY.md) says what to expect.
 
+[Website](https://opena2a.org/agent-identity-management) · [AIM Cloud](https://aim.opena2a.org/get-started) · [Discord](https://discord.gg/uRZa3KXgEn)
+
+### Related projects
+
+> **[OpenA2A](https://github.com/opena2a-org)**: [CLI](https://github.com/opena2a-org/opena2a) · [HackMyAgent](https://github.com/opena2a-org/hackmyagent) · [Secretless](https://github.com/opena2a-org/secretless-ai) · **AIM** · [Browser Guard](https://github.com/opena2a-org/ai-browserguard) · [DVAA](https://github.com/opena2a-org/damn-vulnerable-ai-agent)
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+[![Status: stable](https://img.shields.io/badge/status-stable-green)](STATUS.md)
+[![Docker](https://img.shields.io/docker/pulls/opena2a/aim-server?label=docker%20pulls)](https://hub.docker.com/r/opena2a/aim-server)
+[![Security](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml/badge.svg)](https://github.com/opena2a-org/agent-identity-management/actions/workflows/security.yml)
