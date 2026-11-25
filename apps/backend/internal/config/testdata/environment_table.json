@@ -3837,6 +3837,48 @@
       "value": "1m",
       "setting": "\"1m\"",
       "line": "WARNING: TRUST_REEVALUATION_INTERVAL=\"1m\" is under the 5m0s minimum; using 5m0s"
+    },
+    {
+      "variable": "PAM_ENABLED",
+      "input": "unset",
+      "value": null,
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "PAM_ENABLED",
+      "input": "empty",
+      "value": "",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "PAM_ENABLED",
+      "input": "whitespace",
+      "value": "   ",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "PAM_ENABLED",
+      "input": "valid",
+      "value": "true",
+      "setting": "true",
+      "line": ""
+    },
+    {
+      "variable": "PAM_ENABLED",
+      "input": "invalid",
+      "value": "yes",
+      "setting": "false",
+      "line": ""
+    },
+    {
+      "variable": "PAM_ENABLED",
+      "input": "uppercase",
+      "value": "TRUE",
+      "setting": "false",
+      "line": ""
     }
   ]
 }

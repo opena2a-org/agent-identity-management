@@ -29,6 +29,7 @@ type Config struct {
 	SIEM        SIEMConfig
 	SigningKeys SigningKeysConfig
 	Jobs        JobsConfig
+	PAM         PAMConfig
 }
 
 // ServerConfig holds server configuration
@@ -329,6 +330,14 @@ func (k SigningKeysConfig) Value(name string) string {
 	return ""
 }
 
+// PAMConfig holds the privileged access management setting.
+type PAMConfig struct {
+	// Enabled turns on the privileged access management service and its
+	// /api/v1/pam routes (PAM_ENABLED, exactly "true"). Off by default: the
+	// server then builds no PAM service and mounts no PAM route.
+	Enabled bool
+}
+
 // JobsConfig holds the intervals of two background jobs as set:
 // DRIFT_MONITOR_INTERVAL for the capability drift monitor and
 // TRUST_REEVALUATION_INTERVAL for the trust re-evaluation job. cmd/server
@@ -357,7 +366,7 @@ func (j JobsConfig) Value(name string) string {
 // value of spaces is a value. REDIS_HOST is the one exception: set and empty,
 // it turns Redis off. A number or a duration that does not parse gives the
 // default. A flag is on only for its word: "true" for REDIS_USE_TLS and
-// REGISTRY_BRIDGE_ENABLED, "true" in any case for AUTH_REVOCATION_FAIL_OPEN,
+// REGISTRY_BRIDGE_ENABLED and PAM_ENABLED, "true" in any case for AUTH_REVOCATION_FAIL_OPEN,
 // and "on" for POSTGRES_SCOPE_CENSUS. JWT_SECRET, POSTGRES_HOST, POSTGRES_USER
 // and POSTGRES_DB are required.
 func Load() (*Config, error) {
@@ -471,6 +480,9 @@ func Load() (*Config, error) {
 		Jobs: JobsConfig{
 			DriftMonitorInterval:      getEnv("DRIFT_MONITOR_INTERVAL", ""),
 			TrustReevaluationInterval: getEnv("TRUST_REEVALUATION_INTERVAL", ""),
+		},
+		PAM: PAMConfig{
+			Enabled: getEnvFlag("PAM_ENABLED", "true"),
 		},
 	}
 

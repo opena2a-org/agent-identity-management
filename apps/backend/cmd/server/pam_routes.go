@@ -1,6 +1,11 @@
 package main
 
-import "github.com/gofiber/fiber/v3"
+import (
+	"github.com/gofiber/fiber/v3"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
+)
 
 // pamRouteDeps is the middleware and handlers the privileged access
 // management routes mount. Production passes the real ones; a test passes
@@ -51,4 +56,14 @@ func registerPAMRoutes(r fiber.Router, d pamRouteDeps) {
 	r.Get("/pam/campaigns", d.Authenticate, d.Limit, d.ListCampaigns)
 	r.Post("/pam/campaigns/:id/decisions", d.Authenticate, d.Limit, d.RequireManager, d.RecordCertificationDecision)
 	r.Get("/pam/campaigns/:id/decisions", d.Authenticate, d.Limit, d.ListCertificationDecisions)
+}
+
+// newPAMHandler returns the PAM handler for service, or nil when the server
+// holds no PAM service (PAM_ENABLED is not "true"): mountAPIRoutes then mounts
+// no PAM route.
+func newPAMHandler(service *application.PAMService, audit handlers.AuditServicer) *handlers.PAMHandler {
+	if service == nil {
+		return nil
+	}
+	return handlers.NewPAMHandler(service, audit)
 }

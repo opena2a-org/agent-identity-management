@@ -12,7 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 )
 
 // pamRoleRank orders the roles a dashboard session carries.
@@ -101,4 +104,28 @@ func TestPAMRoutesAreMountedWithTheirRoleGates(t *testing.T) {
 			}
 		})
 	}
+}
+
+// PAM is off unless PAM_ENABLED is "true": the server then builds no PAM
+// service and no PAM handler, and mountAPIRoutes mounts no /api/v1/pam route.
+func TestPAMIsOffByDefault(t *testing.T) {
+	t.Setenv("JWT_SECRET", "pam-off-by-default-secret-of-at-least-32-chars")
+	assert.Nil(t, newPAMHandler(nil, nil), "no service, no handler")
+	assert.NotNil(t, newPAMHandler(&application.PAMService{}, nil))
+
+	app := fiber.New()
+	mountAPIRoutes(app, &Handlers{}, &Services{Secrets: &application.SecretsService{}}, auth.NewJWTService(), nil, nil)
+	for _, route := range app.GetRoutes() {
+		assert.False(t, strings.HasPrefix(route.Path, "/api/v1/pam"), "%s %s is mounted with PAM off", route.Method, route.Path)
+	}
+
+	on := fiber.New()
+	mountAPIRoutes(on, &Handlers{PAM: handlers.NewPAMHandler(nil, nil)}, &Services{Secrets: &application.SecretsService{}}, auth.NewJWTService(), nil, nil)
+	mounted := 0
+	for _, route := range on.GetRoutes() {
+		if strings.HasPrefix(route.Path, "/api/v1/pam") {
+			mounted++
+		}
+	}
+	assert.NotZero(t, mounted, "PAM routes with PAM on")
 }

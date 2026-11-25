@@ -208,6 +208,8 @@ func renderSetting(cfg *Config, name string) (string, bool) {
 		return q(cfg.Registry.BridgeURL), true
 	case "REGISTRY_BRIDGE_ENABLED":
 		return fmt.Sprintf("%t", cfg.Registry.BridgeEnabled), true
+	case "PAM_ENABLED":
+		return fmt.Sprintf("%t", cfg.PAM.Enabled), true
 	case "ATC_ISSUER_URI":
 		return q(cfg.Registry.ATCIssuerURI), true
 	case "REGISTRY_URL":
