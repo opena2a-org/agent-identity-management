@@ -93,6 +93,48 @@ export interface A2ASkill {
 }
 
 /**
+ * What `registerSkill` sends to `POST /api/v1/a2a/skills`: the members the
+ * route reads. `id` is the skill's identifier, `agentId` the agent it is
+ * registered for (the authenticated agent when left out). Each example is a
+ * string, as A2A card skills declare them.
+ */
+export interface A2ASkillRegistration {
+  agentId?: string;
+  id?: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  inputModes?: string[];
+  outputModes?: string[];
+  examples?: string[];
+}
+
+/**
+ * A skill as the server stores and answers it: `id` is the stored row's
+ * identifier, `skillId` the skill's own, and the examples are strings.
+ */
+export interface A2ARegisteredSkill {
+  id: string;
+  agentId: string;
+  skillId: string;
+  name: string;
+  description?: string;
+  tags?: string[];
+  inputModes?: string[];
+  outputModes?: string[];
+  examples?: string[];
+  invocationCount: number;
+  successCount: number;
+  failureCount: number;
+  avgDurationMs?: number;
+  isVerified: boolean;
+  verifiedAt?: string;
+  attestationCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
  * A2A Skill Example
  */
 export interface A2ASkillExample {

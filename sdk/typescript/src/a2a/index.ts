@@ -19,6 +19,8 @@ export type {
   A2ACardSkill,
   A2ASkill,
   A2ASkillExample,
+  A2ASkillRegistration,
+  A2ARegisteredSkill,
   A2AAttestation,
   A2ATrustScore,
   A2APeerTrust,

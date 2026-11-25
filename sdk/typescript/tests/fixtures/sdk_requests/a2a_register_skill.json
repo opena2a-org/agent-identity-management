@@ -1,0 +1,15 @@
+{
+  "description": "The request A2AClient.registerSkill sends, in the TypeScript SDK, for a skill with one example: the members POST /api/v1/a2a/skills reads, the example as a string. The route answers 201 with the stored skill.",
+  "method": "POST",
+  "path": "/api/v1/a2a/skills",
+  "requestType": "RegisterSkill",
+  "body": {
+    "id": "summarize",
+    "name": "Summarize",
+    "description": "Summarizes a report",
+    "tags": ["text"],
+    "inputModes": ["text/plain"],
+    "outputModes": ["text/plain"],
+    "examples": ["Summarize the nightly report"]
+  }
+}

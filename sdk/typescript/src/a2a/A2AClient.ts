@@ -44,6 +44,8 @@ import type {
   A2ASecurityViolation,
   CapableAgent,
   A2ASkill,
+  A2ASkillRegistration,
+  A2ARegisteredSkill,
   A2ASkillAttestation,
   A2AConsensusResult,
 } from './types';
@@ -52,6 +54,11 @@ const A2A_BASE_PATH = '/api/v1/a2a';
 
 /** The card members the card update route once edited one by one and no longer reads. */
 const CARD_FIELD_MEMBERS = ['name', 'description', 'version', 'endpoint', 'url', 'skills'];
+
+/** A skill example as the skill route reads it: a string, or an object's JSON text. */
+function exampleText(example: unknown): string {
+  return typeof example === 'string' ? example : JSON.stringify(example);
+}
 
 export class A2AClient {
   private readonly aimClient: AIMClient;
@@ -577,10 +584,33 @@ export class A2AClient {
   // ==================== Skill Operations ====================
 
   /**
-   * Register a skill for the current agent.
+   * Register a skill for the current agent, or for `skill.agentId`.
+   *
+   * Sends the members `POST /api/v1/a2a/skills` reads, each example as a
+   * string. An example passed as an object (the earlier `A2ASkillExample`
+   * shape) is sent as its JSON text; the route refuses a non-string example.
+   *
+   * @example
+   * ```typescript
+   * const skill = await a2a.registerSkill({
+   *   id: 'summarize',
+   *   name: 'Summarize',
+   *   examples: ['Summarize this article'],
+   * });
+   * skill.examples; // ['Summarize this article']
+   * ```
    */
-  async registerSkill(skill: Omit<A2ASkill, 'id'>): Promise<A2ASkill> {
-    return this.post<A2ASkill>(`${A2A_BASE_PATH}/skills`, skill);
+  async registerSkill(skill: A2ASkillRegistration): Promise<A2ARegisteredSkill> {
+    return this.post<A2ARegisteredSkill>(`${A2A_BASE_PATH}/skills`, {
+      agentId: skill.agentId,
+      id: skill.id,
+      name: skill.name,
+      description: skill.description,
+      tags: skill.tags,
+      inputModes: skill.inputModes,
+      outputModes: skill.outputModes,
+      examples: skill.examples?.map(exampleText),
+    });
   }
 
   /**

@@ -50,22 +50,15 @@ var sdkRouteContractAllowList = map[string]string{
 	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member context":       allowPolicyShape,
 	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member resource":      allowPolicyShape,
 	a2aClient + " evaluatePolicy POST /api/v1/a2a/policies/evaluate member targetAgentId": allowPolicyShape,
-
-	a2aClient + " registerSkill POST /api/v1/a2a/skills member attestationCount": allowWholeSkill,
-	a2aClient + " registerSkill POST /api/v1/a2a/skills member inputSchema":      allowWholeSkill,
-	a2aClient + " registerSkill POST /api/v1/a2a/skills member isVerified":       allowWholeSkill,
-	a2aClient + " registerSkill POST /api/v1/a2a/skills member outputSchema":     allowWholeSkill,
-	a2aClient + " registerSkill POST /api/v1/a2a/skills member verifiedAt":       allowWholeSkill,
 }
 
-const sdkRouteContractAllowListCeiling = 14
+const sdkRouteContractAllowListCeiling = 9
 
 const (
 	a2aClient = "sdk/typescript/src/a2a/A2AClient.ts"
 
 	allowVerifyRequestShape = "the server verifies an agentId and requestHash, while the client sends the method, path, body and public key; matching them changes the protocol, not a name"
 	allowPolicyShape        = "the server evaluates a different request (event, clientAgentId, remoteAgentId, skillId); no member maps one to one"
-	allowWholeSkill         = "the client sends whatever skill fields its caller passes, including ones the server computes; narrowing the parameter type is an API change"
 )
 
 // sdkCall is one HTTP call an SDK makes, as read from its source.
