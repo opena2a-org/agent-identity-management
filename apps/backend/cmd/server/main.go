@@ -1352,8 +1352,12 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 
 	// Privileged access management: the tier registry, approval requests,
 	// break-glass declarations and certification campaigns, each record kept
-	// for one organization. It needs no configuration.
-	pamService := application.NewPAMService(db, telemetry.Logger("aim-pam"))
+	// for one organization. Built only with PAM_ENABLED=true; otherwise the
+	// server holds no PAM service and mounts no PAM route.
+	var pamService *application.PAMService
+	if cfg.PAM.Enabled {
+		pamService = application.NewPAMService(db, telemetry.Logger("aim-pam"))
+	}
 
 	return &Services{
 		Auth:              authService,
@@ -1550,7 +1554,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			jwtService, // a revoked session cannot create or update an alert channel
 		),
-		PAM: handlers.NewPAMHandler(services.PAM, services.Audit),
+		PAM: newPAMHandler(services.PAM, services.Audit),
 		Verification: handlers.NewVerificationHandler(
 			services.Agent,
 			services.Audit,
@@ -2290,27 +2294,30 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	// Privileged access management: the capability tier registry, approval
 	// requests for SUPER_PRIVILEGED capabilities, break-glass declarations and
 	// certification campaigns of the caller's organization. The role each
-	// route needs is in registerPAMRoutes.
-	registerPAMRoutes(v1, pamRouteDeps{
-		Authenticate:                middleware.AuthMiddleware(jwtService),
-		Limit:                       middleware.RateLimitMiddleware(),
-		RequireMember:               middleware.MemberMiddleware(),
-		RequireManager:              middleware.ManagerMiddleware(),
-		RequireAdmin:                middleware.AdminMiddleware(),
-		ListTiers:                   h.PAM.ListTiers,
-		RequestApproval:             h.PAM.RequestApproval,
-		ListApprovals:               h.PAM.ListApprovals,
-		GetApproval:                 h.PAM.GetApproval,
-		DecideApproval:              h.PAM.DecideApproval,
-		DeclareEmergency:            h.PAM.DeclareEmergency,
-		ListEmergencies:             h.PAM.ListEmergencies,
-		ExtendEmergency:             h.PAM.ExtendEmergency,
-		RevokeEmergency:             h.PAM.RevokeEmergency,
-		CreateCampaign:              h.PAM.CreateCampaign,
-		ListCampaigns:               h.PAM.ListCampaigns,
-		RecordCertificationDecision: h.PAM.RecordCertificationDecision,
-		ListCertificationDecisions:  h.PAM.ListCertificationDecisions,
-	})
+	// route needs is in registerPAMRoutes. Mounted only when the server has a
+	// PAM handler, which it builds with PAM_ENABLED=true.
+	if h.PAM != nil {
+		registerPAMRoutes(v1, pamRouteDeps{
+			Authenticate:                middleware.AuthMiddleware(jwtService),
+			Limit:                       middleware.RateLimitMiddleware(),
+			RequireMember:               middleware.MemberMiddleware(),
+			RequireManager:              middleware.ManagerMiddleware(),
+			RequireAdmin:                middleware.AdminMiddleware(),
+			ListTiers:                   h.PAM.ListTiers,
+			RequestApproval:             h.PAM.RequestApproval,
+			ListApprovals:               h.PAM.ListApprovals,
+			GetApproval:                 h.PAM.GetApproval,
+			DecideApproval:              h.PAM.DecideApproval,
+			DeclareEmergency:            h.PAM.DeclareEmergency,
+			ListEmergencies:             h.PAM.ListEmergencies,
+			ExtendEmergency:             h.PAM.ExtendEmergency,
+			RevokeEmergency:             h.PAM.RevokeEmergency,
+			CreateCampaign:              h.PAM.CreateCampaign,
+			ListCampaigns:               h.PAM.ListCampaigns,
+			RecordCertificationDecision: h.PAM.RecordCertificationDecision,
+			ListCertificationDecisions:  h.PAM.ListCertificationDecisions,
+		})
+	}
 
 	// Verification routes (authentication required) - Agent action verification
 	verifications := v1.Group("/verifications")

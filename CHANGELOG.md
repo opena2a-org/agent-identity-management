@@ -11,6 +11,14 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Changed: the privileged access management service and its `/api/v1/pam` routes are off unless `PAM_ENABLED=true`
+
+- `config.Load` reads `PAM_ENABLED` as on only when it is exactly `true`; unset, empty or any other value leaves it
+  off, as the `PAM_ENABLED` rows of `internal/config/testdata/environment_table.json` record.
+- With it off, the default, the server builds no PAM service and mounts no `/api/v1/pam` route, so those paths answer
+  404. With `PAM_ENABLED=true` the server builds the service and serves the routes for capability tiers, approvals,
+  break-glass declarations and certification campaigns, each behind the session check and the role it needs.
+
 ### Added: `POSTGRES_REPLICA_URL` routes the verification path's reads to a Postgres read replica
 
 - `POSTGRES_REPLICA_URL` is the connection string of a read replica. Unset or empty, the default, every read

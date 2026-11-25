@@ -17,6 +17,7 @@ import (
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/auth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/interfaces/http/handlers"
 )
 
 // strictRateLimitedRoutes is every route StrictRateLimitMiddleware covers: the
@@ -86,7 +87,9 @@ func strictCensusApp(t *testing.T) (*fiber.App, *auth.JWTService) {
 		}()
 		return c.Next()
 	})
-	mountAPIRoutes(app, &Handlers{}, &Services{Secrets: &application.SecretsService{}}, jwtService, nil, nil)
+	// The PAM routes are mounted only for a server with PAM enabled: the census
+	// app has a PAM handler with no service behind it.
+	mountAPIRoutes(app, &Handlers{PAM: handlers.NewPAMHandler(nil, nil)}, &Services{Secrets: &application.SecretsService{}}, jwtService, nil, nil)
 	return app, jwtService
 }
 
