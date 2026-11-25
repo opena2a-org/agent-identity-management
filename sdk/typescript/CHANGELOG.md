@@ -7,6 +7,19 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed: `A2AClient.registerSkill` sends each example as a string (#652)
+
+- `POST /api/v1/a2a/skills` reads a skill's examples as strings. `registerSkill` took an `A2ASkill` and sent it as it
+  was, examples as objects (`{ name, input, output }`), which the route cannot bind: it answered `400`. It now takes
+  `A2ASkillRegistration` (`agentId?`, `id?`, `name`, `description?`, `tags?`, `inputModes?`, `outputModes?`,
+  `examples?: string[]`), sends only those members, and returns the stored skill as `A2ARegisteredSkill`, its
+  examples strings. A skill registered with one example is stored and answered `201`.
+- **Breaking change for typed callers.** Pass each example as a string. An example passed as an object anyway is sent
+  as its JSON text; `inputSchema`, `outputSchema` and the members the server computes are no longer sent, as the route
+  never read them.
+- The request is pinned in `tests/fixtures/sdk_requests/a2a_register_skill.json`, which the backend's handler test
+  POSTs to the route. Tests: `src/a2a/registerSkill.wire.test.ts`.
+
 ### Fixed: `A2AClient` sends the agent's access token as the bearer (#652)
 
 - Every `A2AClient` request sent `Authorization: Bearer <agent ID>`. The agent ID is not a credential, so the server

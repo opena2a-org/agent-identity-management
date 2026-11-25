@@ -170,6 +170,8 @@ export {
   type A2ACardSkill,
   type A2ASkill,
   type A2ASkillExample,
+  type A2ASkillRegistration,
+  type A2ARegisteredSkill,
   type A2AAttestation,
   type A2ATrustScore,
   type A2APeerTrust,

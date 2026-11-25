@@ -70,8 +70,11 @@ behaviors:
           id: "summarization"
           name: "Text Summarization"
           description: "Summarizes text content"
+          examples:
+            - "Summarize this article"
       assertions:
         - "Skill is added"
+        - "Examples are sent and stored as strings"
         - "Skill appears in list"
 
     - id: remove_skill
