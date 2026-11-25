@@ -24,6 +24,10 @@ const fgaDrainTimeout = 10 * time.Second
 // already sent to its endpoint is not waited for.
 const webhookDrainTimeout = 2 * time.Second
 
+// auditBatcherDrainTimeout bounds the wait for the verification audit entries
+// still queued when the API listener has stopped to be written.
+const auditBatcherDrainTimeout = 10 * time.Second
+
 // apiServer is the part of *fiber.App that shutdown uses.
 type apiServer interface {
 	ShutdownWithTimeout(timeout time.Duration) error

@@ -811,17 +811,19 @@ func (h *AgentHandler) VerifyCapability(c fiber.Ctx) error {
 		}
 	}
 
-	h.auditService.LogAction(
-		c.Context(),
-		orgID,
-		userID,
-		domain.AuditActionVerify,
-		"agent_capability",
-		agentID,
-		c.IP(),
-		c.Get("User-Agent"),
-		auditMetadata,
-	)
+	// Every decision is audited. The entry is queued for a batch write when
+	// the audit service batches them, so the response does not wait on the
+	// insert; LogVerification copies the request header values it holds.
+	_ = h.auditService.LogVerification(c.Context(), &domain.AuditLog{
+		OrganizationID: orgID,
+		UserID:         &userID,
+		Action:         domain.AuditActionVerify,
+		ResourceType:   "agent_capability",
+		ResourceID:     agentID,
+		IPAddress:      c.IP(),
+		UserAgent:      c.Get("User-Agent"),
+		Metadata:       auditMetadata,
+	})
 
 	// 2. RECORD VERIFICATION EVENT (for monitoring dashboard)
 	verificationStatus := domain.VerificationEventStatusSuccess

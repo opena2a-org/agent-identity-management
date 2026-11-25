@@ -366,6 +366,14 @@ type MockAuditServiceImpl struct {
 	GetAgentActivityFunc func(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
 	GetAuditLogsFunc     func(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
 	GetByIDFunc          func(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
+	LogVerificationFunc  func(ctx context.Context, entry *domain.AuditLog) error
+}
+
+func (m *MockAuditServiceImpl) LogVerification(ctx context.Context, entry *domain.AuditLog) error {
+	if m.LogVerificationFunc != nil {
+		return m.LogVerificationFunc(ctx, entry)
+	}
+	return nil
 }
 
 func (m *MockAuditServiceImpl) LogAction(ctx context.Context, orgID uuid.UUID, userID uuid.UUID, action domain.AuditAction, resourceType string, resourceID uuid.UUID, ipAddress string, userAgent string, metadata map[string]interface{}) error {
@@ -1429,6 +1437,12 @@ func (m *MockAuditServiceForVerificationImpl) Log(ctx context.Context, entry *do
 		return m.LogFunc(ctx, entry)
 	}
 	return nil
+}
+
+// LogVerification is given to LogFunc, which records every audit entry the
+// verification handler writes.
+func (m *MockAuditServiceForVerificationImpl) LogVerification(ctx context.Context, entry *domain.AuditLog) error {
+	return m.Log(ctx, entry)
 }
 
 // MockAlertServiceForVerificationImpl implements AlertServicerForVerification interface

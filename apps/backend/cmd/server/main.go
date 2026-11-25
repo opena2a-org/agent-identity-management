@@ -453,6 +453,11 @@ func main() {
 	// End the alert channel deliveries: a wait before a retry ends, an attempt
 	// in flight ends within its 10-second timeout, and queued alerts are not sent.
 	services.AlertChannel.Stop()
+	// Write the verification audit entries still queued, before the SIEM
+	// flush below, which delivers what they write.
+	if !services.Audit.CloseBatcher(auditBatcherDrainTimeout) {
+		log.Printf("Audit entries still queued after %s", auditBatcherDrainTimeout)
+	}
 	// Deliver the audit log entries still queued for the SIEM.
 	if siemForwarder != nil {
 		flushSIEMForwarding(siemForwarder)
@@ -896,6 +901,10 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	)
 
 	auditService := application.NewAuditService(repos.AuditLog)
+	// Verification decisions queue their audit entries, written in batches,
+	// so a verification does not wait on the audit insert. main closes the
+	// batcher at shutdown, which writes the entries still queued.
+	auditService.SetBatcher(application.NewAuditBatcher(repos.AuditLog, application.AuditBatcherConfig{}))
 
 	trustCalculator := application.NewTrustCalculatorWithVerification(
 		repos.TrustScore,

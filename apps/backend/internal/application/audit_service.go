@@ -12,6 +12,40 @@ import (
 // AuditService handles audit logging
 type AuditService struct {
 	auditRepo domain.AuditLogRepository
+	batcher   *AuditBatcher // Optional: queues verification entries for batch writes; set by SetBatcher
+}
+
+// SetBatcher makes LogVerification queue its entries on batcher, which writes
+// them in batches, instead of writing each before it returns. Set it at
+// startup, before the service is shared.
+func (s *AuditService) SetBatcher(batcher *AuditBatcher) {
+	s.batcher = batcher
+}
+
+// CloseBatcher closes the batcher SetBatcher set, writing the entries still
+// queued, and reports whether they were written within timeout. Without a
+// batcher it returns true at once. An entry logged afterwards is written
+// before LogVerification returns.
+func (s *AuditService) CloseBatcher(timeout time.Duration) bool {
+	if s.batcher == nil {
+		return true
+	}
+	return s.batcher.Close(timeout)
+}
+
+// LogVerification records the audit entry of a verification decision. With a
+// batcher set it queues the entry and returns without waiting for the insert;
+// the batcher writes it with the next batch (see AuditBatcher). Without one
+// the entry is written before it returns, as Log writes it. The entry's
+// IPAddress and UserAgent are copied, as LogAction copies them: a queued entry
+// outlives the request whose buffer they may view.
+func (s *AuditService) LogVerification(ctx context.Context, entry *domain.AuditLog) error {
+	entry.IPAddress = strings.Clone(entry.IPAddress)
+	entry.UserAgent = strings.Clone(entry.UserAgent)
+	if s.batcher != nil {
+		return s.batcher.Enqueue(entry)
+	}
+	return s.auditRepo.Create(entry)
 }
 
 // NewAuditService creates a new audit service

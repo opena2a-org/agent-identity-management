@@ -71,6 +71,10 @@ type AuditServicer interface {
 	GetAgentActivity(ctx context.Context, orgID, agentID uuid.UUID, limit, offset int) ([]*domain.AuditLog, error)
 	GetAuditLogs(ctx context.Context, orgID uuid.UUID, action string, entityType string, entityID *uuid.UUID, userID *uuid.UUID, startDate *time.Time, endDate *time.Time, limit int, offset int) ([]*domain.AuditLog, int, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.AuditLog, error)
+	// LogVerification records the audit entry of a verification decision
+	// without waiting for its insert when the service queues them for batch
+	// writes (AuditService.SetBatcher).
+	LogVerification(ctx context.Context, entry *domain.AuditLog) error
 }
 
 // CapabilityServicer defines the methods from CapabilityService that handlers use
