@@ -120,6 +120,23 @@ jobs:
       - name: Every COPY source is covered by the docker filter
         run: ./scripts/lint-docker-paths-filter.sh
 
+  # The project lives under the opena2a-org organization; a link to the
+  # unrelated `opena2a` GitHub account is a failed clone or a 404 (see
+  # scripts/lint-docs-repo-links.sh). The self-test runs first so a lint that
+  # has stopped rejecting its fixtures cannot report the repository clean.
+  # Unconditional: the lint covers every tracked text file, and it is fast.
+  docs-repo-links-lint:
+    name: Docs repository-link lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: The repository-link lint rejects every link its test plants
+        run: bash scripts/test-lint-docs-repo-links.sh
+      - name: No link to the opena2a GitHub account in the repository's files
+        run: ./scripts/lint-docs-repo-links.sh
+
   # The automated review's input. pr-review.yml hands the model a diff and a
   # full-file list composed by scripts/pr-review-generated-files.mjs: generated
   # lockfiles excluded at any depth, npm lockfile hunks replaced by a
@@ -662,6 +679,8 @@ jobs:
 
   ci-gate:
     name: CI Gate
+    # Reads only the results of the jobs it needs; it checks out nothing.
+    permissions: {}
     needs:
       [
         secrets-lint,
@@ -669,6 +688,7 @@ jobs:
         workflow-lint,
         sync-protect-guard,
         docker-paths-filter,
+        docs-repo-links-lint,
         sdk-dependency-audit,
         sdk-tests,
         sdk-python-tests,
@@ -690,6 +710,7 @@ jobs:
           wl='${{ needs.workflow-lint.result }}'
           sp='${{ needs.sync-protect-guard.result }}'
           dp='${{ needs.docker-paths-filter.result }}'
+          dl='${{ needs.docs-repo-links-lint.result }}'
           sa='${{ needs.sdk-dependency-audit.result }}'
           st='${{ needs.sdk-tests.result }}'
           spt='${{ needs.sdk-python-tests.result }}'
@@ -700,11 +721,11 @@ jobs:
           ax='${{ needs.atx-conformance.result }}'
           fe='${{ needs.frontend.result }}'
           ee='${{ needs.e2e-empty-state.result }}'
-          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
+          echo "secrets-lint=$sl tenant-scoping-lint=$tl workflow-lint=$wl sync-protect-guard=$sp docker-paths-filter=$dp docs-repo-links-lint=$dl sdk-dependency-audit=$sa sdk-tests=$st sdk-python-tests=$spt pr-review-input-guard=$pg changes=$ch"
           echo "backend=$be integration=$it atx-conformance=$ax frontend=$fe e2e-empty-state=$ee"
           fail=0
           # Unconditional jobs must succeed outright.
-          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
+          for pair in "secrets-lint:$sl" "tenant-scoping-lint:$tl" "workflow-lint:$wl" "sync-protect-guard:$sp" "docker-paths-filter:$dp" "docs-repo-links-lint:$dl" "sdk-dependency-audit:$sa" "sdk-tests:$st" "sdk-python-tests:$spt" "pr-review-input-guard:$pg" "changes:$ch"; do
             if [ "${pair#*:}" != "success" ]; then
               echo "::error::${pair%%:*} did not succeed (${pair#*:}); failing closed."
               fail=1
