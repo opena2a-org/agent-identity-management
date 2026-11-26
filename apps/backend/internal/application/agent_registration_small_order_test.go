@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key/ed25519keytest"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -66,6 +67,32 @@ func TestAForgedProofForASmallOrderKeyLeavesTheAgentPending(t *testing.T) {
 	}
 }
 
+// An encoding with a canonical y that has no matching x is not a point. The
+// proof presented with it is not accepted, whatever the signature, and the
+// agent registered with it stays pending.
+func TestAProofForAnOffCurveKeyIsNotAcceptedAndLeavesTheAgentPending(t *testing.T) {
+	key := ed25519keytest.OffCurve()
+	require.False(t, ed25519key.Acceptable(key), "the helper refuses the off-curve key")
+	publicKey := base64.StdEncoding.EncodeToString(key)
+
+	rig := newProofRig(t, domain.EnforcementModeMonitoring)
+	issued := rig.issue(t)
+	proof := &PossessionProof{
+		ChallengeID: issued.ID.String(),
+		Signature:   base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize)),
+	}
+
+	outcome := rig.challenges.CheckPossessionProof(context.Background(), rig.orgID, rig.userID, publicKey, proof)
+
+	assert.Equal(t, PendingReasonProofNotAccepted, outcome.reason)
+	assert.Empty(t, outcome.provenKey)
+	assert.True(t, rig.store.used(issued.ID), "the challenge is used up")
+	agent := &domain.Agent{Name: "a", DisplayName: "A", Description: "d", TrustScore: 0.5, PublicKey: &publicKey}
+	decision := rig.svc.decideRegistrationVerification(rig.orgID, agent, outcome)
+	assert.False(t, decision.Verified)
+	assert.Equal(t, PendingReasonProofNotAccepted, decision.PendingReason)
+}
+
 func TestAGenuineKeyWithAGenuineProofIsStillVerified(t *testing.T) {
 	rig := newProofRig(t, domain.EnforcementModeMonitoring)
 	priv, pub := newKey(t)
@@ -109,6 +136,19 @@ func TestKeyReplacementRefusesTheFourteenSmallOrderEncodingsAndStoresNothing(t *
 			assert.Equal(t, current, *repo.agent.PublicKey)
 		})
 	}
+}
+
+func TestKeyReplacementRefusesAnOffCurveKeyAndStoresNothing(t *testing.T) {
+	_, current := newKey(t)
+	repo := &replacementRepo{agent: &domain.Agent{ID: uuid.New(), PublicKey: &current}}
+	svc := &AgentService{agentRepo: repo}
+	offCurve := base64.StdEncoding.EncodeToString(ed25519keytest.OffCurve())
+
+	err := svc.UpdateAgentPublicKey(context.Background(), repo.agent.ID, offCurve, "jwt")
+
+	assert.ErrorIs(t, err, ErrPublicKeyNotAccepted)
+	assert.Zero(t, repo.updates, "nothing is stored")
+	assert.Equal(t, current, *repo.agent.PublicKey)
 }
 
 func TestKeyReplacementDecodesAndLengthChecksTheKeyAsRegistrationDoes(t *testing.T) {

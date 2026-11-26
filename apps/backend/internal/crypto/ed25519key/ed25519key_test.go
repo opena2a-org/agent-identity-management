@@ -5,7 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"math/big"
 	"testing"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key/ed25519keytest"
 )
 
 // forgedSignature is the signature (R = the identity point, S = 0) that
@@ -116,4 +119,59 @@ func TestDecode(t *testing.T) {
 func hex32(s string) []byte {
 	a := mustHex32(s)
 	return a[:]
+}
+
+func TestOffCurveEncodingIsRefused(t *testing.T) {
+	key := ed25519keytest.OffCurve()
+	if len(key) != 32 || !canonical(key) {
+		t.Fatalf("test key %x is not a canonical 32-byte encoding", key)
+	}
+	for _, small := range SmallOrderEncodings() {
+		if string(small) == string(key) {
+			t.Fatalf("test key %x is a small-order encoding", key)
+		}
+	}
+	if Acceptable(key) {
+		t.Errorf("off-curve %x accepted", key)
+	}
+	withSign := append([]byte(nil), key...)
+	withSign[31] |= 0x80
+	if Acceptable(withSign) {
+		t.Errorf("off-curve %x with the sign bit accepted", withSign)
+	}
+	if _, err := Decode(base64.StdEncoding.EncodeToString(key), true); !errors.Is(err, ErrNotAccepted) {
+		t.Errorf("Decode err = %v, want ErrNotAccepted", err)
+	}
+}
+
+// Acceptable agrees with an independent decoder (the RFC 8032 square-root
+// method in ed25519keytest) for the small canonical y values.
+func TestAcceptableAgreesWithCurveForManyY(t *testing.T) {
+	onCurve, offCurve := 0, 0
+	for n := 2; n < 400; n++ {
+		key := make([]byte, 32)
+		key[0], key[1] = byte(n), byte(n>>8)
+		y := new(big.Int).SetBytes([]byte{byte(n >> 8), byte(n)})
+		small := false
+		for _, s := range SmallOrderEncodings() {
+			if string(s) == string(key) {
+				small = true
+			}
+		}
+		if small {
+			continue
+		}
+		want := ed25519keytest.OnCurve(y)
+		if got := Acceptable(key); got != want {
+			t.Fatalf("y=%d: Acceptable = %v, curve says %v", n, got, want)
+		}
+		if want {
+			onCurve++
+		} else {
+			offCurve++
+		}
+	}
+	if onCurve == 0 || offCurve == 0 {
+		t.Fatalf("sample has %d on-curve and %d off-curve", onCurve, offCurve)
+	}
 }

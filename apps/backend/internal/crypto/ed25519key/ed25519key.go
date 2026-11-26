@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/big"
 )
 
 // ErrNotAccepted is returned for a key that decodes to 32 bytes but that
@@ -61,7 +62,8 @@ func SmallOrderEncodings() [][]byte {
 
 // Acceptable reports whether key is an acceptable Ed25519 public key: 32 bytes
 // whose y coordinate (little-endian, top bit masked) is below p = 2^255 - 19,
-// and that is none of the fourteen small-order encodings.
+// that is none of the fourteen small-order encodings, and that decodes to a
+// point on the curve (there is an x with -x^2 + y^2 = 1 + d x^2 y^2).
 func Acceptable(key []byte) bool {
 	if len(key) != ed25519.PublicKeySize {
 		return false
@@ -74,7 +76,51 @@ func Acceptable(key []byte) bool {
 			return false
 		}
 	}
-	return true
+	return onCurve(key)
+}
+
+var (
+	fieldP = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 255), big.NewInt(19))
+	// curveD = -121665/121666 mod p
+	curveD = func() *big.Int {
+		num := new(big.Int).Neg(big.NewInt(121665))
+		den := new(big.Int).ModInverse(big.NewInt(121666), fieldP)
+		return num.Mul(num, den).Mod(num, fieldP)
+	}()
+	legendreExp = new(big.Int).Rsh(new(big.Int).Sub(fieldP, big.NewInt(1)), 1)
+)
+
+// onCurve reports whether the y coordinate of the 32-byte encoding (top bit
+// masked, already known to be below p) has a matching x on edwards25519. The
+// curve equation gives x^2 = (y^2 - 1) / (d y^2 + 1); an x exists exactly when
+// that quotient is zero or a square in the field. The denominator is never
+// zero, because -1/d is not a square modulo p.
+func onCurve(key []byte) bool {
+	var be [ed25519.PublicKeySize]byte
+	for i := range be {
+		be[i] = key[ed25519.PublicKeySize-1-i]
+	}
+	be[0] &= 0x7f
+	y := new(big.Int).SetBytes(be[:])
+	y2 := new(big.Int).Mul(y, y)
+	y2.Mod(y2, fieldP)
+	u := new(big.Int).Sub(y2, big.NewInt(1))
+	u.Mod(u, fieldP)
+	v := new(big.Int).Mul(curveD, y2)
+	v.Add(v, big.NewInt(1))
+	v.Mod(v, fieldP)
+	if v.Sign() == 0 {
+		return false
+	}
+	if u.Sign() == 0 {
+		return true
+	}
+	q := new(big.Int).ModInverse(v, fieldP)
+	if q == nil {
+		return false
+	}
+	q.Mul(q, u).Mod(q, fieldP)
+	return q.Exp(q, legendreExp, fieldP).Cmp(big.NewInt(1)) == 0
 }
 
 // canonical reports whether the y coordinate of the 32-byte encoding, with the
