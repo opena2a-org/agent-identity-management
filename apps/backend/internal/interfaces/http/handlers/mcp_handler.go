@@ -751,7 +751,7 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 		}
 		if errors.Is(err, application.ErrPublicKeyTypeNotSupported) {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": application.ErrPublicKeyTypeNotSupported.Error(),
+				"error": `keyType must be "ed25519"`,
 			})
 		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
