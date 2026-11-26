@@ -77,7 +77,7 @@ func postCreateAgentGranting(t *testing.T, repo *registeringAgentRepo, grants do
 	vault, err := crypto.NewKeyVault(base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32)))
 	require.NoError(t, err)
 
-	agentService := application.NewAgentService(repo, failingTrustCalculator{}, nil, vault, nil, nil, grants, nil, nil, nil, nil, nil)
+	agentService := application.NewAgentService(repo, failingTrustCalculator{}, nil, vault, nil, nil, grants, nil, nil, nil, &MockOrganizationRepository{}, nil)
 	handler := NewAgentHandlerWithInterfaces(
 		agentService,
 		&MockMCPServiceImpl{},

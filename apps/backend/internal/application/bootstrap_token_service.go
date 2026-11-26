@@ -2,13 +2,13 @@ package application
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -195,8 +195,7 @@ func (s *BootstrapTokenService) Exchange(ctx context.Context, plaintext string, 
 		return nil, err
 	}
 	if req.PublicKey != "" {
-		decoded, err := base64.StdEncoding.DecodeString(req.PublicKey)
-		if err != nil || len(decoded) != 32 {
+		if _, err := ed25519key.Decode(req.PublicKey, false); err != nil {
 			return nil, ErrBootstrapInvalidPublicKey
 		}
 	}

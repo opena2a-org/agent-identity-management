@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 )
 
 // ED25519Service handles ED25519 cryptographic operations
@@ -67,6 +69,9 @@ func (s *ED25519Service) Verify(publicKeyB64 string, message []byte, signatureB6
 	// Verify public key length
 	if len(publicKey) != ed25519.PublicKeySize {
 		return false, fmt.Errorf("invalid public key size: expected %d, got %d", ed25519.PublicKeySize, len(publicKey))
+	}
+	if !ed25519key.Acceptable(publicKey) {
+		return false, ed25519key.ErrNotAccepted
 	}
 
 	// Decode signature from base64

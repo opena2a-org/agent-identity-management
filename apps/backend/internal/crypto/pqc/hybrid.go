@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 )
 
 // GenerateHybridKeyPair generates both Ed25519 and ML-DSA key pairs
@@ -110,6 +112,11 @@ func HybridVerify(publicKey *HybridPublicKey, message []byte, sig *HybridSignatu
 	}
 	if len(sig.MLDSA) == 0 {
 		return ErrMissingMLDSASignature
+	}
+
+	// A small-order or non-canonical Ed25519 key verifies nothing.
+	if !ed25519key.Acceptable(publicKey.Ed25519) {
+		return ErrEd25519SignatureInvalid
 	}
 
 	// Verify Ed25519 signature first (faster)

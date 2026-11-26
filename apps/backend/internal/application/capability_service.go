@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/transition"
@@ -758,7 +759,7 @@ func (s *CapabilityService) verifySignature(publicKeyStr string, algorithm strin
 	// For now, only Ed25519 is implemented
 	// TODO: Add support for RSA and ECDSA
 	if algorithm == "Ed25519" || algorithm == "" {
-		if len(publicKey) != ed25519.PublicKeySize {
+		if !ed25519key.Acceptable(publicKey) {
 			return false
 		}
 		return ed25519.Verify(publicKey, payload, signature)

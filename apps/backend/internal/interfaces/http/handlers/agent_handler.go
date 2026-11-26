@@ -325,6 +325,8 @@ func registrationErrorStatus(err error) int {
 	switch {
 	case errors.Is(err, application.ErrAgentNameExists):
 		return fiber.StatusConflict
+	case errors.Is(err, application.ErrPublicKeyNotAccepted):
+		return fiber.StatusBadRequest
 	case errors.Is(err, application.ErrInvalidOrgOrUser):
 		// Foreign-key violation: the org/user from the credential no longer
 		// exists (e.g. stale API key, deleted org). Client error, not 500.
@@ -346,6 +348,9 @@ func respondRegistrationError(c fiber.Ctx, err error) error {
 	var refusal *application.AgentRequestError
 	if errors.As(err, &refusal) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": refusal.Message()})
+	}
+	if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+		return publicKeyNotAccepted(c)
 	}
 	switch status := registrationErrorStatus(err); status {
 	case fiber.StatusConflict:
@@ -474,6 +479,12 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 
 	// Build response with agent details and API key
 	response := h.enrichAgentResponse(c, agent)
+
+	// An agent that stays pending says why, so that a developer is not left
+	// guessing. The reason holds no secret and no challenge.
+	if agent.Status == domain.AgentStatusPending && agent.RegistrationPendingReason != "" {
+		response["pendingReason"] = agent.RegistrationPendingReason
+	}
 
 	// ✅ Include API key in response (only shown once!) - only for non-SDK registrations
 	if sdkTokenID == nil {
@@ -2362,6 +2373,9 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 
 	// Update public key (passes auth method for key replacement security check)
 	if err := h.agentService.UpdateAgentPublicKey(withTransitionActor(c), agentID, req.PublicKey, authMethod); err != nil {
+		if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+			return publicKeyNotAccepted(c)
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 

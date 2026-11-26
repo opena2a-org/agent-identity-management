@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/utils"
@@ -606,7 +607,7 @@ func (s *A2AService) VerifyA2ARequest(
 
 	// 4. Parse and verify signature
 	publicKey, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+	if err != nil || !ed25519key.Acceptable(publicKey) {
 		a2aDecoyVerify(req)
 		result.Error = "invalid public key format"
 		return result, nil

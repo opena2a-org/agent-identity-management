@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	infracrypto "github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
@@ -138,6 +140,14 @@ type AddPublicKeyRequest struct {
 // sdkTokenID is optional - tracks which SDK token was used to create this server
 // apiKeyID is optional - tracks which API key was used to create this server
 func (s *MCPService) CreateMCPServer(ctx context.Context, req *CreateMCPServerRequest, orgID, userID uuid.UUID, agentID *uuid.UUID, sdkTokenID *uuid.UUID, apiKeyID *uuid.UUID) (*domain.MCPServer, error) {
+	// A public key the request brings is stored as sent, so it has to be an
+	// acceptable Ed25519 key first.
+	if req.PublicKey != "" {
+		if _, err := ed25519key.Decode(req.PublicKey, false); err != nil {
+			return nil, ErrPublicKeyNotAccepted
+		}
+	}
+
 	// Check if THIS organization already has an MCP server at this URL.
 	// SECURITY (defect #40): The lookup is org-scoped at the repository
 	// layer. The mcp_servers table has UNIQUE(organization_id, url), so
@@ -440,6 +450,12 @@ func (s *MCPService) ListMCPServers(ctx context.Context, orgID uuid.UUID) ([]*do
 
 // UpdateMCPServer updates an MCP server
 func (s *MCPService) UpdateMCPServer(ctx context.Context, id uuid.UUID, req *UpdateMCPServerRequest) (*domain.MCPServer, error) {
+	if req.PublicKey != "" {
+		if _, err := ed25519key.Decode(req.PublicKey, false); err != nil {
+			return nil, ErrPublicKeyNotAccepted
+		}
+	}
+
 	server, err := s.mcpRepo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -670,8 +686,23 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	return nil
 }
 
-// AddPublicKey adds a public key to an MCP server
+// ErrPublicKeyTypeNotSupported is returned when the key type of a tool server's
+// key is empty or is not "ed25519" (any letter case). Ed25519 is the only type a
+// tool server's key is verified with (VerifyChallengeResponse), so it is the only
+// type that is stored.
+var ErrPublicKeyTypeNotSupported = errors.New(`keyType must be "ed25519"`)
+
+// AddPublicKey adds a public key to an MCP server. The key type has to be
+// Ed25519, and the key has to be an acceptable Ed25519 public key, before
+// anything is stored.
 func (s *MCPService) AddPublicKey(ctx context.Context, serverID uuid.UUID, req *AddPublicKeyRequest) error {
+	if !strings.EqualFold(req.KeyType, "ed25519") {
+		return ErrPublicKeyTypeNotSupported
+	}
+	if _, err := ed25519key.Decode(req.PublicKey, false); err != nil {
+		return ErrPublicKeyNotAccepted
+	}
+
 	// Verify server exists
 	_, err := s.mcpRepo.GetByID(serverID)
 	if err != nil {

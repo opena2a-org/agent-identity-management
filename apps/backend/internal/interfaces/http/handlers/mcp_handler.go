@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -324,6 +325,10 @@ func (h *MCPHandler) CreateMCPServer(c fiber.Ctx) error {
 			return c.Status(fiber.StatusConflict).JSON(response)
 		}
 
+		if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+			return publicKeyNotAccepted(c)
+		}
+
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
@@ -530,6 +535,9 @@ func (h *MCPHandler) UpdateMCPServer(c fiber.Ctx) error {
 
 	server, err := h.mcpService.UpdateMCPServer(c.Context(), serverID, &req)
 	if err != nil {
+		if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+			return publicKeyNotAccepted(c)
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
@@ -738,6 +746,14 @@ func (h *MCPHandler) AddPublicKey(c fiber.Ctx) error {
 	}
 
 	if err := h.mcpService.AddPublicKey(c.Context(), serverID, &req); err != nil {
+		if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+			return publicKeyNotAccepted(c)
+		}
+		if errors.Is(err, application.ErrPublicKeyTypeNotSupported) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": `keyType must be "ed25519"`,
+			})
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 
@@ -1459,4 +1475,12 @@ func (h *MCPHandler) getTimestamp(ts interface{}) time.Time {
 		}
 	}
 	return time.Time{}
+}
+
+// publicKeyNotAccepted answers a request whose Ed25519 public key is refused;
+// nothing was stored.
+func publicKeyNotAccepted(c fiber.Ctx) error {
+	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		"error": "publicKey must be a base64-encoded 32-byte Ed25519 public key",
+	})
 }

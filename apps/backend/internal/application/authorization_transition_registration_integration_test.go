@@ -4,7 +4,6 @@ package application
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
@@ -75,7 +74,7 @@ func TestTransitionTriggerOnRegistrationOpensTheAgentsHistory(t *testing.T) {
 		f.orgID, f.userID, nil, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, domain.AgentStatusVerified, verified.Status)
-	external, err := svc.CreateAgent(ctx, registration("reg-external-"+suffix, randomKey(t, ed25519.PublicKeySize), "api:call"),
+	external, err := svc.CreateAgent(ctx, registration("reg-external-"+suffix, newEd25519PublicKey(t), "api:call"),
 		f.orgID, f.userID, nil, nil, "")
 	require.NoError(t, err)
 	assert.Equal(t, domain.AgentStatusPending, external.Status, "an agent holding its own key is not verified automatically")

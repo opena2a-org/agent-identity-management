@@ -11,6 +11,36 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: a registration is verified on a signed challenge when the agent holds its own key, in monitoring mode
+
+- `POST /api/v1/agents/registration-challenges` answers a challenge id and a 32-byte challenge in base64, valid for
+  five minutes and bound to the organization and the user that asked. A registration (`POST /api/v1/agents`) may carry
+  `possessionProof: {challengeId, signature}`: the agent's Ed25519 signature over
+  `"aim-agent-registration-v1\n" + organizationId + "\n" + challengeId + "\n" + challenge + "\n" + publicKey`, with the
+  challenge and the public key in the base64 text the API carries them in.
+- The organization's enforcement mode is read once per registration, and an agent is verified automatically only when
+  that read says monitoring. In strict mode every agent stays pending, and so does every agent of an organization that
+  cannot be read, whether its key is the agent's own or one the server holds.
+- In an organization in monitoring mode, an agent registered with its own `publicKey` is verified at registration only
+  by such a proof, checked against the public key of the same request, together with the conditions every agent
+  already meets. A proof counts only for a key that `ed25519key.Acceptable` accepts: 32 bytes, canonical, not of
+  small order, and a point on the curve. For an otherwise valid registration, a missing, expired, reused, foreign or
+  bad proof leaves the agent pending and the registration succeeds. A registration whose `publicKey` is not an
+  acceptable Ed25519 key is refused with 400 (`publicKey must be a base64-encoded 32-byte Ed25519 public key`), as any
+  invalid key is, and stores nothing.
+- `POST /api/v1/mcp-servers/:id/keys` takes a key of type `ed25519` (any letter case) only; a request whose `keyType` is
+  empty, omitted or another type is refused with 400 (`keyType must be "ed25519"`), and the key is checked as an
+  agent's key is before anything is stored.
+- A registration that names a challenge with an id that parses as a UUID uses the challenge up, whatever the rest of
+  the proof holds: the signature, its organization, its user and its expiry are judged after that. A registration whose
+  `challengeId` does not parse uses no challenge. If the store fails to use the challenge, the registration succeeds
+  with the agent pending (`possession proof could not be checked`) and the challenge may be left unused. The five
+  minutes are judged when the challenge is used, with the clock read after the store answers, not when the
+  registration starts. An agent that stays pending is answered with `pendingReason`.
+- Migration `142_agent_registration_challenges.sql` creates `agent_registration_challenges`; the expiration cleanup job
+  deletes its expired rows. The upgrade from 1.0.0 now applies 44 migrations; `docs/releases/platform-v1.1.0.md`
+  carries its timing again.
+
 ### Changed: the privileged access management service and its `/api/v1/pam` routes are off unless `PAM_ENABLED=true`
 
 - `config.Load` reads `PAM_ENABLED` as on only when it is exactly `true`; unset, empty or any other value leaves it

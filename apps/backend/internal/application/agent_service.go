@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
@@ -38,7 +39,8 @@ var (
 
 // AgentRequestError is returned by CreateAgent for a request the caller can
 // correct: one that leaves a required member empty, or names an agent type
-// the service does not register. It names members by the JSON names
+// the service does not register. (A supplied public key that is not acceptable
+// is ErrPublicKeyNotAccepted.) It names members by the JSON names
 // CreateAgentRequest binds, and its text is written for the caller. Maps to
 // 400.
 type AgentRequestError struct {
@@ -89,6 +91,7 @@ type AgentService struct {
 	atcRevocationRetryDelays []time.Duration               // Waits between those revocation requests; nil means defaultRegistryATCRevocationRetryDelays
 	atcRevocations           *RegistryATCRevocations       // Optional: stores RevokeAgent's revocation request before it is sent, in place of atcRevoker; set by SetRegistryATCRevocations
 	verifyReadSource         VerifyReadSource              // Optional: where VerifyCapability reads from, a read replica when one is current; set by SetVerifyReads
+	registrationChallenges   *RegistrationChallengeService // Optional: issues and uses up the challenges of registration possession proofs; set by SetRegistrationChallenges
 }
 
 // SetWebhookService wires the webhook service that the agent.* and
@@ -349,6 +352,10 @@ type CreateAgentRequest struct {
 	// (atx-spec core.md §1.5). Identity/attestation + offline detection signal only;
 	// never an authorization input.
 	DeclaredPurpose *domain.DeclaredPurpose `json:"declaredPurpose,omitempty"`
+	// PossessionProof is the optional proof that the agent holds the private key
+	// of PublicKey: its signature over a challenge issued by
+	// POST /api/v1/agents/registration-challenges. See RegistrationProofMessage.
+	PossessionProof *PossessionProof `json:"possessionProof,omitempty"`
 }
 
 // CreateAgent creates a new agent
@@ -374,6 +381,16 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	if !isValidAgentType(req.AgentType) {
 		return nil, &AgentRequestError{UnknownAgentType: true}
+	}
+
+	// A public key the request supplies is stored only when it is a
+	// base64-encoded 32-byte Ed25519 key that ed25519key.Acceptable accepts. A
+	// refusal is answered before a challenge is used up and before anything is
+	// stored.
+	if req.PublicKey != "" {
+		if _, err := ed25519key.Decode(req.PublicKey, true); err != nil {
+			return nil, ErrPublicKeyNotAccepted
+		}
 	}
 
 	// ✅ Validate and sanitize TalksTo entries
@@ -484,8 +501,12 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 		}
 	}
 
+	// The proof, when the registration carries one, is checked here, before the
+	// status is decided, and its challenge is used up whatever the check finds.
+	proof := s.checkRegistrationProof(ctx, orgID, userID, req)
+
 	if s.transitions != nil {
-		scored, err := s.registerAgent(ctx, agent, req.Capabilities, orgID, userID)
+		scored, err := s.registerAgent(ctx, agent, req.Capabilities, orgID, userID, proof)
 		if err != nil {
 			return nil, err
 		}
@@ -537,9 +558,10 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	// AUTO-VERIFICATION: Only in monitoring mode. In strict mode, agents must be manually verified.
 	// This ensures strict environments require explicit approval before agents can operate.
-	shouldAutoVerify := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
+	decision := s.decideRegistrationVerification(orgID, agent, proof)
+	agent.RegistrationPendingReason = decision.PendingReason
 	autoVerified := false
-	if shouldAutoVerify {
+	if decision.Verified {
 		now := time.Now()
 		agent.Status = domain.AgentStatusVerified
 		agent.VerifiedAt = &now
@@ -636,16 +658,6 @@ func agentCreateError(err error) error {
 	}
 }
 
-// inStrictMode reports whether the organization requires agents to be
-// verified by hand.
-func (s *AgentService) inStrictMode(orgID uuid.UUID) bool {
-	if s.orgRepo == nil {
-		return false
-	}
-	org, err := s.orgRepo.GetByID(orgID)
-	return err == nil && org != nil && org.EnforcementMode == domain.EnforcementModeStrict
-}
-
 // registerAgent stores a new agent and grants the capabilities it declared
 // as its baseline, in one transaction with its registration_baseline record.
 // The status is decided before the agent is stored: verified when the
@@ -656,7 +668,7 @@ func (s *AgentService) inStrictMode(orgID uuid.UUID) bool {
 // history row is written after the commit. The actor is the one the context
 // names, else the registering user. It reports whether the agent was stored
 // with a calculated trust score.
-func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, capabilities []string, orgID, userID uuid.UUID) (bool, error) {
+func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, capabilities []string, orgID, userID uuid.UUID, proof possessionProofOutcome) (bool, error) {
 	repository.PrepareNewAgent(agent)
 	var trustScore *domain.TrustScore
 	if score, err := s.trustCalc.Calculate(agent); err != nil {
@@ -664,7 +676,9 @@ func (s *AgentService) registerAgent(ctx context.Context, agent *domain.Agent, c
 	} else {
 		trustScore, agent.TrustScore = score, score.Score
 	}
-	verified := !s.inStrictMode(orgID) && s.shouldAutoVerifyAgent(agent)
+	decision := s.decideRegistrationVerification(orgID, agent, proof)
+	agent.RegistrationPendingReason = decision.PendingReason
+	verified := decision.Verified
 	if verified {
 		now := time.Now()
 		agent.Status = domain.AgentStatusVerified
@@ -815,34 +829,6 @@ func (s *AgentService) applyRegistrationTags(ctx context.Context, agent *domain.
 			}
 		}
 	}
-}
-
-// shouldAutoVerifyAgent determines if an agent meets criteria for automatic verification
-// Auto-verification criteria:
-// 1. Has valid cryptographic keys (public + encrypted private key)
-// 2. Trust score >= 0.3 (30% minimum threshold)
-// 3. Has required metadata (name, description, type)
-func (s *AgentService) shouldAutoVerifyAgent(agent *domain.Agent) bool {
-	// ✅ Check 1: Must have cryptographic keys
-	if agent.PublicKey == nil || agent.EncryptedPrivateKey == nil {
-		fmt.Printf("Agent %s cannot be auto-verified: missing cryptographic keys\n", agent.Name)
-		return false
-	}
-
-	// ✅ Check 2: Trust score must be >= 0.3 (30%)
-	if agent.TrustScore < 0.3 {
-		fmt.Printf("Agent %s cannot be auto-verified: trust score too low (%.2f < 0.3)\n", agent.Name, agent.TrustScore)
-		return false
-	}
-
-	// ✅ Check 3: Must have required metadata
-	if agent.Name == "" || agent.DisplayName == "" || agent.Description == "" {
-		fmt.Printf("Agent %s cannot be auto-verified: missing required metadata\n", agent.Name)
-		return false
-	}
-
-	// ✅ All checks passed - agent qualifies for auto-verification
-	return true
 }
 
 // GetAgent retrieves an agent by ID
@@ -2926,6 +2912,9 @@ func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UU
 	// 2. Validate public key format (should be base64-encoded 32-byte Ed25519 public key)
 	if publicKey == "" {
 		return fmt.Errorf("public_key is required")
+	}
+	if _, err := ed25519key.Decode(publicKey, true); err != nil {
+		return ErrPublicKeyNotAccepted
 	}
 
 	// 3. SECURITY: If agent already has a registered key, require JWT auth (not Ed25519)

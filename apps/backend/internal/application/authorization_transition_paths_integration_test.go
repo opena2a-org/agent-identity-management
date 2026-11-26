@@ -4,7 +4,6 @@ package application
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
@@ -72,7 +71,9 @@ func (f *transitionFixture) request(t *testing.T, ctx context.Context, capabilit
 	return req
 }
 
-// randomKey is n random bytes in the standard base64 a stored key uses.
+// randomKey is n random bytes in the standard base64 a stored key uses. It
+// stands for an ML-DSA key only: random bytes are an acceptable Ed25519 key
+// only by chance, so an Ed25519 key comes from newEd25519PublicKey.
 func randomKey(t *testing.T, n int) string {
 	t.Helper()
 	b := make([]byte, n)
@@ -134,7 +135,7 @@ func TestTransitionTriggersOnRequestKeyVerificationAndSuspensionPathsReplayToThe
 	// agent (TestTransitionTriggerOfAVerificationMovesAPendingAgent).
 	require.NoError(t, f.agentSvc.ReactivateAgent(userCtx, f.agentID))
 
-	sdkKey := randomKey(t, ed25519.PublicKeySize)
+	sdkKey := newEd25519PublicKey(t)
 	require.NoError(t, f.agentSvc.UpdateAgentPublicKey(userCtx, f.agentID, sdkKey, "jwt"))
 	firstPQC, secondPQC := randomKey(t, 1952), randomKey(t, 1952)
 	require.NoError(t, f.agentSvc.UpdateAgentPQCKey(userCtx, f.agentID, firstPQC, "ML-DSA-65", true))
@@ -335,7 +336,7 @@ func TestTransitionTriggerOnRequestAndKeyPathsWhenTheRecordPathFails(t *testing.
 		f.agentID).Scan(&requests))
 	assert.Zero(t, requests, "a refused automatic approval left its request behind")
 	require.ErrorIs(t, f.agentSvc.ReactivateAgent(userCtx, f.agentID), transition.ErrRecordUnavailable)
-	require.ErrorIs(t, f.agentSvc.UpdateAgentPublicKey(userCtx, f.agentID, randomKey(t, ed25519.PublicKeySize), "jwt"),
+	require.ErrorIs(t, f.agentSvc.UpdateAgentPublicKey(userCtx, f.agentID, newEd25519PublicKey(t), "jwt"),
 		transition.ErrRecordUnavailable)
 	require.ErrorIs(t, f.agentSvc.UpdateAgentPQCKey(userCtx, f.agentID, randomKey(t, 1952), "ML-DSA-65", true),
 		transition.ErrRecordUnavailable)

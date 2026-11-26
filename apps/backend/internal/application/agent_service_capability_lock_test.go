@@ -141,7 +141,7 @@ func TestCapabilityLock_FirstRegisterStrict_GrantsBaselineDirectly(t *testing.T)
 		Description:  "Strict-mode first-registration baseline test",
 		AgentType:    domain.AgentTypeAI,
 		Version:      "1.0.0",
-		PublicKey:    "Y2FwLWxvY2stdGVzdC1maXJzdC1zdHJpY3QtYmFzZWxpbmU=", // skip key generation
+		PublicKey:    "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=", // skip key generation
 		Capabilities: []string{"flight:search", "flight:book"},
 	}
 
@@ -173,7 +173,7 @@ func TestCapabilityLock_FirstRegisterMonitoring_GrantsBaselineDirectly(t *testin
 		Description:  "Monitoring-mode first-registration baseline test",
 		AgentType:    domain.AgentTypeAI,
 		Version:      "1.0.0",
-		PublicKey:    "Y2FwLWxvY2stdGVzdC1maXJzdC1tb24tYmFzZWxpbmU=",
+		PublicKey:    "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 		Capabilities: []string{"flight:search", "flight:book"},
 	}
 

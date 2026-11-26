@@ -27,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/pqc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -319,7 +320,7 @@ func (k Keys) ed25519Key() (ed25519.PublicKey, error) {
 		return nil, keyNotRecognized(KeyCauseNoRegisteredKey)
 	}
 	raw, err := base64.StdEncoding.DecodeString(*k.agent.PublicKey)
-	if err != nil || len(raw) != ed25519.PublicKeySize {
+	if err != nil || !ed25519key.Acceptable(raw) {
 		logMalformedKey(k.agentID, "Ed25519")
 		return nil, keyNotRecognized(KeyCauseRegisteredKeyMalformed)
 	}
