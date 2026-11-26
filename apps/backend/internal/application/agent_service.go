@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/infrastructure/repository"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/record/trace"
@@ -2910,6 +2911,9 @@ func (s *AgentService) UpdateAgentPublicKey(ctx context.Context, agentID uuid.UU
 	// 2. Validate public key format (should be base64-encoded 32-byte Ed25519 public key)
 	if publicKey == "" {
 		return fmt.Errorf("public_key is required")
+	}
+	if _, err := ed25519key.Decode(publicKey, true); err != nil {
+		return ErrPublicKeyNotAccepted
 	}
 
 	// 3. SECURITY: If agent already has a registered key, require JWT auth (not Ed25519)

@@ -2210,7 +2210,7 @@ func TestAgentService_UpdateAgentPublicKey_Success(t *testing.T) {
 	}
 
 	agent := createTestAgentForService()
-	newPublicKey := "new-sdk-public-key-base64"
+	_, newPublicKey := newKey(t)
 
 	mockAgentRepo.On("GetByID", agent.ID).Return(agent, nil)
 	mockAgentRepo.On("Update", mock.MatchedBy(func(a *domain.Agent) bool {
@@ -2588,7 +2588,8 @@ func TestAgentService_UpdateAgentPublicKey_IncrementsRotationCount(t *testing.T)
 	ctx := context.Background()
 	// authMethod="jwt" because the agent already has a key and the function
 	// rejects Ed25519/mldsa/hybrid auth in that branch.
-	err := service.UpdateAgentPublicKey(ctx, agent.ID, "fresh-public-key", "jwt")
+	_, freshPublicKey := newKey(t)
+	err := service.UpdateAgentPublicKey(ctx, agent.ID, freshPublicKey, "jwt")
 
 	assert.NoError(t, err)
 	assert.Equal(t, 8, agent.RotationCount, "UpdateAgentPublicKey must increment RotationCount")

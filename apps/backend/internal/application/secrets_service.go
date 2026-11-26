@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/agentauth"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	atcdomain "github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/atc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain/secrets"
@@ -177,7 +178,7 @@ func (s *SecretsService) Resolve(agentID uuid.UUID, req *secrets.ResolutionReque
 	}
 
 	pubKeyBytes, err := base64.StdEncoding.DecodeString(*agent.PublicKey)
-	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+	if err != nil || !ed25519key.Acceptable(pubKeyBytes) {
 		agentauth.DecoyVerifyEd25519(message, req.Signature)
 		denyReason = "invalid agent public key"
 		return nil, fmt.Errorf("invalid agent public key for %s", agentID)

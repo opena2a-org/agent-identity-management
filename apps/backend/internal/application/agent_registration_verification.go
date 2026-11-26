@@ -10,8 +10,14 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
+
+// ErrPublicKeyNotAccepted is returned wherever an Ed25519 public key is accepted
+// for storing and is not a base64-encoded 32-byte key that ed25519key.Acceptable
+// accepts. Nothing is stored; a route answers it with its validation error.
+var ErrPublicKeyNotAccepted = errors.New("publicKey must be a base64-encoded 32-byte Ed25519 public key")
 
 // This file holds the criterion for verifying an agent at registration, and
 // nothing else decides it: the proof of possession of the agent's key, the
@@ -148,8 +154,8 @@ func (s *RegistrationChallengeService) CheckPossessionProof(ctx context.Context,
 		return refused(PendingReasonProofNotAccepted)
 	}
 
-	key, err := base64.StdEncoding.Strict().DecodeString(publicKey)
-	if err != nil || len(key) != ed25519.PublicKeySize {
+	key, err := ed25519key.Decode(publicKey, true)
+	if err != nil {
 		return refused(PendingReasonProofNotAccepted)
 	}
 	signature, err := base64.StdEncoding.Strict().DecodeString(proof.Signature)
@@ -157,7 +163,7 @@ func (s *RegistrationChallengeService) CheckPossessionProof(ctx context.Context,
 		return refused(PendingReasonProofNotAccepted)
 	}
 	message := RegistrationProofMessage(orgID, challenge.ID, challenge.Challenge, publicKey)
-	if !ed25519.Verify(ed25519.PublicKey(key), message, signature) {
+	if !ed25519.Verify(key, message, signature) {
 		return refused(PendingReasonProofNotAccepted)
 	}
 	return possessionProofOutcome{presented: true, provenKey: publicKey}

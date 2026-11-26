@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 )
 
 // KeyPair represents an Ed25519 cryptographic key pair
@@ -58,6 +60,10 @@ func DecodePublicKey(publicKeyBase64 string) (ed25519.PublicKey, error) {
 		return nil, fmt.Errorf("invalid public key size: expected %d bytes, got %d", ed25519.PublicKeySize, len(publicKeyBytes))
 	}
 
+	if !ed25519key.Acceptable(publicKeyBytes) {
+		return nil, ed25519key.ErrNotAccepted
+	}
+
 	return ed25519.PublicKey(publicKeyBytes), nil
 }
 
@@ -82,5 +88,8 @@ func SignMessage(privateKey ed25519.PrivateKey, message []byte) []byte {
 
 // VerifySignature verifies a signature with a public key
 func VerifySignature(publicKey ed25519.PublicKey, message, signature []byte) bool {
+	if !ed25519key.Acceptable(publicKey) {
+		return false
+	}
 	return ed25519.Verify(publicKey, message, signature)
 }

@@ -2368,6 +2368,9 @@ func (h *AgentHandler) UpdateAgentKeys(c fiber.Ctx) error {
 
 	// Update public key (passes auth method for key replacement security check)
 	if err := h.agentService.UpdateAgentPublicKey(withTransitionActor(c), agentID, req.PublicKey, authMethod); err != nil {
+		if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+			return publicKeyNotAccepted(c)
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 

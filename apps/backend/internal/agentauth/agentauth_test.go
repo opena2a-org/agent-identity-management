@@ -7,12 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/pqc"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
@@ -280,4 +282,30 @@ func TestDecoyVerifyEd25519CostsOneVerification(t *testing.T) {
 	counted := countVerifications(t)
 	DecoyVerifyEd25519([]byte("message"), make([]byte, ed25519.SignatureSize))
 	require.Equal(t, verifications{ed25519: 1}, *counted)
+}
+
+// A registered key that is a small-order encoding verifies nothing: a request
+// whose signature plain ed25519.Verify accepts under it is not signed by the
+// agent.
+func TestVerifyEd25519RefusesARegisteredSmallOrderKey(t *testing.T) {
+	forged := make([]byte, ed25519.SignatureSize)
+	forged[0] = 1
+	for _, key := range ed25519key.SmallOrderEncodings() {
+		var message []byte
+		for i := 0; i < 10000 && message == nil; i++ {
+			candidate := []byte(fmt.Sprintf("message-%d", i))
+			if ed25519.Verify(ed25519.PublicKey(key), candidate, forged) {
+				message = candidate
+			}
+		}
+		require.NotNil(t, message, "%x", key)
+		agent := &domain.Agent{ID: uuid.New(), Status: domain.AgentStatusVerified, PublicKey: encoded(key)}
+		keys := KeySet(context.Background(), mapSource{agent.ID: agent}, agent.ID)
+
+		_, err := keys.VerifyEd25519("", message, forged)
+
+		require.ErrorIs(t, err, ErrKeyNotRecognized, "%x", key)
+		_, err = keys.VerifyEd25519(*encoded(key), message, forged)
+		require.ErrorIs(t, err, ErrKeyNotRecognized, "%x", key)
+	}
 }

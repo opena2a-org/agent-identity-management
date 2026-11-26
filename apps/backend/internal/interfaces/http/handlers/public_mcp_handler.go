@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/base64"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -172,6 +173,9 @@ func (h *PublicMCPHandler) RegisterMCPServer(c fiber.Ctx) error {
 	actorCtx := transition.WithActor(c.Context(), transition.Agent(agentID))
 	server, err := h.mcpService.CreateMCPServer(actorCtx, createReq, agent.OrganizationID, agentID, &agentID, nil, nil)
 	if err != nil {
+		if errors.Is(err, application.ErrPublicKeyNotAccepted) {
+			return publicKeyNotAccepted(c)
+		}
 		return respondServerError(c, fiber.StatusInternalServerError, err)
 	}
 

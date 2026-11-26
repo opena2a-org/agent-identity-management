@@ -9,6 +9,8 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 )
 
 // Capability tiers, as stored in privileged_capability_registry.tier.
@@ -217,7 +219,7 @@ func AuthorizePrivilegedAction(action PrivilegedAction, authority ActionAuthorit
 	if key.Kind != OwnerKeyATXCertified {
 		return refuse("owner key %q of kind %q cannot be verified by this policy", key.ID, key.Kind)
 	}
-	if len(key.PublicKey) != ed25519.PublicKeySize {
+	if !ed25519key.Acceptable(key.PublicKey) {
 		return refuse("owner key %q is not a valid Ed25519 public key", key.ID)
 	}
 

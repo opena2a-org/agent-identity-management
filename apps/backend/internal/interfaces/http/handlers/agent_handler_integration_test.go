@@ -1617,6 +1617,51 @@ func TestAgentHandler_UpdateAgentKeys_MissingPublicKey(t *testing.T) {
 	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
 }
 
+func TestAgentHandler_UpdateAgentKeys_RefusedKeyIsAValidationError(t *testing.T) {
+	orgID := uuid.New()
+	userID := uuid.New()
+	agentID := uuid.New()
+
+	mockAgentService := &MockAgentServiceImpl{
+		GetAgentFunc: func(ctx context.Context, id uuid.UUID) (*domain.Agent, error) {
+			return &domain.Agent{ID: agentID, OrganizationID: orgID, Name: "test-agent"}, nil
+		},
+		UpdateAgentPublicKeyFunc: func(ctx context.Context, agentID uuid.UUID, publicKey string) error {
+			return application.ErrPublicKeyNotAccepted
+		},
+	}
+
+	handler := NewAgentHandlerWithInterfaces(
+		mockAgentService,
+		&MockMCPServiceImpl{},
+		&MockAuditServiceImpl{},
+		&MockAPIKeyServiceImpl{},
+		nil,
+		&MockAlertServiceImpl{},
+		&MockVerificationEventServiceImpl{},
+		&MockCapabilityServiceImpl{},
+		&MockTagServiceImpl{},
+		&MockOrganizationRepository{},
+		&MockMCPAttestationServiceImpl{},
+	)
+
+	app := createTestAppWithAuth(handler, orgID, userID)
+	app.Put("/agents/:id/keys", handler.UpdateAgentKeys)
+
+	body := `{"publicKey":"AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}`
+	req := httptest.NewRequest("PUT", "/agents/"+agentID.String()+"/keys", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := app.Test(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	var out map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	assert.Equal(t, application.ErrPublicKeyNotAccepted.Error(), out["error"])
+}
+
 // ===========================
 // AgentHandler.GetAgentByIdentifier Tests with Mocks
 // ===========================

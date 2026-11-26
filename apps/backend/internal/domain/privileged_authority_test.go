@@ -3,11 +3,14 @@ package domain
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
 )
 
 // privilegedFixture is one SUPER_PRIVILEGED action plus an owner key that is
@@ -388,6 +391,40 @@ func TestPrivilegedActionStatement_SigningBytes(t *testing.T) {
 		st.Resource = bad
 		if _, err := st.SigningBytes(); err == nil {
 			t.Errorf("resource %q encoded without error", bad)
+		}
+	}
+}
+
+// An owner key that is a small-order encoding verifies no signature: a forged
+// signature that plain ed25519.Verify accepts under it does not authorize the
+// action.
+func TestAuthorizePrivilegedAction_RefusesASmallOrderOwnerKey(t *testing.T) {
+	f := newPrivilegedFixture(t)
+	forged := make([]byte, ed25519.SignatureSize)
+	forged[0] = 1
+	for _, key := range ed25519key.SmallOrderEncodings() {
+		var st PrivilegedActionStatement
+		found := false
+		for i := 0; i < 10000 && !found; i++ {
+			st = f.statement()
+			st.Nonce = fmt.Sprintf("nonce-%d", i)
+			msg, err := st.SigningBytes()
+			if err != nil {
+				t.Fatal(err)
+			}
+			found = ed25519.Verify(ed25519.PublicKey(key), msg, forged)
+		}
+		if !found {
+			t.Fatalf("no statement forges under %x", key)
+		}
+		keys := []OwnerKey{{ID: f.ownerID, Kind: OwnerKeyATXCertified, PublicKey: key}}
+		authority := ActionAuthority{
+			Kind:           AuthorityOwnerSignature,
+			OwnerSignature: &OwnerSignature{KeyID: f.ownerID, Statement: st, Signature: forged},
+		}
+
+		if got := AuthorizePrivilegedAction(f.action, authority, keys, f.now); got.Allowed {
+			t.Errorf("a forged signature under the small-order owner key %x authorized the action", key)
 		}
 	}
 }
