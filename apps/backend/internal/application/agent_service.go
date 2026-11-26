@@ -39,7 +39,8 @@ var (
 
 // AgentRequestError is returned by CreateAgent for a request the caller can
 // correct: one that leaves a required member empty, or names an agent type
-// the service does not register. It names members by the JSON names
+// the service does not register. (A supplied public key that is not acceptable
+// is ErrPublicKeyNotAccepted.) It names members by the JSON names
 // CreateAgentRequest binds, and its text is written for the caller. Maps to
 // 400.
 type AgentRequestError struct {
@@ -380,6 +381,16 @@ func (s *AgentService) CreateAgent(ctx context.Context, req *CreateAgentRequest,
 
 	if !isValidAgentType(req.AgentType) {
 		return nil, &AgentRequestError{UnknownAgentType: true}
+	}
+
+	// A public key the request supplies is stored only when it is a
+	// base64-encoded 32-byte Ed25519 key that ed25519key.Acceptable accepts. A
+	// refusal is answered before a challenge is used up and before anything is
+	// stored.
+	if req.PublicKey != "" {
+		if _, err := ed25519key.Decode(req.PublicKey, true); err != nil {
+			return nil, ErrPublicKeyNotAccepted
+		}
 	}
 
 	// ✅ Validate and sanitize TalksTo entries

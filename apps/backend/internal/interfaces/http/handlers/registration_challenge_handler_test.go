@@ -66,7 +66,7 @@ func TestTheChallengeRouteAnswersAChallengeBoundToItsAsker(t *testing.T) {
 }
 
 func TestARegistrationThatStaysPendingSaysWhyInOneField(t *testing.T) {
-	publicKey := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	publicKey := "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY="
 	cases := map[string]struct {
 		extra string
 		want  string

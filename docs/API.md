@@ -332,7 +332,7 @@ Content-Type: application/json
   "displayName": "My Awesome Agent",
   "description": "Production agent for user management",
   "agentType": "ai_agent",
-  "publicKey": "base64-encoded-ed25519-public-key",
+  "publicKey": "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
   "version": "1.0.0",
   "repositoryUrl": "https://github.com/myorg/my-agent",
   "documentationUrl": "https://docs.myorg.com",

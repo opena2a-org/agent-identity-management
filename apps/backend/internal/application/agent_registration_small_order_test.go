@@ -48,7 +48,7 @@ func (r *proofRig) chooseChallengeForForgery(t *testing.T, issued *IssuedRegistr
 	return nil
 }
 
-func TestAForgedProofForASmallOrderKeyLeavesTheAgentPending(t *testing.T) {
+func TestAForgedProofForASmallOrderKeyIsNotAcceptedAndTheRegistrationIsRefused(t *testing.T) {
 	encodings := ed25519key.SmallOrderEncodings()
 	require.Len(t, encodings, 14)
 	for _, key := range encodings {
@@ -59,10 +59,23 @@ func TestAForgedProofForASmallOrderKeyLeavesTheAgentPending(t *testing.T) {
 			issued := rig.issue(t)
 			proof := rig.chooseChallengeForForgery(t, issued, key, publicKey)
 
-			agent := rig.register(t, "forged", publicKey, proof)
-
-			requirePending(t, agent, PendingReasonProofNotAccepted)
+			// The signature is the forgery plain ed25519.Verify accepts; the proof
+			// is not accepted and the agent would stay pending.
+			outcome := rig.challenges.CheckPossessionProof(context.Background(), rig.orgID, rig.userID, publicKey, proof)
+			assert.Equal(t, PendingReasonProofNotAccepted, outcome.reason)
 			assert.True(t, rig.store.used(issued.ID), "the challenge is used up")
+			agent := &domain.Agent{Name: "a", DisplayName: "A", Description: "d", TrustScore: 0.5, PublicKey: &publicKey}
+			decision := rig.svc.decideRegistrationVerification(rig.orgID, agent, outcome)
+			assert.False(t, decision.Verified)
+			assert.Equal(t, PendingReasonProofNotAccepted, decision.PendingReason)
+
+			// The registration itself is refused and stores nothing.
+			_, err := rig.svc.CreateAgent(context.Background(), &CreateAgentRequest{
+				Name: "forged", DisplayName: "forged", Description: "d", AgentType: domain.AgentTypeLangChain,
+				PublicKey: publicKey, PossessionProof: proof,
+			}, rig.orgID, rig.userID, nil, nil, "")
+			assert.ErrorIs(t, err, ErrPublicKeyNotAccepted)
+			assert.Empty(t, rig.agents.stored, "nothing is stored")
 		})
 	}
 }

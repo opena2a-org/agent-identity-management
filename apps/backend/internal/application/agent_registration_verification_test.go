@@ -429,8 +429,19 @@ func TestAProofThatIsNotWellFormedLeavesTheAgentPending(t *testing.T) {
 	t.Run("a public key that is not 32 bytes", func(t *testing.T) {
 		short := base64.StdEncoding.EncodeToString([]byte("short key"))
 		issued := rig.issue(t)
-		agent := rig.register(t, "short-key", short, signed(t, priv, rig.orgID, issued, short))
-		requirePending(t, agent, PendingReasonProofNotAccepted)
+		proof := signed(t, priv, rig.orgID, issued, short)
+
+		outcome := rig.challenges.CheckPossessionProof(context.Background(), rig.orgID, rig.userID, short, proof)
+		assert.Equal(t, PendingReasonProofNotAccepted, outcome.reason)
+		assert.True(t, rig.store.used(issued.ID))
+
+		// The registration itself is refused, as any key that is not acceptable is.
+		storedBefore := len(rig.agents.stored)
+		_, err := rig.svc.CreateAgent(context.Background(), &CreateAgentRequest{
+			Name: "short-key", DisplayName: "Short", AgentType: domain.AgentTypeLangChain, PublicKey: short,
+		}, rig.orgID, rig.userID, nil, nil, "")
+		assert.ErrorIs(t, err, ErrPublicKeyNotAccepted)
+		assert.Len(t, rig.agents.stored, storedBefore, "nothing is stored")
 	})
 }
 

@@ -1576,7 +1576,7 @@ func TestAgentService_CreateAgent_WithPublicKey(t *testing.T) {
 		Name:        "sdk-agent",
 		DisplayName: "SDK Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:   "sdk-provided-public-key-base64",
+		PublicKey:   "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 	}
 
 	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(nil)
@@ -1594,7 +1594,7 @@ func TestAgentService_CreateAgent_WithPublicKey(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.NotNil(t, agent)
-	assert.Equal(t, "sdk-provided-public-key-base64", *agent.PublicKey)
+	assert.Equal(t, "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=", *agent.PublicKey)
 	assert.Equal(t, "Ed25519", agent.KeyAlgorithm)
 	// No encrypted private key since SDK provided its own
 	assert.Nil(t, agent.EncryptedPrivateKey)
@@ -1702,7 +1702,7 @@ func TestAgentService_CreateAgent_WithCapabilities(t *testing.T) {
 		Name:         "agent-with-caps",
 		DisplayName:  "Agent with Capabilities",
 		AgentType:    domain.AgentTypeAI,
-		PublicKey:    "test-key",
+		PublicKey:    "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 		Capabilities: []string{"file:read", "api:call"},
 	}
 
@@ -1746,7 +1746,7 @@ func TestAgentService_CreateAgent_WithTalksTo(t *testing.T) {
 		Name:        "mcp-connected-agent",
 		DisplayName: "MCP Connected Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:   "test-key",
+		PublicKey:   "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 		TalksTo:     []string{"memory", "filesystem", "github"},
 	}
 
@@ -1794,7 +1794,7 @@ func TestAgentService_CreateAgent_SanitizesMalformedTalksTo(t *testing.T) {
 		Name:        "malformed-talks-to-agent",
 		DisplayName: "Malformed TalksTo Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:   "test-key",
+		PublicKey:   "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 		TalksTo:     []string{"memory,filesystem,github"}, // Malformed!
 	}
 
@@ -1829,7 +1829,7 @@ func TestAgentService_CreateAgent_RepoError(t *testing.T) {
 		Name:        "test-agent",
 		DisplayName: "Test Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:   "test-key",
+		PublicKey:   "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 	}
 
 	mockAgentRepo.On("Create", mock.AnythingOfType("*domain.Agent")).Return(errors.New("database error"))
@@ -1855,7 +1855,7 @@ func TestAgentService_CreateAgent_DuplicateName(t *testing.T) {
 		Name:        "duplicate-agent",
 		DisplayName: "Duplicate Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:   "test-key",
+		PublicKey:   "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 	}
 
 	// Simulate PostgreSQL unique constraint violation
@@ -1894,7 +1894,7 @@ func TestAgentService_CreateAgent_WithSDKToken(t *testing.T) {
 		Name:        "sdk-token-agent",
 		DisplayName: "SDK Token Agent",
 		AgentType:   domain.AgentTypeAI,
-		PublicKey:   "test-key",
+		PublicKey:   "ET+TaPuDNVsfrj49F9/pFuiKKmG5NfMml4c3zbT+0MY=",
 	}
 
 	// Verify SDK token ID is stored
