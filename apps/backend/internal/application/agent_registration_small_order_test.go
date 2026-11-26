@@ -122,6 +122,7 @@ type replacementRepo struct {
 	domain.AgentRepository
 	agent   *domain.Agent
 	updates int
+	updated []*domain.Agent
 }
 
 func (r *replacementRepo) GetByID(uuid.UUID) (*domain.Agent, error) {
@@ -129,8 +130,10 @@ func (r *replacementRepo) GetByID(uuid.UUID) (*domain.Agent, error) {
 	return &copied, nil
 }
 
-func (r *replacementRepo) Update(*domain.Agent) error {
+func (r *replacementRepo) Update(agent *domain.Agent) error {
 	r.updates++
+	copied := *agent
+	r.updated = append(r.updated, &copied)
 	return nil
 }
 
@@ -195,4 +198,9 @@ func TestKeyReplacementStoresAGenuineKey(t *testing.T) {
 
 	require.NoError(t, svc.UpdateAgentPublicKey(context.Background(), repo.agent.ID, fresh, "jwt"))
 	assert.Equal(t, 1, repo.updates)
+	require.Len(t, repo.updated, 1)
+	require.NotNil(t, repo.updated[0].PublicKey)
+	assert.Equal(t, fresh, *repo.updated[0].PublicKey, "the stored key is the new one")
+	require.NotNil(t, repo.updated[0].PreviousPublicKey)
+	assert.Equal(t, current, *repo.updated[0].PreviousPublicKey, "the old key is kept as the previous one")
 }
