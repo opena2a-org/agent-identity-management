@@ -64,19 +64,27 @@ type PossessionProof struct {
 	Signature   string `json:"signature"`
 }
 
-// UnmarshalJSON never fails: a member that is not an object with these two
-// strings is a proof that is not accepted, and the registration goes on with
-// the agent pending, as it does for any proof that is not good.
+// UnmarshalJSON never fails. The two members are decoded independently: a
+// challengeId that is a string is kept whatever the signature member holds, and
+// the other way round, so a challenge that is named is always used. A member of
+// another JSON type is left empty, and a value that is not an object leaves both
+// empty; the proof is then not accepted and the registration goes on with the
+// agent pending, as it does for any proof that is not good.
 func (p *PossessionProof) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		ChallengeID string `json:"challengeId"`
-		Signature   string `json:"signature"`
+		ChallengeID json.RawMessage `json:"challengeId"`
+		Signature   json.RawMessage `json:"signature"`
 	}
+	*p = PossessionProof{}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		*p = PossessionProof{}
 		return nil
 	}
-	*p = PossessionProof(raw)
+	if err := json.Unmarshal(raw.ChallengeID, &p.ChallengeID); err != nil {
+		p.ChallengeID = ""
+	}
+	if err := json.Unmarshal(raw.Signature, &p.Signature); err != nil {
+		p.Signature = ""
+	}
 	return nil
 }
 

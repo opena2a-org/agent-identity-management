@@ -413,6 +413,37 @@ func TestAPossessionProofThatIsNotAnObjectIsAProofNotAcceptedAndNotARejectedBody
 	assert.Equal(t, &PossessionProof{ChallengeID: "c", Signature: "s"}, req.PossessionProof)
 }
 
+func TestAChallengeIdIsKeptAndUsedWhateverTheSignatureMemberHolds(t *testing.T) {
+	for _, signatureJSON := range []string{`7`, `[1,2]`, `{"a":1}`, `true`, `null`} {
+		t.Run(signatureJSON, func(t *testing.T) {
+			rig := newProofRig(t, domain.EnforcementModeMonitoring)
+			priv, pub := newKey(t)
+			issued := rig.issue(t)
+			good := signed(t, priv, rig.orgID, issued, pub)
+
+			var req CreateAgentRequest
+			body := `{"name":"n","possessionProof":{"challengeId":"` + issued.ID.String() + `","signature":` + signatureJSON + `}}`
+			require.NoError(t, json.Unmarshal([]byte(body), &req))
+			require.NotNil(t, req.PossessionProof)
+			assert.Equal(t, issued.ID.String(), req.PossessionProof.ChallengeID)
+			assert.Empty(t, req.PossessionProof.Signature)
+
+			first := rig.register(t, "wrong-type-signature", pub, req.PossessionProof)
+			requirePending(t, first, PendingReasonProofNotAccepted)
+			assert.True(t, rig.store.used(issued.ID), "a challenge that is named is used")
+
+			second := rig.register(t, "good-signature-after", pub, good)
+			requirePending(t, second, PendingReasonProofUsed)
+		})
+	}
+
+	t.Run("a signature is kept when the challenge id has the wrong type", func(t *testing.T) {
+		var proof PossessionProof
+		require.NoError(t, json.Unmarshal([]byte(`{"challengeId":7,"signature":"abc"}`), &proof))
+		assert.Equal(t, PossessionProof{Signature: "abc"}, proof)
+	})
+}
+
 func TestStrictModeKeepsASelfKeyedAgentPendingWithAGoodProof(t *testing.T) {
 	rig := newProofRig(t, domain.EnforcementModeStrict)
 	priv, pub := newKey(t)
