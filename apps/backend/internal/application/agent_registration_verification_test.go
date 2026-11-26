@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -126,11 +127,11 @@ func (proofTrustScoreRepo) Create(*domain.TrustScore) error { return nil }
 type proofOrgRepo struct {
 	domain.OrganizationRepository
 	orgs  map[uuid.UUID]*domain.Organization
-	reads int
+	reads atomic.Int32
 }
 
 func (r *proofOrgRepo) GetByID(id uuid.UUID) (*domain.Organization, error) {
-	r.reads++
+	r.reads.Add(1)
 	if org, ok := r.orgs[id]; ok {
 		return org, nil
 	}
@@ -537,7 +538,7 @@ func TestTheModeOfTheOrganizationIsReadOncePerRegistration(t *testing.T) {
 	agent := rig.register(t, "read-once", pub, signed(t, priv, rig.orgID, issued, pub))
 
 	assert.Equal(t, domain.AgentStatusVerified, agent.Status)
-	assert.Equal(t, 1, orgs.reads)
+	assert.Equal(t, int32(1), orgs.reads.Load())
 }
 
 func TestWithoutChallengesWiredAProofIsNotAccepted(t *testing.T) {
