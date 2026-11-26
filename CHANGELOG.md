@@ -18,11 +18,20 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   `possessionProof: {challengeId, signature}`: the agent's Ed25519 signature over
   `"aim-agent-registration-v1\n" + organizationId + "\n" + challengeId + "\n" + challenge + "\n" + publicKey`, with the
   challenge and the public key in the base64 text the API carries them in.
+- The organization's enforcement mode is read once per registration, and an agent is verified automatically only when
+  that read says monitoring. In strict mode every agent stays pending, and so does every agent of an organization that
+  cannot be read, whether its key is the agent's own or one the server holds.
 - In an organization in monitoring mode, an agent registered with its own `publicKey` is verified at registration only
   by such a proof, checked against the public key of the same request, together with the conditions every agent
-  already meets. A missing, expired, reused, foreign or bad proof leaves the agent pending and the registration
-  succeeds as before; the challenge is used up whatever the check finds. In strict mode the agent stays pending. An
-  agent that stays pending is answered with `pendingReason`.
+  already meets. A proof counts only for a key that `ed25519key.Acceptable` accepts: 32 bytes, canonical, and not of
+  small order. A missing, expired, reused, foreign or bad proof leaves the agent pending and the registration
+  succeeds as before.
+- A registration that names a challenge with an id that parses as a UUID uses the challenge up, whatever the rest of
+  the proof holds: the signature, its organization, its user and its expiry are judged after that. A registration whose
+  `challengeId` does not parse uses no challenge. If the store fails to use the challenge, the registration succeeds
+  with the agent pending (`possession proof could not be checked`) and the challenge may be left unused. The five
+  minutes are judged when the challenge is used, with the clock read after the store answers, not when the
+  registration starts. An agent that stays pending is answered with `pendingReason`.
 - Migration `142_agent_registration_challenges.sql` creates `agent_registration_challenges`; the expiration cleanup job
   deletes its expired rows. The upgrade from 1.0.0 now applies 44 migrations; `docs/releases/platform-v1.1.0.md`
   carries its timing again.

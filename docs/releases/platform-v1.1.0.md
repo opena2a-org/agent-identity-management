@@ -194,6 +194,18 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
   identity is an HMAC under the key, the same at every start with the same key, so two instances can be checked for
   the same `KEYVAULT_MASTER_KEY` without printing it. CHANGELOG: *Added: the server prints one line at start that
   names its KeyVault master key*.
+- An agent that registers with its own `publicKey` is verified at registration, in an organization in monitoring mode,
+  only by `possessionProof: {challengeId, signature}`: its Ed25519 signature over a challenge from
+  `POST /api/v1/agents/registration-challenges`, valid for five minutes and bound to the organization and the user that
+  asked. The proof counts only for a public key that is 32 bytes, canonical and not of small order. The registration
+  succeeds in every case; an agent without a good proof stays pending, and the answer carries `pendingReason`. A
+  registration that names a challenge with an id that parses as a UUID uses it up, whatever the rest of the proof
+  holds; one whose `challengeId` does not parse uses none. If the store fails to use the challenge, the agent stays
+  pending and the challenge may be left unused. The five minutes are judged when the challenge is used, not when the
+  registration starts. The organization's mode is read once per registration: strict mode, and an organization that
+  cannot be read, leave every agent pending. Migration `142_agent_registration_challenges.sql` creates the table of
+  challenges. CHANGELOG: *Added: a registration is verified on a signed challenge when the agent holds its own key, in
+  monitoring mode*.
 - `POSTGRES_POOL_ROLE` names a database role the request pool switches to with `SET ROLE`, and
   `POSTGRES_SCOPE_CENSUS=on` makes the request pool count its statements that name a tenant-scoped table, and those of
   them that run outside a transaction that declared a tenant or the service scope. Both are off when unset.
