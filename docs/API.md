@@ -358,6 +358,8 @@ Content-Type: application/json
 }
 ```
 
+In monitoring mode the agent is registered `verified` when it has its keys (a server-generated pair, or an Ed25519 `publicKey` whose private key the caller holds), a trust score of at least 0.3, and a `name`, `displayName` and `description`. Otherwise it is registered `pending` and the response carries `statusReason`, for example `"pending: the organization is in strict mode; an administrator verifies the agent under Agents in the dashboard"` or `"pending: trust score 0.25 is below the threshold 0.30"`.
+
 ---
 
 #### GET /api/v1/agents

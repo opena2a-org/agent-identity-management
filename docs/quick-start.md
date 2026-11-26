@@ -290,7 +290,8 @@ decorator registers `get_weather` as a capability the first time it runs, AIM gr
 the agent was not granted runs and is recorded. AIM refuses that call only in strict mode, which an administrator
 turns on per organization: Global Enforcement Mode on `/dashboard/admin/security-policies`, or
 `PUT /api/v1/admin/enforcement-settings` with `{"enforcementMode": "strict"}`. Strict mode also refuses every action
-of an agent that is not verified, and does not verify an agent when it registers.
+of an agent that is not verified, and does not verify an agent when it registers: an administrator verifies it under
+Agents in the dashboard. In monitoring mode `secure("weather-agent")` registers the agent verified.
 
 **Every time `get_weather()` is called**, AIM automatically:
 
@@ -632,6 +633,8 @@ Want to see the same boundary stop a real attack? The [Demos](DOCUMENTATION_INDE
 ### Notes on the root README's Quick start
 
 The first request after sign-in presents the refresh token `aim-sdk login` saved. A server with Redis records it as revoked, answers with a new one, and the SDK prints a line: `Token rotated successfully. Old refresh token revoked (new id: 461d130d...)`. Without Redis the server logs `Token revocation disabled (no Redis configured)` at startup, and one whose Redis could not be reached logs `Token revocation disabled (Redis unavailable)`; in both cases the server answers with the token it was given and the SDK prints no such line.
+
+In monitoring mode, the mode a new organization starts in, the server verifies an agent when it registers if the agent has its keys (the SDK sends the public half of the Ed25519 keypair it generates and keeps the private half), a trust score of at least 0.3, and a name, a display name and a description. `secure()` sends the name as the display name and `Agent <name> registered via AIM SDK` as the description when you give neither. The captured output above was recorded before the server verified an agent whose private key only the SDK holds, so it shows `pending`. An agent the registration leaves `pending` gets the reason in the answer's `statusReason`, which the SDK prints on the line under its status: `pending: the organization is in strict mode; an administrator verifies the agent under Agents in the dashboard`, or, in monitoring mode, the check the agent did not pass, such as `pending: trust score 0.25 is below the threshold 0.30`.
 
 `aim-sdk login` uses the OAuth 2.0 device grant (RFC 8628): the CLI prints a code and you approve it on your dashboard's `/device` page. `secure()` generates an Ed25519 keypair, registers the agent with the AIM backend, and stores credentials at `~/.aim/`.
 

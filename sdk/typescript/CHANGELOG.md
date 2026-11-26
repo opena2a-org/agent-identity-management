@@ -7,6 +7,13 @@ and this package adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed: `registerAgent({ name })` sends a description
+
+- The shortest call sent `description: ''`, and the server verifies an agent at registration only when it has a
+  display name and a description. An empty or absent `description` is now `Agent <name> registered via AIM SDK`, and
+  an empty `displayName` is the name, as in the Python SDK; the Java SDK also sends both.
+- `Agent.statusReason` is the reason the server gives when a registration leaves the agent pending.
+
 ### Fixed: `A2AClient.evaluatePolicy` sends the request the server reads (#652)
 
 - `POST /api/v1/a2a/policies/evaluate` reads `event`, `clientAgentId`, `remoteAgentId` and `skillId`.

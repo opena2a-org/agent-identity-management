@@ -193,16 +193,16 @@ PENDING_STRICT_REFUSAL = "Agent not verified - all actions denied"
 
 
 def test_the_pending_paragraph_says_what_a_pending_agents_call_does_in_each_mode():
-    """A reader who calls the agent before it is verified meets one of two states: on a
-    new organization, in monitoring mode, the call runs and raises an alert; on a
-    strict-mode organization it is refused. The paragraph names each in the words the
-    server uses."""
+    """A reader whose agent is not verified at registration meets one of two states: in
+    monitoring mode, the mode a new organization starts in, the call runs and raises an
+    alert; on a strict-mode organization it is refused. The paragraph names each in the
+    words the server uses."""
     server = AGENT_SERVICE.read_text(encoding="utf-8")
     assert f'"{PENDING_MONITORING_ALERT}: %s"' in server, "the server no longer titles the alert this way"
     assert f'"{PENDING_STRICT_REFUSAL}"' in server, "the server no longer refuses with this reason"
 
-    found = [p for p, _ in paragraphs() if p.startswith("The agent starts `pending`")]
-    assert len(found) == 1, f"the Quick start must say once that the agent starts pending: {found}"
+    found = [p for p, _ in paragraphs() if p.startswith("A pending agent's call")]
+    assert len(found) == 1, f"the Quick start must say once what a pending agent's call does: {found}"
     said = re.split(r"(?<=[.!?])\s+", found[0])
     monitoring = [s for s in said if f"`{PENDING_MONITORING_ALERT}`" in s]
     assert len(monitoring) == 1, f"the paragraph must name the monitoring-mode alert: {found[0]!r}"

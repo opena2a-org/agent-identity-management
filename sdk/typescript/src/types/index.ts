@@ -166,6 +166,12 @@ export interface Agent {
   agentType: string;
   version: string;
   status: AgentStatus;
+  /**
+   * Why the registration left the agent pending, for example "pending: the
+   * organization is in strict mode; ...". Present only on the agent
+   * registerAgent returns, and only when it is pending.
+   */
+  statusReason?: string;
   trustScore: number;
   organizationId: string;
   capabilities: string[];

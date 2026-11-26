@@ -434,8 +434,11 @@ export class AIMClient {
 
     const payload = {
       name: options.name,
-      displayName: options.displayName ?? options.name,
-      description: options.description ?? '',
+      displayName: options.displayName || options.name,
+      // The server verifies an agent at registration only when it has a
+      // display name and a description, so both are derived from the name
+      // when not given, as the Python and Java SDKs do.
+      description: options.description || `Agent ${options.name} registered via AIM SDK`,
       agentType: options.agentType ?? 'custom',
       version: options.version ?? '1.0.0',
       capabilities: options.capabilities ?? [],

@@ -29,7 +29,9 @@ agent = secure("my-first-agent", capabilities=["db:read"])
 
 `aim-sdk login` prints a code you approve on your dashboard's `/device` page; the PyPI release does not yet ([self-hosted sign-in](docs/quick-start.md#sign-in-from-your-dashboard), [#789](https://github.com/opena2a-org/agent-identity-management/issues/789)). `secure()` generates an Ed25519 keypair and stores credentials at `~/.aim/`.
 
-The agent starts `pending` until an administrator verifies it under Agents in the dashboard. On a new organization, which starts in monitoring mode, a pending agent's call runs and raises an `Unverified Agent Action (Monitoring Mode)` alert. On a strict-mode organization every call is refused with `Agent not verified - all actions denied` until then.
+Monitoring mode, a new organization's default, verifies the agent at registration; the capture above predates that. In strict mode it starts `pending`, with the reason under its status.
+
+A pending agent's call runs in monitoring mode and raises an `Unverified Agent Action (Monitoring Mode)` alert. On a strict-mode organization its calls are refused with `Agent not verified - all actions denied` until an administrator verifies it under Agents.
 
 Once it is verified, protect a function with that capability and call it:
 

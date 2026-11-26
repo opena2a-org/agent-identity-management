@@ -78,7 +78,7 @@ func TestTransitionTriggerOnRegistrationOpensTheAgentsHistory(t *testing.T) {
 	external, err := svc.CreateAgent(ctx, registration("reg-external-"+suffix, randomKey(t, ed25519.PublicKeySize), "api:call"),
 		f.orgID, f.userID, nil, nil, "")
 	require.NoError(t, err)
-	assert.Equal(t, domain.AgentStatusPending, external.Status, "an agent holding its own key is not verified automatically")
+	assert.Equal(t, domain.AgentStatusVerified, external.Status, "an agent holding its own key is verified in monitoring mode")
 	f.setEnforcement(t, domain.EnforcementModeStrict)
 	strict, err := svc.CreateAgent(ctx, registration("reg-strict-"+suffix, ""), f.orgID, f.userID, nil, nil, "")
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestTransitionTriggerOnRegistrationOpensTheAgentsHistory(t *testing.T) {
 		granted []string
 	}{
 		{verified, "verified", transition.KeyCustodyServer, []string{"db:read", "files:read"}},
-		{external, "pending", transition.KeyCustodyExternal, []string{"api:call"}},
+		{external, "verified", transition.KeyCustodyExternal, []string{"api:call"}},
 		{strict, "pending", transition.KeyCustodyServer, []string{}},
 	}
 	for i, w := range want {
