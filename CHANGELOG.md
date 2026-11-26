@@ -28,6 +28,9 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
   bad proof leaves the agent pending and the registration succeeds. A registration whose `publicKey` is not an
   acceptable Ed25519 key is refused with 400 (`publicKey must be a base64-encoded 32-byte Ed25519 public key`), as any
   invalid key is, and stores nothing.
+- `POST /api/v1/mcp-servers/:id/keys` takes a key of type `ed25519` (any letter case) only; a request whose `keyType` is
+  empty, omitted or another type is refused with 400 (`keyType must be "ed25519"`), and the key is checked as an
+  agent's key is before anything is stored.
 - A registration that names a challenge with an id that parses as a UUID uses the challenge up, whatever the rest of
   the proof holds: the signature, its organization, its user and its expiry are judged after that. A registration whose
   `challengeId` does not parse uses no challenge. If the store fails to use the challenge, the registration succeeds

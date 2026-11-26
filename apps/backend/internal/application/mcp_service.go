@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -685,12 +686,21 @@ func (s *MCPService) VerifyMCPServer(ctx context.Context, id uuid.UUID, userID u
 	return nil
 }
 
-// AddPublicKey adds a public key to an MCP server
+// ErrPublicKeyTypeNotSupported is returned when the key type of a tool server's
+// key is empty or is not "ed25519" (any letter case). Ed25519 is the only type a
+// tool server's key is verified with (VerifyChallengeResponse), so it is the only
+// type that is stored.
+var ErrPublicKeyTypeNotSupported = errors.New(`keyType must be "ed25519"`)
+
+// AddPublicKey adds a public key to an MCP server. The key type has to be
+// Ed25519, and the key has to be an acceptable Ed25519 public key, before
+// anything is stored.
 func (s *MCPService) AddPublicKey(ctx context.Context, serverID uuid.UUID, req *AddPublicKeyRequest) error {
-	if strings.EqualFold(req.KeyType, "ed25519") {
-		if _, err := ed25519key.Decode(req.PublicKey, false); err != nil {
-			return ErrPublicKeyNotAccepted
-		}
+	if !strings.EqualFold(req.KeyType, "ed25519") {
+		return ErrPublicKeyTypeNotSupported
+	}
+	if _, err := ed25519key.Decode(req.PublicKey, false); err != nil {
+		return ErrPublicKeyNotAccepted
 	}
 
 	// Verify server exists
