@@ -737,6 +737,7 @@ type Repositories struct {
 	BootstrapToken       *repository.BootstrapTokenRepository       // Onboarding bootstrap tokens (one agent registration each)
 	OnboardingEvent      *repository.OnboardingEventRepository      // Onboarding telemetry (organization, event, time; no user data)
 	OIDCSignInConfig     *repository.OIDCSignInConfigRepository     // Each organization's OIDC sign-in provider (client secret sealed)
+	RegChallenge         *repository.RegistrationChallengeRepository
 }
 
 func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPostgres) {
@@ -802,6 +803,7 @@ func initRepositories(db *sql.DB) (*Repositories, *repository.OAuthRepositoryPos
 		BootstrapToken:       repository.NewBootstrapTokenRepository(db),
 		OnboardingEvent:      repository.NewOnboardingEventRepository(db),
 		OIDCSignInConfig:     repository.NewOIDCSignInConfigRepository(db),
+		RegChallenge:         repository.NewRegistrationChallengeRepository(db),
 	}, oauthRepo
 }
 
@@ -849,6 +851,8 @@ type Services struct {
 	ActionRequestNonces *application.ActionRequestNonceService
 	// Records a user's request for the deletion of their own account, and deletes the account when it is due
 	AccountDeletion *application.AccountDeletionService
+	// Issues the challenges an agent signs to show it holds its key at registration
+	RegChallenges *application.RegistrationChallengeService
 }
 
 func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheService *cache.RedisCache, oauthRepo *repository.OAuthRepositoryPostgres, jwtService *auth.JWTService, emailService domain.EmailService) (*Services, *crypto.KeyVault) {
@@ -976,6 +980,8 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 	// Lets AddMCPServers tell that an MCP server's ID and its name on an
 	// agent's talks_to list are one server.
 	agentService.SetMCPServerLookup(repos.MCPServer)
+	registrationChallengeService := application.NewRegistrationChallengeService(repos.RegChallenge)
+	agentService.SetRegistrationChallenges(registrationChallengeService)
 
 	apiKeyService := application.NewAPIKeyService(
 		repos.APIKey,
@@ -1415,6 +1421,7 @@ func initServices(cfg *config.Config, db *sql.DB, repos *Repositories, cacheServ
 
 		// Account deletion requests and the purge that deletes the accounts when due
 		AccountDeletion: application.NewAccountDeletionService(repos.User, auditService),
+		RegChallenges:   registrationChallengeService,
 	}, keyVault
 }
 
@@ -1466,6 +1473,7 @@ type Handlers struct {
 	Authorize          *handlers.AuthorizeHandler          // POST /agents/:id/authorize -- FGA decision endpoint
 	ATCIssuance        *handlers.ATCIssuanceHandler        // POST /agents/:id/atc -- Registry-delegated ATC issuance
 	PAM                *handlers.PAMHandler                // /pam -- privileged access management of the organization
+	RegChallenge       *handlers.RegistrationChallengeHandler
 }
 
 func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTService, keyVault *crypto.KeyVault, cfg *config.Config, db *sql.DB) *Handlers {
@@ -1623,6 +1631,7 @@ func initHandlers(services *Services, repos *Repositories, jwtService *auth.JWTS
 			services.Audit,
 			services.Auth, // verifies the password with the sign-in's lockout and failure records
 		),
+		RegChallenge: handlers.NewRegistrationChallengeHandler(services.RegChallenges),
 		AccountDeletion: handlers.NewAccountDeletionHandler(
 			repos.User,
 			services.Auth, // verifies the password with the sign-in's lockout and failure records
@@ -1991,6 +2000,8 @@ func setupRoutes(v1 fiber.Router, h *Handlers, services *Services, jwtService *a
 	agents.Get("/", h.Agent.ListAgents)
 	agents.Post("/bulk-status", h.Lifecycle.BulkStatus)                          // Bulk agent status lookup
 	agents.Post("/", middleware.MemberOrAPIKeyMiddleware(), h.Agent.CreateAgent) // machine API keys (org-scoped) OR member+ JWT; other routes stay MemberMiddleware (JWT-only)
+	// The challenge an agent signs to show it holds its key; open to the callers of POST /.
+	agents.Post("/registration-challenges", middleware.MemberOrAPIKeyMiddleware(), h.RegChallenge.Issue)
 	agentsHeld.Get("/:id", h.Agent.GetAgent)
 	// Member+ JWT, OR a service principal acting on ITSELF. The TypeScript SDK's
 	// updateAgent() calls this with its OAuth token; before the service-token fix
@@ -2819,6 +2830,13 @@ func runExpirationCleanup(db *sql.DB) {
 		log.Printf("Password reset token cleanup error: %v", err)
 	} else if cleared > 0 {
 		log.Printf("Cleared %d expired password reset token(s)", cleared)
+	}
+
+	deleted, err := repository.NewRegistrationChallengeRepository(db).DeleteExpired(context.Background(), time.Now())
+	if err != nil {
+		log.Printf("Registration challenge cleanup error: %v", err)
+	} else if deleted > 0 {
+		log.Printf("Deleted %d expired registration challenge(s)", deleted)
 	}
 }
 

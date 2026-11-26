@@ -475,6 +475,12 @@ func (h *AgentHandler) CreateAgent(c fiber.Ctx) error {
 	// Build response with agent details and API key
 	response := h.enrichAgentResponse(c, agent)
 
+	// An agent that stays pending says why, so that a developer is not left
+	// guessing. The reason holds no secret and no challenge.
+	if agent.Status == domain.AgentStatusPending && agent.RegistrationPendingReason != "" {
+		response["pendingReason"] = agent.RegistrationPendingReason
+	}
+
 	// ✅ Include API key in response (only shown once!) - only for non-SDK registrations
 	if sdkTokenID == nil {
 		if apiKeyErr == nil && fullAPIKey != "" {
