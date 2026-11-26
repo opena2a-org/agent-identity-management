@@ -143,8 +143,7 @@ func (s *RegistrationChallengeService) CheckPossessionProof(ctx context.Context,
 		return refused(PendingReasonProofNotAccepted)
 	}
 
-	now := s.now()
-	challenge, firstUse, err := s.repo.Consume(ctx, challengeID, now)
+	challenge, firstUse, err := s.repo.Consume(ctx, challengeID, s.now())
 	switch {
 	case errors.Is(err, domain.ErrRegistrationChallengeNotFound):
 		return refused(PendingReasonProofNotAccepted)
@@ -155,7 +154,9 @@ func (s *RegistrationChallengeService) CheckPossessionProof(ctx context.Context,
 	if !firstUse {
 		return refused(PendingReasonProofUsed)
 	}
-	if !now.Before(challenge.ExpiresAt) {
+	// The expiry is judged at the use: with the clock read after Consume returns,
+	// not before it.
+	if !s.now().Before(challenge.ExpiresAt) {
 		return refused(PendingReasonProofExpired)
 	}
 	if challenge.OrganizationID != orgID || challenge.PrincipalID != principalID {

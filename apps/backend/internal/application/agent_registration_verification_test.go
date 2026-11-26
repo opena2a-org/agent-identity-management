@@ -262,6 +262,35 @@ func TestAnExpiredChallengeLeavesTheAgentPendingAndIsUsedUp(t *testing.T) {
 	assert.True(t, rig.store.used(issued.ID))
 }
 
+// slowConsumeStore moves the clock while it uses the challenge up, as a store
+// that is slow to answer does.
+type slowConsumeStore struct {
+	*memoryChallengeStore
+	clock *time.Time
+	delay time.Duration
+}
+
+func (s slowConsumeStore) Consume(ctx context.Context, id uuid.UUID, now time.Time) (*domain.RegistrationChallenge, bool, error) {
+	challenge, firstUse, err := s.memoryChallengeStore.Consume(ctx, id, now)
+	*s.clock = s.clock.Add(s.delay)
+	return challenge, firstUse, err
+}
+
+func TestAChallengeThatExpiresWhileItIsBeingUsedLeavesTheAgentPendingAsExpired(t *testing.T) {
+	rig := newProofRig(t, domain.EnforcementModeMonitoring)
+	rig.challenges.repo = slowConsumeStore{memoryChallengeStore: rig.store, clock: rig.clock, delay: time.Second}
+	priv, pub := newKey(t)
+	issued := rig.issue(t)
+	proof := signed(t, priv, rig.orgID, issued, pub)
+	// One second before the expiry when the registration starts.
+	*rig.clock = issued.ExpiresAt.Add(-time.Second)
+
+	agent := rig.register(t, "expires-during-use", pub, proof)
+
+	requirePending(t, agent, PendingReasonProofExpired)
+	assert.True(t, rig.store.used(issued.ID))
+}
+
 func TestAReusedChallengeLeavesTheSecondAgentPending(t *testing.T) {
 	rig := newProofRig(t, domain.EnforcementModeMonitoring)
 	priv, pub := newKey(t)
