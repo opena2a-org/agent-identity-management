@@ -1,6 +1,6 @@
 # Verifying an agent without a trip to the dashboard: Design Note
 
-**Status:** Draft for the owner's decision. Nothing in this note is implemented.
+**Status:** Draft for the maintainers' decision. Nothing in this note is implemented.
 **Date:** 2026-11-25
 **Audience:** the maintainers, and a security reviewer.
 
@@ -8,7 +8,7 @@
 
 ## 1. The problem
 
-An organisation in strict mode does not verify an agent when it is registered. The agent is stored as `pending`, and stays so until an administrator or manager opens the agent's page in the dashboard and clicks "Verify agent". The developer registered the agent in code, from a terminal. Making them (or someone else) sign in to a web page to click one button for each agent is a poor experience. The owner's position is that an agent should be verified without that trip where that is safe, and that a hardware key may be what makes it safe.
+An organisation in strict mode does not verify an agent when it is registered. The agent is stored as `pending`, and stays so until an administrator or manager opens the agent's page in the dashboard and clicks "Verify agent". The developer registered the agent in code, from a terminal. Making them (or someone else) sign in to a web page to click one button for each agent is a poor experience. The maintainers' position is that an agent should be verified without that trip where that is safe, and that a hardware key may be what makes it safe.
 
 This note looks at four ways to remove or shorten the trip and to raise assurance:
 
@@ -19,7 +19,7 @@ This note looks at four ways to remove or shorten the trip and to raise assuranc
 
 Monitoring mode is in scope only where an option raises assurance there. The backend already means to verify at registration in monitoring mode; a defect there (section 2.2) is handled by another change and is not addressed here.
 
-For each option the note gives: what the developer and the administrator do, what is stored and what is signed by which key, what three attackers gain compared with today, what it costs to build, and what can be undone. Section 8 compares them, section 9 recommends, section 10 lists the owner's open questions.
+For each option the note gives: what the developer and the administrator do, what is stored and what is signed by which key, what three attackers gain compared with today, what it costs to build, and what can be undone. Section 8 compares them, section 9 recommends, section 10 lists the maintainers' open questions.
 
 The three attackers are:
 
@@ -443,7 +443,7 @@ Administrator, afterwards:
 
 **(c) Compromised CI secret.**
 - Organisation API keys can register agents (`main.go:1993`). The policy should not apply to API-key registrations, because a key has no role and no person behind it. With that rule, a CI API key gains nothing.
-- If the owner wants CI agents verified, a separate per-key setting is safer than letting the role rule cover keys (section 10).
+- If the maintainers want CI agents verified, a separate per-key setting is safer than letting the role rule cover keys (section 10).
 
 ### 7.5 Cost
 
@@ -478,7 +478,7 @@ The smallest option.
 
 Build option 4 first, with classes from `capability_definitions.risk_level`, unknown capabilities counted as critical, and API-key registrations excluded. It removes the trip for most agents at the smallest cost, and its decision function is the one option 1 needs. Build option 2 next, and offer its organisation setting to strict organisations: it is the only option that is stronger than today against a stolen token, because today an admin's stored refresh token can already verify without any page (section 2.5). Leave option 1 until option 4 shows whether a policy is enough, and treat option 3 as a separate project about agent key theft that may later feed policy as a yes/no condition, never as auto-verification above a trust score.
 
-## 10. Open questions for the owner
+## 10. Open questions for the maintainers
 
 1. Should a policy (option 4) or a grant (option 1) be allowed at all in strict mode? Or should strict mean "a person, or a person's hardware key, approves every agent", with option 4 offered only as a new mode between monitoring and strict?
 2. Which roles may give a grant, or be covered by the policy: members, or only managers and admins? Today device approval checks no role at all (section 2.7). Should that be fixed separately, so viewers cannot approve a device sign-in?
