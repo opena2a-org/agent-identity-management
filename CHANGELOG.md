@@ -11,6 +11,22 @@ forward the platform follows [Semantic Versioning](https://semver.org/spec/v2.0.
 
 ## [Unreleased]
 
+### Added: a registration is verified on a signed challenge when the agent holds its own key, in monitoring mode
+
+- `POST /api/v1/agents/registration-challenges` answers a challenge id and a 32-byte challenge in base64, valid for
+  five minutes and bound to the organization and the user that asked. A registration (`POST /api/v1/agents`) may carry
+  `possessionProof: {challengeId, signature}`: the agent's Ed25519 signature over
+  `"aim-agent-registration-v1\n" + organizationId + "\n" + challengeId + "\n" + challenge + "\n" + publicKey`, with the
+  challenge and the public key in the base64 text the API carries them in.
+- In an organization in monitoring mode, an agent registered with its own `publicKey` is verified at registration only
+  by such a proof, checked against the public key of the same request, together with the conditions every agent
+  already meets. A missing, expired, reused, foreign or bad proof leaves the agent pending and the registration
+  succeeds as before; the challenge is used up whatever the check finds. In strict mode the agent stays pending. An
+  agent that stays pending is answered with `pendingReason`.
+- Migration `142_agent_registration_challenges.sql` creates `agent_registration_challenges`; the expiration cleanup job
+  deletes its expired rows. The upgrade from 1.0.0 now applies 44 migrations; `docs/releases/platform-v1.1.0.md`
+  carries its timing again.
+
 ### Changed: the privileged access management service and its `/api/v1/pam` routes are off unless `PAM_ENABLED=true`
 
 - `config.Load` reads `PAM_ENABLED` as on only when it is exactly `true`; unset, empty or any other value leaves it

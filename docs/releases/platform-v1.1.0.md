@@ -414,29 +414,32 @@ To roll back, restore the backup from step 2 and run the 1.0.0 images.
 
 ### Measured migration time
 
-Upgrading from 1.0.0 applies 43 migrations, `098_mcp_manifest_baselines.sql` to
-`141_pam_records_belong_to_an_organization.sql`. Measured on 2026-10-21 on an Apple M4 Max laptop with
-PostgreSQL 18.3: a database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own
-transaction and recorded in `schema_migrations` by file name, as the 1.0.0 server does at start. The two databases
-with 1,000,000 rows were then vacuumed and analyzed. Then `aim-server migrate`, built from a tree whose last migration
-is `141_pam_records_belong_to_an_organization.sql`, was timed against it with `/usr/bin/time -p`, three runs on
-separate copies, each copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that laptop,
-while the laptop ran other work and its one-minute load average read 18.45 before the runs and 16.96 after them.
-Each run logged `Successfully applied 43 pending migration(s)`:
+Upgrading from 1.0.0 applies 44 migrations, `098_mcp_manifest_baselines.sql` to
+`142_agent_registration_challenges.sql`. Measured on 2026-11-25 on an Apple M5 Ultra machine with PostgreSQL 18.7: a
+database was migrated with the 97 migration files of `platform-v1.0.0`, each applied in its own transaction with its
+row in `schema_migrations`, recorded by file name as the 1.0.0 server does at start; a 1.0.0 image has no `migrate`
+command, so each file was applied with `psql` and its row inserted in the same transaction. The two databases with
+1,000,000 rows were then vacuumed and analyzed. Then `aim-server migrate`, built from a tree whose last migration is
+`142_agent_registration_challenges.sql`, was timed against it with `/usr/bin/time -p`, three runs on separate copies,
+each copy followed by a `CHECKPOINT` before its run, by a binary that had already run on that machine, while the
+machine ran other work and its one-minute load average read 46.22 before the runs and 44.49 after them. Each run logged
+`Successfully applied 44 pending migration(s)`:
 
 | 1.0.0 database | Wall time, three runs |
 |----------------|-----------------------|
-| only the rows the migrations write, 14 MB | 0.18 s, 0.10 s, 0.09 s |
-| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 994 MB | 0.71 s, 0.93 s, 1.17 s |
-| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 993 MB | 2.83 s, 2.56 s, 2.88 s |
+| only the rows the migrations write, 14 MB | 0.79 s, 0.40 s, 0.62 s |
+| 1,000,000 rows in `api_calls` and 1,000,000 in `audit_logs`, 1,062 MB | 1.73 s, 1.59 s, 1.42 s |
+| the same, with 10,000 of the `audit_logs` rows role changes that hold a `user_email` and name no user, 1,066 MB | 2.38 s, 2.47 s, 2.62 s |
 
 The time grows with the size of the tables the migrations alter or index. The third database is the second with
 10,000 of its `audit_logs` rows written as such role changes;
 `137_user_delete_removes_registration_requests_and_audit_copies.sql` removes `user_email` from them once, as it does
 from the audit rows about users deleted before it ran. `138_user_delete_removes_email_from_access_review_evidence.sql`
 rewrites, once, each admin access review stored as compliance evidence that holds an entry with an email whose id names
-no user. These databases hold no compliance evidence; on a migrated copy of the first with 10,000 such reviews of three
-admins each, that statement took 389 ms, 316 ms and 1,545 ms in three runs of `EXPLAIN ANALYZE`. Nor do they hold rows
+no user. These databases hold no compliance evidence. That statement was not timed again on the machine above: on a
+migrated copy of the first database with 10,000 such reviews of three admins each, it took 389 ms, 316 ms and 1,545 ms
+in three runs of `EXPLAIN ANALYZE`, measured on 2026-10-21 on an Apple M4 Max laptop with PostgreSQL 18.3, when the
+upgrade applied 43 migrations. Nor do the databases hold rows
 in `a2a_consent_records`, `community_intelligence_reports` or `device_codes`, the three tables whose foreign key to
 `organizations` `140_organization_references_allow_organization_delete.sql` replaces. The agent private key
 conversion runs at the server's first start, not in `aim-server migrate`, and is not in these times; it reads every
