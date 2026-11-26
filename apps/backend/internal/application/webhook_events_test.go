@@ -63,11 +63,17 @@ func registeringAgentService(t *testing.T) (*AgentService, *MockAgentRepository,
 	scores.On("Create", mock.AnythingOfType("*domain.TrustScore")).Return(nil)
 	agents.On("Create", mock.AnythingOfType("*domain.Agent")).Return(nil)
 
+	// The organization is in monitoring mode, the only mode in which an agent
+	// is verified at registration.
+	orgs := new(SharedMockOrganizationRepository)
+	orgs.On("GetByID", mock.Anything).Return(&domain.Organization{EnforcementMode: domain.EnforcementModeMonitoring}, nil)
+
 	dispatcher := newRecordingDispatcher()
 	s := &AgentService{
 		agentRepo:      agents,
 		trustCalc:      calc,
 		trustScoreRepo: scores,
+		orgRepo:        orgs,
 		keyVault:       keyVault,
 		capabilityRepo: new(MockCapabilityRepository),
 		webhooks:       dispatcher,

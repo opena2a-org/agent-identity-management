@@ -647,16 +647,6 @@ func agentCreateError(err error) error {
 	}
 }
 
-// inStrictMode reports whether the organization requires agents to be
-// verified by hand.
-func (s *AgentService) inStrictMode(orgID uuid.UUID) bool {
-	if s.orgRepo == nil {
-		return false
-	}
-	org, err := s.orgRepo.GetByID(orgID)
-	return err == nil && org != nil && org.EnforcementMode == domain.EnforcementModeStrict
-}
-
 // registerAgent stores a new agent and grants the capabilities it declared
 // as its baseline, in one transaction with its registration_baseline record.
 // The status is decided before the agent is stored: verified when the

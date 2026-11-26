@@ -198,22 +198,24 @@ type registrationVerification struct {
 }
 
 // decideRegistrationVerification decides whether an agent is verified at
-// registration. A strict-mode organization keeps every agent pending. A proof
-// that was presented and is not good keeps the agent pending. An agent that
-// holds its own key is verified only by a good proof, in an organization read as
-// being in monitoring mode, and then meets the conditions of every agent
-// (autoVerificationCriteria).
+// registration. The organization's mode is read once, and an agent is verified
+// automatically only when that read says monitoring: a strict-mode organization
+// keeps every agent pending, and so does one that cannot be read. A proof that
+// was presented and is not good keeps the agent pending. An agent that holds its
+// own key is verified only by a good proof, and then meets the conditions of
+// every agent (autoVerificationCriteria).
 func (s *AgentService) decideRegistrationVerification(orgID uuid.UUID, agent *domain.Agent, proof possessionProofOutcome) registrationVerification {
-	if s.inStrictMode(orgID) {
+	switch s.registrationMode(orgID) {
+	case domain.EnforcementModeMonitoring:
+	case domain.EnforcementModeStrict:
 		return registrationVerification{PendingReason: PendingReasonStrictMode}
+	default:
+		return registrationVerification{PendingReason: PendingReasonModeUnknown}
 	}
 	if proof.presented && proof.reason != "" {
 		return registrationVerification{PendingReason: proof.reason}
 	}
 	keyHeld := proof.provesKeyOf(agent)
-	if keyHeld && !s.inMonitoringMode(orgID) {
-		return registrationVerification{PendingReason: PendingReasonModeUnknown}
-	}
 	if agent.EncryptedPrivateKey == nil && !keyHeld {
 		reason := proof.reason
 		if reason == "" {
@@ -227,15 +229,18 @@ func (s *AgentService) decideRegistrationVerification(orgID uuid.UUID, agent *do
 	return registrationVerification{Verified: true}
 }
 
-// inMonitoringMode reports whether the organization is read as being in
-// monitoring mode. Unlike inStrictMode, an organization that cannot be read is
-// not in monitoring mode.
-func (s *AgentService) inMonitoringMode(orgID uuid.UUID) bool {
+// registrationMode reads the organization's enforcement mode, once per
+// registration. An organization that cannot be read gives the empty mode, which
+// is neither monitoring nor strict.
+func (s *AgentService) registrationMode(orgID uuid.UUID) domain.EnforcementMode {
 	if s.orgRepo == nil {
-		return false
+		return ""
 	}
 	org, err := s.orgRepo.GetByID(orgID)
-	return err == nil && org != nil && org.EnforcementMode == domain.EnforcementModeMonitoring
+	if err != nil || org == nil {
+		return ""
+	}
+	return org.EnforcementMode
 }
 
 // shouldAutoVerifyAgent determines if an agent meets criteria for automatic

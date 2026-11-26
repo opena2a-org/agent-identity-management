@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 )
 
@@ -124,10 +125,12 @@ func (proofTrustScoreRepo) Create(*domain.TrustScore) error { return nil }
 
 type proofOrgRepo struct {
 	domain.OrganizationRepository
-	orgs map[uuid.UUID]*domain.Organization
+	orgs  map[uuid.UUID]*domain.Organization
+	reads int
 }
 
 func (r *proofOrgRepo) GetByID(id uuid.UUID) (*domain.Organization, error) {
+	r.reads++
 	if org, ok := r.orgs[id]; ok {
 		return org, nil
 	}
@@ -493,6 +496,48 @@ func TestAnOrganizationWhoseModeCannotBeReadKeepsASelfKeyedAgentPendingWithAGood
 	agent := rig.register(t, "mode-unknown", pub, signed(t, priv, rig.orgID, issued, pub))
 
 	requirePending(t, agent, PendingReasonModeUnknown)
+}
+
+func TestAnOrganizationWhoseModeCannotBeReadKeepsAServerHeldAgentPending(t *testing.T) {
+	rig := newProofRig(t, domain.EnforcementModeMonitoring)
+	rig.svc.orgRepo = &proofOrgRepo{orgs: map[uuid.UUID]*domain.Organization{}}
+	agent := &domain.Agent{Name: "a", DisplayName: "A", Description: "d", TrustScore: 0.5,
+		PublicKey: strPtr("k"), EncryptedPrivateKey: strPtr("sealed")}
+
+	decision := rig.svc.decideRegistrationVerification(rig.orgID, agent, possessionProofOutcome{reason: PendingReasonNoProof})
+
+	assert.False(t, decision.Verified)
+	assert.Equal(t, PendingReasonModeUnknown, decision.PendingReason)
+}
+
+func TestAServerHeldAgentWhoseOrganizationCannotBeReadEndsPendingAtRegistration(t *testing.T) {
+	rig := newProofRig(t, domain.EnforcementModeMonitoring)
+	rig.svc.orgRepo = &proofOrgRepo{orgs: map[uuid.UUID]*domain.Organization{}}
+	keyVault, err := crypto.NewKeyVault(base64.StdEncoding.EncodeToString([]byte("test-master-key-32-bytes-long!!!")))
+	require.NoError(t, err)
+	rig.svc.keyVault = keyVault
+
+	agent, err := rig.svc.CreateAgent(context.Background(), &CreateAgentRequest{
+		Name: "server-held", DisplayName: "Server held", Description: "Writes the weekly report",
+		AgentType: domain.AgentTypeLangChain,
+	}, rig.orgID, rig.userID, nil, nil, "")
+	require.NoError(t, err)
+
+	require.NotNil(t, agent.EncryptedPrivateKey, "the server holds the key of this agent")
+	requirePending(t, agent, PendingReasonModeUnknown)
+	assert.Equal(t, domain.AgentStatusPending, rig.agents.last().Status)
+}
+
+func TestTheModeOfTheOrganizationIsReadOncePerRegistration(t *testing.T) {
+	rig := newProofRig(t, domain.EnforcementModeMonitoring)
+	orgs := rig.svc.orgRepo.(*proofOrgRepo)
+	priv, pub := newKey(t)
+	issued := rig.issue(t)
+
+	agent := rig.register(t, "read-once", pub, signed(t, priv, rig.orgID, issued, pub))
+
+	assert.Equal(t, domain.AgentStatusVerified, agent.Status)
+	assert.Equal(t, 1, orgs.reads)
 }
 
 func TestWithoutChallengesWiredAProofIsNotAccepted(t *testing.T) {
