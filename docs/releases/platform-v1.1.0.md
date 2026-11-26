@@ -197,8 +197,10 @@ A deployment that pulls the `1` or `latest` tag receives these changes with 1.1.
 - An agent that registers with its own `publicKey` is verified at registration, in an organization in monitoring mode,
   only by `possessionProof: {challengeId, signature}`: its Ed25519 signature over a challenge from
   `POST /api/v1/agents/registration-challenges`, valid for five minutes and bound to the organization and the user that
-  asked. The proof counts only for a public key that is 32 bytes, canonical and not of small order. The registration
-  succeeds in every case; an agent without a good proof stays pending, and the answer carries `pendingReason`. A
+  asked. The proof counts only for a public key that is 32 bytes, canonical, not of small order and a point on the
+  curve. An otherwise valid registration succeeds even when the proof is not accepted; the agent stays pending, and
+  the answer carries `pendingReason`. A registration whose `publicKey` is not an acceptable Ed25519 key is refused with
+  400, as any invalid key is, and stores nothing. A
   registration that names a challenge with an id that parses as a UUID uses it up, whatever the rest of the proof
   holds; one whose `challengeId` does not parse uses none. If the store fails to use the challenge, the agent stays
   pending and the challenge may be left unused. The five minutes are judged when the challenge is used, not when the
