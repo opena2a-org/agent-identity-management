@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -115,12 +116,18 @@ func refusedKeys(t *testing.T) map[string]string {
 	genuine, _, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
 	enc := base64.StdEncoding.EncodeToString
+	// The non-canonical class of the key helper's own tests (TestCanonical,
+	// "y = 2^255-1"): a y at or above p = 2^255 - 19. It is not small-order, and
+	// y mod p = 18 is on the curve, so the canonical check is what refuses it.
+	nonCanonical, err := hex.DecodeString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f")
+	require.NoError(t, err)
 	keys := map[string]string{
-		"off the curve":     enc(ed25519keytest.OffCurve()),
-		"31 bytes":          enc(genuine[:31]),
-		"33 bytes":          enc(append(append([]byte{}, genuine...), 0)),
-		"not base64":        "not base64!",
-		"genuine, unpadded": base64.RawStdEncoding.EncodeToString(genuine),
+		"not canonical, y = 2^255-1": enc(nonCanonical),
+		"off the curve":              enc(ed25519keytest.OffCurve()),
+		"31 bytes":                   enc(genuine[:31]),
+		"33 bytes":                   enc(append(append([]byte{}, genuine...), 0)),
+		"not base64":                 "not base64!",
+		"genuine, unpadded":          base64.RawStdEncoding.EncodeToString(genuine),
 	}
 	for i, small := range ed25519key.SmallOrderEncodings() {
 		keys["small order "+string(rune('a'+i))] = enc(small)

@@ -3,6 +3,8 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,6 +17,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/application"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key"
+	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/crypto/ed25519key/ed25519keytest"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/domain"
 	"github.com/opena2a-org/agent-identity-management/apps/backend/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -383,4 +387,39 @@ func TestBootstrapTokenHandler_DuplicateNameIs409AndTheTokenSurvives(t *testing.
 
 	status, _, _ = rig.do(t, exchangeRequest(t, second.Token, map[string]interface{}{"name": "my-second-agent"}))
 	assert.Equal(t, fiber.StatusCreated, status)
+}
+
+// A publicKey the key helper refuses is answered 400 by the exchange route,
+// with the route's validation error, and no agent is created; the token is not
+// used, and the same token then registers with a generated key.
+func TestBootstrapTokenHandler_ExchangeWithARefusedPublicKeyIs400AndCreatesNothing(t *testing.T) {
+	refused := map[string][]byte{"off the curve": ed25519keytest.OffCurve()}
+	for i, small := range ed25519key.SmallOrderEncodings() {
+		refused["small order "+string(rune('a'+i))] = small
+	}
+	for name, key := range refused {
+		key := key
+		t.Run(name, func(t *testing.T) {
+			rig := newBTRig(t)
+			orgID := uuid.New()
+			minted := rig.mint(t, orgID, uuid.New())
+
+			status, body, _ := rig.do(t, exchangeRequest(t, minted.Token, map[string]interface{}{
+				"publicKey": base64.StdEncoding.EncodeToString(key),
+			}))
+
+			assert.Equal(t, fiber.StatusBadRequest, status, "body: %v", body)
+			assert.Equal(t, map[string]interface{}{"error": "publicKey must be a base64-encoded 32-byte Ed25519 public key"}, body)
+			assert.Empty(t, rig.agents.inOrg(orgID), "no agent is created")
+
+			// Control: the same token with a generated key registers one agent.
+			pub, _, err := ed25519.GenerateKey(nil)
+			require.NoError(t, err)
+			status, body, _ = rig.do(t, exchangeRequest(t, minted.Token, map[string]interface{}{
+				"publicKey": base64.StdEncoding.EncodeToString(pub),
+			}))
+			assert.Equal(t, fiber.StatusCreated, status, "body: %v", body)
+			assert.Len(t, rig.agents.inOrg(orgID), 1)
+		})
+	}
 }

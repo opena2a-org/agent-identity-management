@@ -106,6 +106,42 @@ func TestAProofForAnOffCurveKeyIsNotAcceptedAndLeavesTheAgentPending(t *testing.
 	assert.Equal(t, PendingReasonProofNotAccepted, decision.PendingReason)
 }
 
+// The key is refused before the proof is checked, so a challenge named in a
+// registration refused for its key is not used up: it serves one later
+// registration with a good key, and no registration after that.
+func TestAChallengeNamedInARegistrationRefusedForItsKeyServesOneLaterRegistrationAndNoMore(t *testing.T) {
+	refused := map[string][]byte{"off the curve": ed25519keytest.OffCurve()}
+	for i, small := range ed25519key.SmallOrderEncodings() {
+		refused["small order "+string(rune('a'+i))] = small
+	}
+	for name, key := range refused {
+		key := key
+		t.Run(name, func(t *testing.T) {
+			rig := newProofRig(t, domain.EnforcementModeMonitoring)
+			priv, pub := newKey(t)
+			issued := rig.issue(t)
+			refusedKey := base64.StdEncoding.EncodeToString(key)
+
+			_, err := rig.svc.CreateAgent(context.Background(), &CreateAgentRequest{
+				Name: "refused", DisplayName: "refused", Description: "d", AgentType: domain.AgentTypeLangChain,
+				PublicKey: refusedKey, PossessionProof: signed(t, priv, rig.orgID, issued, refusedKey),
+			}, rig.orgID, rig.userID, nil, nil, "")
+			require.ErrorIs(t, err, ErrPublicKeyNotAccepted)
+			assert.Empty(t, rig.agents.stored, "nothing is stored")
+			assert.False(t, rig.store.used(issued.ID), "the refused registration does not use the challenge")
+
+			proof := signed(t, priv, rig.orgID, issued, pub)
+			first := rig.register(t, "first", pub, proof)
+			assert.Equal(t, domain.AgentStatusVerified, first.Status)
+			assert.Empty(t, first.RegistrationPendingReason)
+			assert.True(t, rig.store.used(issued.ID), "the good registration uses the challenge")
+
+			second := rig.register(t, "second", pub, proof)
+			requirePending(t, second, PendingReasonProofUsed)
+		})
+	}
+}
+
 func TestAGenuineKeyWithAGenuineProofIsStillVerified(t *testing.T) {
 	rig := newProofRig(t, domain.EnforcementModeMonitoring)
 	priv, pub := newKey(t)
