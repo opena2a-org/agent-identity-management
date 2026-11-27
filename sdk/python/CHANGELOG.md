@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added: a ruff configuration for the SDK, and CI runs `ruff check` on it (#612)
+
+- `ruff.toml` names the target version (`py38`, from `python_requires`) and the rules: pyflakes (F) and the
+  pycodestyle error rules E4, E7 and E9, so the installed ruff's default rule set does not decide what is checked.
+  `ruff check .` in `sdk/python` reports no findings.
+- The findings older than the configuration (188 in 47 files with ruff 0.17.6, none in `client.py` or
+  `credentials.py`) are waived per file and per rule under `[lint.per-file-ignores]`. Other files, and other rules
+  in a listed file, are checked in full.
+- The `SDK tests (Python)` CI job runs `python -m ruff check` before the test suite, and
+  `tests/test_lint_ruff.py` runs the same check as `test_sdk_passes_ruff_with_its_configuration`. The job now
+  declares `permissions: contents: read` instead of inheriting the workflow's `pull-requests: read`.
+
 ### Added: `aim_sdk.telemetry.guard`, the NanoMind-Guard socket client (stage 2 of #441)
 
 - `NanoMindGuardClient.classify(text)` sends `{"op": "classify", "text": ...}` as one JSON line over the daemon's

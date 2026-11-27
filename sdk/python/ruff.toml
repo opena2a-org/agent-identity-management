@@ -1,0 +1,64 @@
+# Ruff configuration for the Python SDK. CI runs `ruff check` from this
+# directory (the sdk-python-tests job in .github/workflows/ci.yml), and
+# tests/test_lint_ruff.py runs it as part of the test suite.
+#
+# The rules are named here, so the installed ruff's default rule set does not
+# decide what is checked: pyflakes (F) and the pycodestyle error rules E4, E7
+# and E9.
+target-version = "py38"  # setup.py: python_requires=">=3.8,<3.15"
+
+[lint]
+select = ["E4", "E7", "E9", "F"]
+
+# Baseline: the findings each of these files had when this configuration was
+# added, waived per file and per rule. A file not listed here, and a rule not
+# listed for a file, is checked in full. Fixing a file means removing its line
+# (or the rule from it); do not add lines for new code.
+[lint.per-file-ignores]
+"aim_sdk/__init__.py" = ["E402", "F401"]
+"aim_sdk/a2a.py" = ["E722", "F401"]
+"aim_sdk/attestation_cache.py" = ["F401"]
+"aim_sdk/console.py" = ["F401", "F541"]
+"aim_sdk/decorators.py" = ["F401"]
+"aim_sdk/detection.py" = ["F401"]
+"aim_sdk/integrations/crewai/callbacks.py" = ["F541"]
+"aim_sdk/integrations/crewai/decorators.py" = ["F401"]
+"aim_sdk/integrations/crewai/wrapper.py" = ["F401"]
+"aim_sdk/integrations/langchain/callback.py" = ["F541"]
+"aim_sdk/integrations/langchain/tools.py" = ["F401"]
+"aim_sdk/integrations/mcp/discovery.py" = ["F401", "F841"]
+"aim_sdk/integrations/mcp/registration.py" = ["F401", "F541"]
+"aim_sdk/integrations/mcp/verification.py" = ["F541"]
+"aim_sdk/isolation.py" = ["F401"]
+"aim_sdk/oauth.py" = ["F401", "F841"]
+"aim_sdk/protocol_detection.py" = ["F401"]
+"aim_sdk/secrets.py" = ["F401", "F841"]
+"aim_sdk/secure_storage.py" = ["F541"]
+"aim_sdk/security_logging.py" = ["F401"]
+"examples/example_auto_detection.py" = ["E402", "F401"]
+"examples/example_one_line_setup.py" = ["E402"]
+"scripts/setup_agents_via_api.py" = ["F401", "F541"]
+"scripts/setup_claude_code_agent.py" = ["E402", "F401", "F541", "F841"]
+"test_sdk_comprehensive.py" = ["E722"]
+"tests/test_auto_detection.py" = ["F541"]
+"tests/test_auto_registration.py" = ["F541", "F841"]
+"tests/test_credential_management.py" = ["F541", "F841"]
+"tests/test_crewai_integration.py" = ["E402"]
+"tests/test_e2e.py" = ["F541", "F841"]
+"tests/test_enforcement_matrix.py" = ["E402"]
+"tests/test_fixed_org_agent.py" = ["F541"]
+"tests/test_langchain_integration.py" = ["E402"]
+"tests/test_mcp_verification_events.py" = ["F541"]
+"tests/test_no_emoji_in_console_output.py" = ["E741"]
+"tests/test_phase2_flow.py" = ["F841"]
+"tests/test_protocol_detection.py" = ["F541"]
+"tests/test_readme_quick_start_runs_as_written.py" = ["F811"]
+"tests/test_refresh_cross_process_lock.py" = ["E741"]
+"tests/test_register_agent.py" = ["F841"]
+"tests/test_release_203_p2_p3_findings.py" = ["F821"]
+"tests/test_roadmap_document.py" = ["E741"]
+"tests/test_sdk_comprehensive.py" = ["F541"]
+"tests/test_sdk_direct.py" = ["F541"]
+"tests/test_sdk_integration.py" = ["F541"]
+"tests/test_secure_alias.py" = ["F841"]
+"tests/test_verification_event_creation.py" = ["F541"]

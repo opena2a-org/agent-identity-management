@@ -264,6 +264,10 @@ jobs:
   sdk-python-tests:
     name: SDK tests (Python)
     runs-on: ubuntu-latest
+    # Checkout is all this job needs; it does not inherit the workflow's
+    # pull-requests: read, which is there for the changes job's paths-filter.
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: sdk/python
@@ -279,6 +283,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,mcp]"
+
+      # sdk/python/ruff.toml names the rules (F, E4, E7, E9) and the target
+      # version, and holds the per-file baseline of findings older than it.
+      - name: Lint (ruff)
+        run: python -m ruff check --no-cache --output-format github .
 
       # The suite must run (total > 0) with zero failures and zero errors.
       # Skips are reported, not yet refused: the suite carried 34 skip markers
